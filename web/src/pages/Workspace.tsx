@@ -15,12 +15,12 @@ const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写',
 
 type StructItem = { id: string; [k: string]: any };
 
-function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, emptyHint = '还没有内容' }: {
+function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, emptyHint = '还没有内容', chapters }: {
   kind: 'outline' | 'characters' | 'timeline' | 'ideas';
   items: StructItem[]; setItems: (fn: (prev: StructItem[]) => StructItem[]) => void;
   title: string; addLabel: string;
   fields: { key: string; label: string; placeholder: string; textarea?: boolean }[];
-  projectId: string; onChanged: () => void; emptyHint?: string;
+  projectId: string; onChanged: () => void; emptyHint?: string; chapters?: { id: string; title: string; order_index: number }[];
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -28,7 +28,7 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
   const add = async () => {
     setBusy(true);
     try {
-      const d = await api.post<{ [k: string]: StructItem }>('/projects/' + projectId + '/' + kind, { ...draft });
+      const d = await api.post<{ [k: string]: StructItem }>('/projects/' + projectId + '/' + kind, { ...draft, chapter_id: draft.chapter_id || null });
       const key = { outline: 'node', characters: 'card', timeline: 'event', ideas: 'note' }[kind];
       setItems(prev => [...prev, d[key]]);
       setDraft({}); setOpen(false); onChanged();
@@ -50,6 +50,15 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
           {fields.map(f => f.textarea
             ? <Input key={f.key} label={f.label} value={draft[f.key] || ''} onChange={v => setDraft({ ...draft, [f.key]: v })} textarea rows={2} placeholder={f.placeholder} />
             : <Input key={f.key} label={f.label} value={draft[f.key] || ''} onChange={v => setDraft({ ...draft, [f.key]: v })} placeholder={f.placeholder} />)}
+          {kind === 'outline' && chapters && (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-ink/60">关联章节（可选）</span>
+              <select value={draft.chapter_id || ''} onChange={e => setDraft({ ...draft, chapter_id: e.target.value })} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none">
+                <option value="">暂不关联</option>
+                {chapters.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+            </label>
+          )}
           <div className="flex gap-2">
             <Button variant="subtle" onClick={add} disabled={busy || !Object.values(draft).some(v => v)} className="flex-1 text-xs">添加</Button>
             <Button variant="ghost" onClick={() => setOpen(false)} className="text-xs">取消</Button>
@@ -97,6 +106,7 @@ export default function Workspace() {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [speaking, setSpeaking] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [pendingTrans, setPendingTrans] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<{ assistant_name?: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } | null>(null);
@@ -125,6 +135,7 @@ export default function Workspace() {
   const [adoptDone, setAdoptDone] = useState<string | null>(null);
   const [undoInfo, setUndoInfo] = useState<{ kind: string; id: string; label: string } | null>(null);
   const [draftRestored, setDraftRestored] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showPersonaCard, setShowPersonaCard] = useState(false);
 
   const msgsRef = useRef<HTMLDivElement>(null);
@@ -249,14 +260,14 @@ export default function Workspace() {
             if (event === 'text_delta') { setStreamText(p => p + data.delta); finalText += data.delta; }
             else if (event === 'text_done') { replyType = data.reply_type || 'other'; finalMsgId = data.message_id || ''; }
             else if (event === 'audio_ready' && data.text) {
-              speak(data.text, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1), onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) });
+              speak(data.text, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1), onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
             }
           } catch { /* ignore */ }
         }
       }
       if (finalText) {
         setMessages(prev => [...prev, { id: finalMsgId || 'sse-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: finalText, reply_type: replyType, created_at: new Date().toISOString() }]);
-        if (prefs?.read_aloud) speak(finalText, { rate: prefs.tts_rate ?? 1, pitch: prefs.tts_pitch ?? 1, onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) });
+        if (prefs?.read_aloud) speak(finalText, { rate: prefs.tts_rate ?? 1, pitch: prefs.tts_pitch ?? 1, onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') setMessages(prev => [...prev, { id: 'err-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: '（出错了：' + e.message + '）', reply_type: 'other', created_at: new Date().toISOString() }]);
@@ -270,6 +281,11 @@ export default function Workspace() {
 
   const toggleRecord = () => {
     if (recording) { recRef.current?.stop(); return; }
+    if (!navigator.onLine) {
+      setNotice('当前处于离线状态，语音功能暂不可用，可以继续打字写作');
+      setTimeout(() => setNotice(null), 4000);
+      return;
+    }
     interruptSpeech(); setSpeaking(false);
     const rec = startQuietRecording(
       (t) => setInput(t),
@@ -512,7 +528,7 @@ export default function Workspace() {
             {leftTab === 'outline' && project && (
               <StructurePanel kind="outline" items={outline} setItems={setOutline} title="大纲节点" addLabel="＋ 添加大纲节点"
                 fields={[{ key: 'title', label: '标题', placeholder: '例如：离家前夜' }, { key: 'summary', label: '内容概述', placeholder: '这一节发生什么…' }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" chapters={chapters} />
             )}
             {leftTab === 'characters' && project && (
               <StructurePanel kind="characters" items={characters} setItems={setCharacters} title="人物卡" addLabel="＋ 添加人物"
@@ -721,7 +737,9 @@ export default function Workspace() {
                     <div className="whitespace-pre-wrap">{m.content}</div>
                     {m.role === 'assistant' && (
                       <div className="mt-2 flex flex-wrap items-center gap-3">
-                        <button onClick={() => speak(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) })} className="text-xs text-accent hover:underline">🔊 朗读</button>
+                        {speakingId === m.id && <span className="text-accent" title="正在朗读"><span className="wave-bars"><span /><span /><span /><span /><span /></span></span>}
+
+                        <button onClick={() => speak(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, onStart: () => { setSpeaking(true); setSpeakingId(m.id); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } })} className="text-xs text-accent hover:underline">🔊 朗读</button>
                         {m.adopted_at ? (
                           <span className="text-xs text-emerald-600">✓ 已采纳到文章</span>
                         ) : (
@@ -928,6 +946,7 @@ export default function Workspace() {
         </div>
       )}
       {draftRestored && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{draftRestored}</div>}
+      {notice && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-amber-600 px-5 py-2.5 text-sm text-white shadow-lift animate-fade-up">{notice}</div>}
     </Layout>
   );
 }

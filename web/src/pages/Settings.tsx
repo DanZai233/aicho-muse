@@ -124,6 +124,16 @@ export default function Settings() {
           </p>
         </section>
 
+        <section className="rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+          <h2 className="mb-3 font-serif text-lg font-semibold">隐私与数据</h2>
+          <div className="space-y-2 text-sm leading-6 text-ink/50">
+            <p>🔒 你的创作内容属于你自己。Aicho Muse 将作品、章节、对话保存在你自己的部署环境中（本机或你配置的 MySQL 数据库），不会上传到任何第三方。</p>
+            <p>🤖 AI 对话会发送给你在管理后台配置的大模型提供商用于生成回复；未配置时不发送任何外部请求。</p>
+            <p>🗑 删除的作品进入 30 秒回收站后自动清除；你也可以随时在「设置 → 创作记忆」删除助手记住的偏好。</p>
+            <p>🎙 语音输入使用浏览器本地语音识别；外部 STT/TTS 仅在管理后台配置密钥后才会调用。</p>
+          </div>
+        </section>
+
         {saved && <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">已保存 ✓</p>}
       </div>
     </Layout>
