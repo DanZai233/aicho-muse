@@ -18,14 +18,15 @@ router.get('/', (req, res) => {
     const chapters = d.chapters.filter(c => c.project_id === p.id);
     const words = chapters.reduce((s, c) => s + (c.content || '').length, 0);
     const persona = p.default_persona_id ? d.personas.find(x => x.id === p.default_persona_id) : null;
-    return { ...p, chapter_count: chapters.length, word_count: words, default_persona: persona ? { id: persona.id, name: persona.name, avatar_color: persona.avatar_color } : null };
+    const team = (p.team_persona_ids || []).map(id => { const x = d.personas.find(pp => pp.id === id); return x ? { id: x.id, name: x.name, avatar_color: x.avatar_color } : null; }).filter(Boolean);
+    return { ...p, chapter_count: chapters.length, word_count: words, default_persona: persona ? { id: persona.id, name: persona.name, avatar_color: persona.avatar_color } : null, team_personas: team };
   });
   res.json({ code: 0, data: { list: withMeta, total, page, page_size: pageSize } });
 });
 
 router.post('/', (req, res) => {
   const d = db();
-  const { title, genre, theme, target_audience, goal_word_count, default_persona_id, subtitle, author_name, cover_color } = req.body || {};
+  const { title, genre, theme, target_audience, goal_word_count, default_persona_id, team_persona_ids, subtitle, author_name, cover_color } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ code: 40001, message: '作品标题必填' });
   if (genre && !GENRES.includes(genre)) return res.status(400).json({ code: 40001, message: '不支持的体裁' });
   const now = new Date().toISOString();
@@ -39,6 +40,7 @@ router.post('/', (req, res) => {
     goal_word_count: goal_word_count || 0,
     status: 'drafting',
     default_persona_id: default_persona_id || null,
+    team_persona_ids: Array.isArray(team_persona_ids) ? team_persona_ids.filter(id => id !== (default_persona_id || null)) : [],
     subtitle: subtitle || '',
     author_name: author_name || '',
     cover_color: cover_color || '#8b7d6b',
@@ -66,6 +68,9 @@ router.patch('/:id', (req, res) => {
   if (!p) return res.status(404).json({ code: 40401, message: '作品不存在' });
   for (const k of ['title', 'subtitle', 'author_name', 'genre', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
+  }
+  if (Array.isArray(req.body.team_persona_ids)) {
+    p.team_persona_ids = req.body.team_persona_ids.filter(id => id !== (p.default_persona_id || null));
   }
   p.updated_at = new Date().toISOString();
   saveDb();

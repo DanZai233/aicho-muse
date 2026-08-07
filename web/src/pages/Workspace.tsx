@@ -120,7 +120,7 @@ export default function Workspace() {
   const [showCover, setShowCover] = useState(false);
   const [coverDraft, setCoverDraft] = useState({ title: '', subtitle: '', author_name: '', cover_color: '#8b7d6b' });
   const [showProjSettings, setShowProjSettings] = useState(false);
-  const [projDraft, setProjDraft] = useState({ genre: 'biography', theme: '', target_audience: '', goal_word_count: 0 });
+  const [projDraft, setProjDraft] = useState({ genre: 'biography', theme: '', target_audience: '', goal_word_count: 0, team_persona_ids: [] as string[] });
 
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
@@ -432,7 +432,7 @@ export default function Workspace() {
 
   const openProjSettings = () => {
     if (!project) return;
-    setProjDraft({ genre: project.genre, theme: project.theme || '', target_audience: project.target_audience || '', goal_word_count: project.goal_word_count || 0 });
+    setProjDraft({ genre: project.genre, theme: project.theme || '', target_audience: project.target_audience || '', goal_word_count: project.goal_word_count || 0, team_persona_ids: project.team_persona_ids || [] });
     setShowProjSettings(true);
   };
   const saveProjSettings = async () => {
@@ -809,11 +809,11 @@ export default function Workspace() {
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-ink/60">选择人设</span>
             <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
-              {personas.map(p => (
+              {(project?.team_persona_ids?.length ? [...personas.filter(p => (project.team_persona_ids || []).includes(p.id)), ...personas.filter(p => !(project.team_persona_ids || []).includes(p.id))] : personas).map(p => (
                 <button key={p.id} onClick={() => setNewPersona(p.id)}
                   className={"flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition " + (newPersona === p.id ? 'bg-accentlight/70' : 'hover:bg-ink/5')}>
                   <Avatar name={p.name} color={p.avatar_color} size="sm" />
-                  <div><div className="font-medium">{p.name}</div><div className="text-xs text-ink/40">{p.tagline}</div></div>
+                  <div><div className="flex items-center gap-1.5">{p.name}{project?.team_persona_ids?.includes(p.id) && <span className="text-[9px] text-accent">团队</span>}</div><div className="text-xs text-ink/40">{p.tagline}</div></div>
                 </button>
               ))}
             </div>
@@ -867,6 +867,24 @@ export default function Workspace() {
           </label>
           <Input label="主题（一句话）" value={projDraft.theme} onChange={v => setProjDraft({ ...projDraft, theme: v })} placeholder="例如：一个江南小镇青年的成长" />
           <Input label="目标读者" value={projDraft.target_audience} onChange={v => setProjDraft({ ...projDraft, target_audience: v })} placeholder="例如：家人与朋友 / 悬疑小说读者" />
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">陪跑团队（编辑 + 读者 + 导师可同时在场）</span>
+            <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-xl border border-ink/10 bg-paper/50 p-2">
+              {personas.map(p => {
+                const checked = projDraft.team_persona_ids.includes(p.id);
+                return (
+                  <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-ink/5">
+                    <input type="checkbox" checked={checked} onChange={e => setProjDraft({ ...projDraft, team_persona_ids: e.target.checked ? [...projDraft.team_persona_ids, p.id] : projDraft.team_persona_ids.filter(id => id !== p.id) })}
+                      className="accent-accent" />
+                    <Avatar name={p.name} color={p.avatar_color} size="sm" />
+                    <span className="truncate">{p.name}</span>
+                    <span className="ml-auto truncate text-xs text-ink/40">{p.tagline}</span>
+                  </label>
+                );
+              })}
+              {personas.length === 0 && <p className="px-2 py-3 text-center text-xs text-ink/30">还没有可用人设，先去「人设」页创建</p>}
+            </div>
+          </div>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-ink/60">创作目标字数</span>
             <input type="number" min={0} step={1000} value={projDraft.goal_word_count || ''}
