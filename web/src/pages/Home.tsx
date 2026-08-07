@@ -25,6 +25,7 @@ export default function Home() {
   const [theme, setTheme] = useState('');
   const [cover, setCover] = useState('#8b7d6b');
   const [busy, setBusy] = useState(false);
+  const [undoInfo, setUndoInfo] = useState<{ kind: string; id: string; label: string } | null>(null);
 
   const load = async () => {
     try {
@@ -52,6 +53,31 @@ export default function Home() {
       setOpen(false); setTitle(''); setSubtitle(''); setAuthor(''); setTheme('');
       nav('/workspace?project=' + d.project.id);
     } finally { setBusy(false); }
+  };
+
+  const deleteProject = async (p: Project) => {
+    if (!confirm('删除《' + p.title + '》？30 秒内可撤销。')) return;
+    try {
+      await api.del('/projects/' + p.id);
+      setProjects(prev => prev.filter(x => x.id !== p.id)); setProjTotal(t => t - 1);
+      setUndoInfo({ kind: 'project', id: p.id, label: p.title });
+      setTimeout(() => setUndoInfo(prev => prev && prev.id === p.id ? null : prev), 30000);
+    } catch { /* ignore */ }
+  };
+  const undoDelete = async () => {
+    if (!undoInfo) return;
+    try {
+      await api.post('/trash/restore', { kind: undoInfo.kind, id: undoInfo.id });
+      setUndoInfo(null); load();
+    } catch { /* ignore */ }
+  };
+
+  const cycleStatus = async (p: Project) => {
+    const next = p.status === 'final' ? 'drafting' : p.status === 'reviewed' ? 'final' : 'reviewed';
+    try {
+      await api.patch('/projects/' + p.id, { status: next });
+      setProjects(prev => prev.map(x => x.id === p.id ? { ...x, status: next } : x));
+    } catch { /* ignore */ }
   };
 
   const preview: Project = { id: '', title: title || '未命名作品', subtitle, author_name: author, genre, theme: '', target_audience: '', goal_word_count: 0, status: '', default_persona_id: null, cover_color: cover, chapter_count: 0, word_count: 0 };
@@ -96,8 +122,10 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map(p => (
-              <Link key={p.id} to={'/workspace?project=' + p.id}
-                className="group flex items-start gap-4 rounded-2xl border border-ink/5 bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+              <div key={p.id} className="group relative rounded-2xl border border-ink/5 bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProject(p); }}
+                  className="absolute right-3 top-3 z-10 rounded-full px-2 py-0.5 text-[11px] text-ink/25 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100">删除</button>
+                <Link to={'/workspace?project=' + p.id} className="flex items-start gap-4">
                 <BookCover project={p} size="md" />
                 <div className="min-w-0 flex-1 pt-1">
                   <div className="flex items-center justify-between gap-2">
@@ -112,7 +140,12 @@ export default function Home() {
                     <span className="text-accent opacity-0 transition group-hover:opacity-100">继续创作 →</span>
                   </div>
                 </div>
-              </Link>
+                </Link>
+                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); cycleStatus(p); }}
+                  className="mt-2 text-[11px] text-ink/35 transition hover:text-accent" title="点击推进作品状态：初稿 → 修改中 → 已定稿">
+                  {p.status === 'final' ? '✓ 已定稿（点击回到初稿）' : p.status === 'reviewed' ? '● 修改中（点击定稿）' : '○ 初稿（点击进入修改中）'}
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -121,6 +154,14 @@ export default function Home() {
             <Button variant="subtle" onClick={loadMore} disabled={loadingMore} className="text-sm">
               {loadingMore ? '加载中…' : '加载更多作品（' + projects.length + ' / ' + projTotal + '）'}
             </Button>
+          </div>
+        )}
+
+        {undoInfo && (
+          <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">
+            <span>已删除《{undoInfo.label}》</span>
+            <button onClick={undoDelete} className="font-medium text-accentlight hover:underline">撤销</button>
+            <span className="text-xs text-paper/50">30s</span>
           </div>
         )}
 
