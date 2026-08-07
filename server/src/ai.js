@@ -183,8 +183,12 @@ async function callLLM(messages, opts = {}) {
 export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId }) {
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
-  const memories = userId ? (db().memories || []).filter(m => m.user_id === userId).sort((a, b) => (b.importance || 0) - (a.importance || 0)).slice(0, 5) : [];
-  const memoryText = memories.length ? memories.map(m => '- ' + m.content).join('\n') : '';
+  // 记忆检索：项目级优先（与当前作品强相关），再按 importance 排序，最多注入 5 条（Prompt Engineering §1/§9）
+  const memories = userId ? (db().memories || [])
+    .filter(m => m.user_id === userId)
+    .sort((a, b) => Number(b.scope === 'project') - Number(a.scope === 'project') || (b.importance || 0) - (a.importance || 0))
+    .slice(0, 5) : [];
+  const memoryText = memories.length ? memories.map(m => '- [' + (m.scope === 'project' ? '作品' : '用户') + '] ' + m.content).join('\n') : '';
 
   const s = db().settings.ai;
   const personaName = persona?.name || '黎文';
@@ -251,7 +255,14 @@ export async function runWritingTool(mode, text, instruction) {
         restyle: '风格迁移',
       };
       const userContent = `请对以下文本进行${modeMap[mode] || mode}${instruction ? `，要求：${instruction}` : ''}。\n\n原文：\n${text}`;
-      const sys = '你是一位专业的中文文学编辑。输出处理后的文本，保持原有语气与核心信息；若为润色，在文末用“——编辑注：”给出一条简短说明。';
+            const sysByMode = {
+        polish: '你是专业的中文文学编辑。对原文润色：保持原意与语气，保留作者核心意象与个人风格，修正病句与冗余。输出：\n1) 改写稿；\n2) 以“——编辑注：”开头给出 2–3 条改动说明（指出改了什么、为什么）。',
+        expand: '你是专业的中文文学编辑。扩写原文：丰富细节与画面，保持原有语气与核心信息，不改变情节走向。输出：\n1) 扩写稿；\n2) 以“——编辑注：”开头给一句说明（你补充了什么）。',
+        condense: '你是专业的中文文学编辑。缩写原文：保留核心情节与信息，删去冗余修饰。输出：\n1) 缩写稿；\n2) 以“——编辑注：”开头给一句说明（删减了什么）。',
+        continue: '你是专业的中文文学编辑。延续上文的情节与语气续写 300–500 字：不引入与已定设定冲突的新角色，结尾留一个自然的悬念或推进。输出：\n1) 续写稿；\n2) 以“——编辑注：”开头给一句接续理由。',
+        restyle: '你是专业的中文文学编辑。将原文改为指定风格（如冷峻、诗意、克制）：只变表达，不变情节与信息。输出：\n1) 改写稿；\n2) 以“——编辑注：”开头给出 2–3 处原句→改写句对照说明。',
+      };
+      const sys = sysByMode[mode] || sysByMode.polish;
       const result = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: userContent }], { max_tokens: 1200, temperature: 0.7 });
       if (result) return { result: result.trim(), source: 'llm' };
     } catch (e) {

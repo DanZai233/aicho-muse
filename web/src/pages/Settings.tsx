@@ -89,7 +89,7 @@ export default function Settings() {
                 </label>
                 <label className="flex items-center gap-2">
                   <input type="checkbox" checked={prefs.auto_send} onChange={e => setPrefs({ ...prefs, auto_send: e.target.checked })} className="accent-accent" />
-                  语音转写完成后自动发送
+                  语音转写完成后自动发送（不开时先确认；转写中仍可随时打字，互不阻塞）
                 </label>
               </div>
               <div className="mt-4"><Button onClick={savePrefs}>保存语音偏好</Button></div>
