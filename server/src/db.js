@@ -125,7 +125,8 @@ export async function initStorage() {
   if (mysqlMode()) {
     const m = await import('./mysql.js');
     await m.mysqlLoad(cache);
-    console.log('[DB] MySQL 模式已启用');
+    m.startPeriodicFlush(cache);
+    console.log('[DB] MySQL 模式已启用（2 秒周期落库）');
   } else {
     console.log('[DB] JSON 文件模式（设置 MYSQL_HOST 可切换 MySQL）');
   }

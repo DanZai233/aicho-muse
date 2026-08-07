@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Badge } from '../components/ui';
 
-type Stats = { users: number; projects: number; chapters: number; conversations: number; messages: number; messages_today: number; conversations_today: number; ai_provider: string };
+type Stats = { users: number; projects: number; chapters: number; conversations: number; messages: number; messages_today: number; conversations_today: number; ai_provider: string; ai_model?: string; memories?: number; reply_types?: Record<string, number> };
 type AdminUser = { id: string; email: string; display_name: string; created_at: string };
 
 const inputCls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
@@ -107,10 +107,11 @@ export default function Admin() {
         {err && <div className="mb-4 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{err}</div>}
 
         {tab === 'stats' && stats && (
+          <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
               ['注册用户', stats.users], ['作品', stats.projects], ['章节', stats.chapters], ['会话', stats.conversations],
-              ['消息总量', stats.messages], ['今日消息', stats.messages_today], ['今日会话', stats.conversations_today], ['AI 引擎', stats.ai_provider === 'none' ? '内置' : stats.ai_provider],
+              ['消息总量', stats.messages], ['今日消息', stats.messages_today], ['今日会话', stats.conversations_today], ['AI 引擎', stats.ai_provider === 'none' ? '内置' : (stats.ai_model ? stats.ai_provider + ' · ' + stats.ai_model : stats.ai_provider)],
             ].map(([label, v]) => (
               <div key={label as string} className="rounded-2xl bg-white/5 p-5">
                 <p className="text-sm text-paper/50">{label}</p>
@@ -118,6 +119,26 @@ export default function Admin() {
               </div>
             ))}
           </div>
+          {stats.reply_types && (
+            <div className="mt-4 rounded-2xl bg-white/5 p-5">
+              <h3 className="mb-3 font-serif text-lg font-semibold">回复类型分布</h3>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                {[
+                  ['提问', stats.reply_types.question, 'accent'],
+                  ['反馈', stats.reply_types.feedback, 'amber'],
+                  ['建议', stats.reply_types.suggestion, 'default'],
+                  ['鼓励', stats.reply_types.encouragement, 'green'],
+                  ['其他', stats.reply_types.other, 'default'],
+                ].map(([label, v]) => (
+                  <div key={label as string} className="rounded-xl bg-white/5 px-4 py-3">
+                    <p className="text-sm text-paper/50">{label}</p>
+                    <p className="mt-1 font-serif text-2xl font-semibold">{v as number}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          </>
         )}
 
         {tab === 'users' && (

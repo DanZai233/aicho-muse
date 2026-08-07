@@ -26,9 +26,18 @@ router.get('/stats', (req, res) => {
       character_cards: d.character_cards.length,
       timeline_events: d.timeline_events.length,
       idea_notes: d.idea_notes.length,
+      memories: (d.memories || []).length,
       messages_today: messagesToday,
       conversations_today: convToday,
-      ai_provider: d.settings.ai.provider,
+      ai_provider: (process.env.LLM_PROVIDER || d.settings.ai.llm_provider || d.settings.ai.provider || 'none'),
+      ai_model: (process.env.LLM_MODEL || d.settings.ai.llm_model || d.settings.ai.model || ''),
+      reply_types: {
+        question: d.messages.filter(m => m.reply_type === 'question').length,
+        feedback: d.messages.filter(m => m.reply_type === 'feedback').length,
+        suggestion: d.messages.filter(m => m.reply_type === 'suggestion').length,
+        encouragement: d.messages.filter(m => m.reply_type === 'encouragement').length,
+        other: d.messages.filter(m => m.reply_type && !['question', 'feedback', 'suggestion', 'encouragement'].includes(m.reply_type)).length,
+      },
     },
   });
 });

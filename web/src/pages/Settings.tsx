@@ -11,14 +11,25 @@ export default function Settings() {
   const [name, setName] = useState(user?.display_name || '');
   const [prefs, setPrefs] = useState<UserPrefs | null>(null);
   const [saved, setSaved] = useState(false);
+  const [memories, setMemories] = useState<any[]>([]);
 
   const load = async () => {
     try {
       const d = await api.get<{ settings: UserPrefs }>('/auth/me/settings');
       setPrefs(d.settings);
     } catch { setPrefs({ tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
+    try {
+      const m = await api.get<{ list: any[] }>('/memories');
+      setMemories(m.list);
+    } catch { /* ignore */ }
   };
   useEffect(() => { load(); }, []);
+
+  const deleteMemory = async (id: string) => {
+    if (!confirm('删除这条创作记忆？')) return;
+    await api.del(`/memories/${id}`);
+    setMemories(prev => prev.filter(x => x.id !== id));
+  };
 
   const saveUser = async () => {
     await api.patch('/auth/me', { display_name: name });
@@ -77,6 +88,26 @@ export default function Settings() {
               <div className="mt-4"><Button onClick={savePrefs}>保存语音偏好</Button></div>
             </>
           ) : <p className="text-sm text-ink/50">加载中…</p>}
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+          <h2 className="mb-3 font-serif text-lg font-semibold">创作记忆（{memories.length}）</h2>
+          <p className="mb-3 text-sm text-ink/50">对话中助手自动记住的创作偏好与设定，会注入到后续回复中。</p>
+          {memories.length === 0 ? (
+            <p className="text-sm text-ink/35">还没有记忆，多聊几次创作后会自动生成。</p>
+          ) : (
+            <div className="space-y-2">
+              {memories.map(m => (
+                <div key={m.id} className="flex items-center justify-between rounded-xl border border-ink/5 bg-paper/50 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="text-sm text-ink/70">{m.content}</div>
+                    <div className="mt-0.5 text-xs text-ink/35">{m.scope === 'project' ? '作品' : '用户'} · 重要度 {m.importance || 3}</div>
+                  </div>
+                  <button onClick={() => deleteMemory(m.id)} className="ml-2 shrink-0 text-xs text-ink/30 hover:text-red-500">删除</button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">

@@ -59,13 +59,25 @@ export async function mysqlLoad(cache) {
   const conn = await getPool().getConnection();
   try {
     const [rows] = await conn.query('SELECT `key`, `value` FROM app_data');
+    // 按 key 前缀归类：users:<id> → cache.users 数组；settings/stats 直接赋值
+    const grouped = {};
     for (const r of rows) {
       const v = r.value;
-      if (typeof v === 'object' && v !== null && Array.isArray(v)) cache[r.key] = v;
-      else if (typeof v === 'object' && v !== null) cache[r.key] = v;
+      if (typeof v !== 'object' || v === null) continue;
+      const sep = r.key.indexOf(':');
+      if (sep > 0) {
+        const table = r.key.slice(0, sep);
+        if (!grouped[table]) grouped[table] = [];
+        grouped[table].push(v);
+      } else {
+        cache[r.key] = v;
+      }
     }
-    // 首次启动：cache 里已有种子数据，全量写入
-    const loaded = rows.some(r => r.key === 'users');
+    for (const [table, list] of Object.entries(grouped)) {
+      if (table in cache && Array.isArray(cache[table])) cache[table] = list;
+    }
+    // 首次启动（DB 无 users 行）：写入种子数据
+    const loaded = rows.some(r => r.key.startsWith('users:'));
     if (!loaded) await mysqlSaveFull(cache);
     return true;
   } finally {
@@ -102,6 +114,15 @@ export async function mysqlSaveFull(cache) {
 
 // 防抖保存：多个 saveDb 合并为一次全量写
 let flushTimer = null;
+let periodic = null;
+export function startPeriodicFlush(cache) {
+  if (periodic) return;
+  periodic = setInterval(() => {
+    mysqlSaveFull(cache).catch(e => console.error('[MySQL] 周期保存失败:', e.message));
+  }, 2000);
+  periodic.unref?.();
+}
+
 export function mysqlScheduleSave(cache) {
   if (!mysqlEnabled()) return;
   if (flushTimer) clearTimeout(flushTimer);
