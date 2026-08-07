@@ -81,6 +81,13 @@ function personaPrompt(persona) {
   if (!persona) return '';
   return `你是${persona.name}：${persona.tagline}。背景：${persona.background}。性格：${persona.personality.join('、')}。说话风格：${persona.speaking_style?.tone || '自然'}，偏好：${(persona.speaking_style?.preferences || []).join('、')}，避免：${(persona.speaking_style?.avoid || []).join('、')}。`;
 }
+const LANGUAGE_NAME = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español', ru: 'Русский' };
+function languageNote(lang) {
+  if (!lang || lang === 'zh-CN') return '';
+  const name = LANGUAGE_NAME[lang] || lang;
+  return '【作品语言】本作品使用' + name + '创作。请用' + name + '与用户交流，并给出' + name + '的写作建议；专有名词可保留原文。';
+}
+
 
 function coachReply(input, persona, project, chapter, history, userName) {
   const cat = categorize(input);
@@ -218,6 +225,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
         userName ? '【称呼】用户希望被称为「' + userName + '」。在合适的时机（如鼓励、回应开头）自然地用这个称呼叫用户，不要每句都叫，也不要生硬重复。' : '',
         '',
         project ? `【项目上下文】作品《${project.title}》（${project.genre || ''}），主题：${project.theme || '未设置'}。` : '',
+        languageNote(project?.language),
         chapter ? `当前章节：${chapter.title}。` : '',
         memories.length ? `【记忆上下文】你记得这些关于用户的创作信息：
 ${memoryText}` : '',
@@ -247,7 +255,7 @@ ${memoryText}` : '',
   return { ...r, source: 'rules' };
 }
 
-export async function runWritingTool(mode, text, instruction) {
+export async function runWritingTool(mode, text, instruction, language) {
   const s = db().settings.ai;
   const hasUni = (process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none';
   const hasLegacy = s.api_key && s.provider !== 'none';
@@ -268,7 +276,9 @@ export async function runWritingTool(mode, text, instruction) {
         continue: '你是专业的中文文学编辑。延续上文的情节与语气续写 300–500 字：不引入与已定设定冲突的新角色，结尾留一个自然的悬念或推进。输出：\n1) 续写稿；\n2) 以“——编辑注：”开头给一句接续理由。',
         restyle: '你是专业的中文文学编辑。将原文改为指定风格（如冷峻、诗意、克制）：只变表达，不变情节与信息。输出：\n1) 改写稿；\n2) 以“——编辑注：”开头给出 2–3 处原句→改写句对照说明。',
       };
-      const sys = sysByMode[mode] || sysByMode.polish;
+      let sys = sysByMode[mode] || sysByMode.polish;
+      const lang = languageNote(language);
+      if (lang) sys = lang + '\n' + sys;
       const result = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: userContent }], { max_tokens: 1200, temperature: 0.7 });
       if (result) return { result: result.trim(), source: 'llm' };
     } catch (e) {

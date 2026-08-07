@@ -6,6 +6,7 @@ const router = Router();
 router.use(authRequired);
 
 const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script'];
+const LANGUAGES = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'];
 
 router.get('/', (req, res) => {
   const d = db();
@@ -26,15 +27,17 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const d = db();
-  const { title, genre, theme, target_audience, goal_word_count, default_persona_id, team_persona_ids, subtitle, author_name, cover_color } = req.body || {};
+  const { title, genre, language, theme, target_audience, goal_word_count, default_persona_id, team_persona_ids, subtitle, author_name, cover_color } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ code: 40001, message: '作品标题必填' });
   if (genre && !GENRES.includes(genre)) return res.status(400).json({ code: 40001, message: '不支持的体裁' });
+  if (language && !LANGUAGES.includes(language)) return res.status(400).json({ code: 40001, message: '不支持的作品语言' });
   const now = new Date().toISOString();
   const p = {
     id: uuid(),
     user_id: req.user.id,
     title: title.trim(),
     genre: genre || 'biography',
+    language: language || 'zh-CN',
     theme: theme || '',
     target_audience: target_audience || '',
     goal_word_count: goal_word_count || 0,
@@ -66,8 +69,11 @@ router.patch('/:id', (req, res) => {
   const d = db();
   const p = d.projects.find(x => x.id === req.params.id && x.user_id === req.user.id);
   if (!p) return res.status(404).json({ code: 40401, message: '作品不存在' });
-  for (const k of ['title', 'subtitle', 'author_name', 'genre', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color']) {
+  for (const k of ['title', 'subtitle', 'author_name', 'genre', 'language', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
+  }
+  if (req.body.language !== undefined && !LANGUAGES.includes(req.body.language)) {
+    return res.status(400).json({ code: 40001, message: '不支持的作品语言' });
   }
   if (Array.isArray(req.body.team_persona_ids)) {
     p.team_persona_ids = req.body.team_persona_ids.filter(id => id !== (p.default_persona_id || null));

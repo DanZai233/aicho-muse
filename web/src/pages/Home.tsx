@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, Project, Conversation } from '../lib/api';
+import { api, Project, Conversation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, EmptyState, Modal, Input } from '../components/ui';
@@ -23,6 +23,7 @@ export default function Home() {
   const [subtitle, setSubtitle] = useState('');
   const [author, setAuthor] = useState('');
   const [genre, setGenre] = useState('biography');
+  const [language, setLanguage] = useState('zh-CN');
   const [theme, setTheme] = useState('');
   const [cover, setCover] = useState('#8b7d6b');
   const [busy, setBusy] = useState(false);
@@ -52,8 +53,8 @@ export default function Home() {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      const d = await api.post<{ project: Project }>('/projects', { title, subtitle, author_name: author, genre, theme, cover_color: cover, default_persona_id: 'preset-liwen' });
-      setOpen(false); setTitle(''); setSubtitle(''); setAuthor(''); setTheme('');
+      const d = await api.post<{ project: Project }>('/projects', { title, subtitle, author_name: author, genre, language, theme, cover_color: cover, default_persona_id: 'preset-liwen' });
+      setOpen(false); setTitle(''); setSubtitle(''); setAuthor(''); setTheme(''); setLanguage('zh-CN');
       nav('/workspace?project=' + d.project.id);
     } finally { setBusy(false); }
   };
@@ -226,6 +227,16 @@ export default function Home() {
                   className={'h-8 w-8 rounded-full ring-2 ring-offset-2 transition ' + (cover === c ? 'ring-ink' : 'ring-transparent')} style={{ background: c }} />
               ))}
             </div>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">作品语言</span>
+            <div className="flex flex-wrap gap-2">
+              {LANGUAGES.map(l => (
+                <button key={l} onClick={() => setLanguage(l)}
+                  className={'rounded-full px-3 py-1 text-sm transition ' + (language === l ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>{LANGUAGE_LABEL[l] || l}</button>
+              ))}
+            </div>
+            <span className="mt-1 block text-xs text-ink/40">AI 将使用该语言与你交流并给出写作建议</span>
           </label>
           <Input label="主题（一句话）" value={theme} onChange={setTheme} placeholder="例如：一个江南小镇青年的成长" />
           <Button onClick={create} disabled={!title.trim() || busy} className="w-full">{busy ? '创建中…' : '创建这本书'}</Button>

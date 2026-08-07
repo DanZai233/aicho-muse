@@ -53,8 +53,11 @@ export type VoiceProfile = {
   speech_notes: string; is_preset: boolean; is_public?: boolean;
 };
 
+export const LANGUAGES = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'];
+export const LANGUAGE_LABEL: Record<string, string> = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español', ru: 'Русский' };
+
 export type Project = {
-  id: string; title: string; genre: string; theme: string; target_audience: string;
+  id: string; title: string; genre: string; language?: string; theme: string; target_audience: string;
   goal_word_count: number; status: string; default_persona_id: string | null; team_persona_ids?: string[];
   cover_color: string; subtitle?: string; author_name?: string;
   chapter_count?: number; word_count?: number;

@@ -78,7 +78,8 @@ router.post('/rewrite', async (req, res) => {
   }
   if (!text || !text.trim()) return res.status(400).json({ code: 40001, message: '没有可处理的文本' });
   try {
-    const out = await runWritingTool(mode, text, instruction);
+    const langProj = chapter_id ? db().projects.find(p => p.id === ownChapter(req, chapter_id)?.project_id) : null;
+    const out = await runWritingTool(mode, text, instruction, langProj?.language);
     const diff = diffParagraphs(text, out.result || '');
     // 记录工具调用
     if (chapter_id) {

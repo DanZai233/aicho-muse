@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile } from '../lib/api';
+import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 import MarkdownEditor from '../components/MarkdownEditor';
@@ -123,7 +123,7 @@ export default function Workspace() {
   const [showCover, setShowCover] = useState(false);
   const [coverDraft, setCoverDraft] = useState({ title: '', subtitle: '', author_name: '', cover_color: '#8b7d6b' });
   const [showProjSettings, setShowProjSettings] = useState(false);
-  const [projDraft, setProjDraft] = useState({ genre: 'biography', theme: '', target_audience: '', goal_word_count: 0, team_persona_ids: [] as string[] });
+  const [projDraft, setProjDraft] = useState({ genre: 'biography', language: 'zh-CN', theme: '', target_audience: '', goal_word_count: 0, team_persona_ids: [] as string[] });
 
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
@@ -435,7 +435,7 @@ export default function Workspace() {
 
   const openProjSettings = () => {
     if (!project) return;
-    setProjDraft({ genre: project.genre, theme: project.theme || '', target_audience: project.target_audience || '', goal_word_count: project.goal_word_count || 0, team_persona_ids: project.team_persona_ids || [] });
+    setProjDraft({ genre: project.genre, language: project.language || 'zh-CN', theme: project.theme || '', target_audience: project.target_audience || '', goal_word_count: project.goal_word_count || 0, team_persona_ids: project.team_persona_ids || [] });
     setShowProjSettings(true);
   };
   const saveProjSettings = async () => {
@@ -867,6 +867,16 @@ export default function Workspace() {
                   className={'rounded-full px-3.5 py-1.5 text-sm transition ' + (projDraft.genre === k ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>{v}</button>
               ))}
             </div>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">作品语言</span>
+            <div className="flex flex-wrap gap-2">
+              {LANGUAGES.map(l => (
+                <button key={l} onClick={() => setProjDraft({ ...projDraft, language: l })}
+                  className={'rounded-full px-3 py-1 text-sm transition ' + (projDraft.language === l ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>{LANGUAGE_LABEL[l] || l}</button>
+              ))}
+            </div>
+            <span className="mt-1 block text-xs text-ink/40">AI 将使用该语言与你交流并给出写作建议</span>
           </label>
           <Input label="主题（一句话）" value={projDraft.theme} onChange={v => setProjDraft({ ...projDraft, theme: v })} placeholder="例如：一个江南小镇青年的成长" />
           <Input label="目标读者" value={projDraft.target_audience} onChange={v => setProjDraft({ ...projDraft, target_audience: v })} placeholder="例如：家人与朋友 / 悬疑小说读者" />
