@@ -563,7 +563,7 @@ export default function Workspace() {
                 <div className="mt-8 space-y-5">
                   {chapters.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-ink/15 bg-white/60 px-6 py-12 text-center text-sm text-ink/40">
-                      这本书还是空的，去「写作」写下第一章吧
+                      这本书还是空的。试着口述一个你最想讲的故事片段，让它成为第一章的开端。
                     </div>
                   )}
                   {chapters.map((c, idx) => (
@@ -574,7 +574,7 @@ export default function Workspace() {
                         <span className="text-xs text-ink/35">{c.word_count} 字</span>
                       </div>
                       <h3 className="font-serif text-lg font-semibold group-hover:text-accent">{c.title}</h3>
-                      <p className="mt-2 whitespace-pre-wrap font-creative text-sm leading-7 text-ink/60 line-clamp-4">{c.content || '（还没有内容）'}</p>
+                      <p className="mt-2 whitespace-pre-wrap font-creative text-sm leading-7 text-ink/60 line-clamp-4">{c.content || '试着口述一个你最想讲的故事片段。'}</p>
                     </div>
                   ))}
                 </div>
@@ -648,7 +648,7 @@ export default function Workspace() {
                 <div className="flex flex-1 flex-col items-center justify-center text-ink/40">
                   {project && <BookCover project={project} size="md" />}
                   <div className="mb-3 mt-4 text-4xl">📖</div>
-                  <p className="text-sm">在左侧「书」里新建章节，开始书写</p>
+                  <p className="text-sm">试着口述一个你最想讲的故事片段，或者输入第一句话。</p>
                   <Button variant="subtle" onClick={addChapter} className="mt-4 text-xs">＋ 新建章节</Button>
                 </div>
               )}
