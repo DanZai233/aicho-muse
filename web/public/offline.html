@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>离线 · Aicho Muse</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #faf7f2; color: #2d2a26; font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
+      .card { text-align: center; padding: 40px 28px; max-width: 360px; }
+      .logo { font-family: Georgia, serif; font-size: 42px; font-weight: 700; color: #8b7d6b; }
+      h1 { font-size: 20px; margin: 20px 0 8px; }
+      p { font-size: 14px; line-height: 1.7; color: rgba(45,42,38,.62); margin: 0 0 20px; }
+      button { border: none; border-radius: 10px; background: #2d2a26; color: #faf7f2; padding: 10px 22px; font-size: 14px; cursor: pointer; }
+      button:hover { opacity: .88; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #1e1b18; color: #ece7df; }
+        p { color: rgba(236,231,223,.62); }
+        button { background: #ece7df; color: #1e1b18; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">Aicho Muse</div>
+      <h1>你暂时离线了</h1>
+      <p>创作内容保存在你的设备与服务器上，联网后即可继续。也可以先在这里歇一歇，灵感不会跑掉。</p>
+      <button onclick="location.reload()">重新连接</button>
+    </div>
+  </body>
+</html>

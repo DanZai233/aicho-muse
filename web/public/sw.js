@@ -1,6 +1,6 @@
 // Aicho Muse Service Worker：导航网络优先（避免部署后缓存旧 HTML），静态资源缓存优先
-const CACHE = 'aicho-muse-v2';
-const PRECACHE = ['/', '/manifest.webmanifest', '/favicon.svg'];
+const CACHE = 'aicho-muse-v3';
+const PRECACHE = ['/', '/offline.html', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
@@ -20,7 +20,7 @@ self.addEventListener('fetch', (e) => {
         const clone = res.clone();
         if (res.ok) caches.open(CACHE).then(c => c.put(e.request, clone));
         return res;
-      }).catch(() => caches.match(e.request).then(cached => cached || caches.match('/')))
+      }).catch(() => caches.match(e.request).then(cached => cached || caches.match('/offline.html')))
     );
     return;
   }
@@ -29,6 +29,6 @@ self.addEventListener('fetch', (e) => {
       const clone = res.clone();
       if (res.ok && url.origin === location.origin) caches.open(CACHE).then(c => c.put(e.request, clone));
       return res;
-    }).catch(() => caches.match('/')))
+    }).catch(() => caches.match('/offline.html')))
   );
 });

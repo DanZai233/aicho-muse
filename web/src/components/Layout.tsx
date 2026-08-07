@@ -7,6 +7,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [dark, setDark] = useState(() => localStorage.getItem('am_theme') === 'dark');
+  const [installEvt, setInstallEvt] = useState<any>(null);
+  const [installed, setInstalled] = useState(() => (window.matchMedia('(display-mode: standalone)').matches));
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem('am_install_dismissed') === '1');
+
+  useEffect(() => {
+    const onPrompt = (e: Event) => { e.preventDefault(); setInstallEvt(e); };
+    const onInstalled = () => { setInstalled(true); setInstallEvt(null); localStorage.setItem('am_installed', '1'); };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+  const doInstall = async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; setInstalled(true); setInstallEvt(null); localStorage.setItem('am_installed', '1'); } catch { /* 用户取消 */ }
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
@@ -15,6 +34,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
+      {installEvt && !installed && !dismissed && (
+        <div className="flex items-center gap-3 border-b border-ink/5 bg-accentlight/40 px-4 py-2 text-sm animate-fade-up">
+          <span className="text-base">📖</span>
+          <span className="min-w-0 flex-1 truncate text-ink/75">把 Aicho Muse 装到桌面/主屏幕，像一本随时打开的书。</span>
+          <button onClick={doInstall} className="shrink-0 rounded-lg bg-ink px-3 py-1 text-xs font-medium text-paper transition hover:bg-ink/90">安装</button>
+          <button onClick={() => { setDismissed(true); localStorage.setItem('am_install_dismissed', '1'); }} className="shrink-0 text-xs text-ink/40 hover:text-ink">稍后</button>
+        </div>
+      )}
       <header className="sticky top-0 z-40 border-b border-ink/5 bg-paper/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2.5">
