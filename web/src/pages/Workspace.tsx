@@ -106,6 +106,10 @@ export default function Workspace() {
   const [timeline, setTimeline] = useState<StructItem[]>([]);
   const [ideas, setIdeas] = useState<StructItem[]>([]);
   const [checkIssues, setCheckIssues] = useState<any[]>([]);
+  const [adoptMsg, setAdoptMsg] = useState<Message | null>(null);
+  const [adoptChapter, setAdoptChapter] = useState('new');
+  const [adoptBusy, setAdoptBusy] = useState(false);
+  const [adoptDone, setAdoptDone] = useState<string | null>(null);
   const [checkBusy, setCheckBusy] = useState(false);
   const [versions, setVersions] = useState<any[]>([]);
   const [showVersions, setShowVersions] = useState(false);
@@ -307,6 +311,26 @@ export default function Workspace() {
     finally { setCheckBusy(false); }
   };
 
+  const adoptMessage = async () => {
+    if (!adoptMsg || !conv) return;
+    setAdoptBusy(true);
+    try {
+      const d = await api.post<{ chapter: Chapter }>('/conversations/' + conv.id + '/adopt', {
+        message_id: adoptMsg.id,
+        chapter_id: adoptChapter === 'new' ? null : adoptChapter,
+      });
+      setMessages(prev => prev.map(m => m.id === adoptMsg.id ? { ...m, adopted_at: new Date().toISOString() } : m));
+      setAdoptDone(adoptChapter === 'new' ? '已采纳为新章节「' + d.chapter.title + '」' : '已追加到「' + (chapters.find(c => c.id === adoptChapter)?.title || '章节') + '」');
+      setAdoptMsg(null);
+      if (project) loadProject(project.id);
+    } catch (e: any) {
+      setAdoptDone('采纳失败：' + e.message);
+    } finally {
+      setAdoptBusy(false);
+      setTimeout(() => setAdoptDone(null), 3000);
+    }
+  };
+
   const exportMd = () => {
     if (!project) return;
     const a = document.createElement('a');
@@ -490,8 +514,13 @@ export default function Workspace() {
                       )}
                       <div className="whitespace-pre-wrap">{m.content}</div>
                       {m.role === 'assistant' && (
-                        <div className="mt-2">
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
                           <button onClick={() => speak(m.content, { onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) })} className="text-xs text-accent hover:underline">🔊 朗读</button>
+                        {m.adopted_at ? (
+                          <span className="text-xs text-emerald-600">✓ 已采纳到文章</span>
+                        ) : (
+                          <button onClick={() => { setAdoptMsg(m); setAdoptChapter('new'); }} className="text-xs text-accent hover:underline">📝 采纳到文章</button>
+                        )}
                         </div>
                       )}
                     </div>
@@ -553,6 +582,27 @@ export default function Workspace() {
           <Button onClick={createConv} className="w-full">开始对话</Button>
         </div>
       </Modal>
+
+      {/* 采纳到文章弹窗 */}
+      <Modal open={!!adoptMsg} onClose={() => setAdoptMsg(null)} title="采纳到文章">
+        <div className="space-y-4">
+          <div className="max-h-32 overflow-y-auto rounded-xl border border-ink/5 bg-paper/60 p-3 text-sm text-ink/70">
+            {adoptMsg?.content}
+          </div>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">写入位置</span>
+            <select value={adoptChapter} onChange={e => setAdoptChapter(e.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none">
+              <option value="new">＋ 新建章节（来自对话）</option>
+              {chapters.map(c => <option key={c.id} value={c.id}>追加到：{c.title}</option>)}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <Button onClick={adoptMessage} disabled={adoptBusy} className="flex-1">{adoptBusy ? '写入中…' : '确认采纳'}</Button>
+            <Button variant="ghost" onClick={() => setAdoptMsg(null)}>取消</Button>
+          </div>
+        </div>
+      </Modal>
+      {adoptDone && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{adoptDone}</div>}
 
       {/* 版本历史弹窗 */}
       <Modal open={showVersions} onClose={() => setShowVersions(false)} title={`版本历史 · ${chapter?.title || ''}`} wide>

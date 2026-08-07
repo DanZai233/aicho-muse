@@ -178,6 +178,45 @@ router.get('/:id/stream', (req, res) => {
   });
 });
 
+// 采纳助手回复到文章：追加到指定章节，或新建章节
+router.post('/:id/adopt', (req, res) => {
+  const d = db();
+  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
+  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const { message_id, chapter_id, mode } = req.body || {};
+  const msg = d.messages.find(m => m.id === message_id && m.conversation_id === c.id);
+  if (!msg || msg.role !== 'assistant') return res.status(400).json({ code: 40001, message: '消息不存在或不是助手回复' });
+  const text = msg.content;
+  if (!text.trim()) return res.status(400).json({ code: 40001, message: '回复内容为空' });
+
+  let targetChapter;
+  if (chapter_id) {
+    targetChapter = d.chapters.find(ch => ch.id === chapter_id && ch.project_id === c.project_id);
+    if (!targetChapter) return res.status(404).json({ code: 40401, message: '目标章节不存在' });
+    const now = new Date().toISOString();
+    d.snapshots.push({ id: uuid(), chapter_id: targetChapter.id, content: targetChapter.content, note: '采纳对话内容前', created_at: now });
+    d.snapshots = d.snapshots.slice(-50);
+    targetChapter.content = (targetChapter.content ? targetChapter.content + '\n\n' : '') + text.trim();
+    targetChapter.word_count = targetChapter.content.length;
+    targetChapter.updated_at = now;
+    const proj = d.projects.find(p => p.id === c.project_id);
+    if (proj) proj.updated_at = now;
+  } else {
+    if (!c.project_id) return res.status(400).json({ code: 40001, message: '该会话未关联作品，无法新建章节' });
+    const now = new Date().toISOString();
+    const maxOrder = d.chapters.filter(ch => ch.project_id === c.project_id).reduce((m, ch) => Math.max(m, ch.order_index), -1);
+    targetChapter = {
+      id: uuid(), project_id: c.project_id, title: '新章节（来自对话）', content: text.trim(),
+      order_index: maxOrder + 1, status: 'draft', word_count: text.trim().length, created_at: now, updated_at: now,
+    };
+    d.chapters.push(targetChapter);
+  }
+  // 标记消息已采纳
+  msg.adopted_at = new Date().toISOString();
+  saveDb();
+  res.json({ code: 0, data: { chapter: targetChapter, adopted: true } });
+});
+
 router.delete('/:id', (req, res) => {
   const d = db();
   const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);

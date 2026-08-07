@@ -75,5 +75,5 @@ export type Conversation = {
 
 export type Message = {
   id: string; conversation_id: string; role: 'user' | 'assistant' | 'tool';
-  content: string; reply_type?: string; source?: string; created_at: string;
+  content: string; reply_type?: string; source?: string; adopted_at?: string; created_at: string;
 };
