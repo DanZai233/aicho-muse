@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, Project } from '../lib/api';
+import { api, Project, Conversation } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, EmptyState, Modal, Input } from '../components/ui';
@@ -12,6 +12,11 @@ export default function Home() {
   const { user } = useAuth();
   const nav = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [convs, setConvs] = useState<Conversation[]>([]);
+  const [projPage, setProjPage] = useState(1);
+  const [projTotal, setProjTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [onboarded, setOnboarded] = useState(() => localStorage.getItem('am_onboarded') === '1');
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -22,7 +27,20 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
-    try { setProjects((await api.get<{ list: Project[] }>('/projects')).list); } catch { /* 401 handled */ }
+    try {
+      const d = await api.get<{ list: Project[]; total: number }>('/projects?page=1&page_size=6');
+      setProjects(d.list); setProjTotal(d.total); setProjPage(1);
+    } catch { /* 401 handled */ }
+    try { setConvs((await api.get<{ list: Conversation[] }>('/conversations')).list); } catch { /* ignore */ }
+  };
+  const loadMore = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const d = await api.get<{ list: Project[]; total: number }>('/projects?page=' + (projPage + 1) + '&page_size=6');
+      setProjects(prev => [...prev, ...d.list]); setProjTotal(d.total); setProjPage(projPage + 1);
+    } catch { /* ignore */ }
+    finally { setLoadingMore(false); }
   };
   useEffect(() => { load(); }, []);
 
@@ -41,6 +59,29 @@ export default function Home() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
+        {!onboarded && (
+          <div className="mb-8 rounded-2xl border border-accent/20 bg-accentlight/30 p-5 animate-fade-up">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-serif text-lg font-semibold">三步开始你的第一本书</h2>
+              <button onClick={() => { localStorage.setItem('am_onboarded', '1'); setOnboarded(true); }} className="text-xs text-ink/40 hover:text-ink">知道了，跳过</button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {[
+                ['① 认识你的创作教练', '去「人设」页选一位，或先沿用默认的黎文。', '/personas', '去选人设'],
+                ['② 新建一本书', '书名、封面、体裁，一本书从封面开始长出来。', null, '新建作品'],
+                ['③ 开口说第一句', '进入作品后点右上「💬 对话」，口述或打字，AI 会提问、反馈、鼓励你。', null, '知道了'],
+              ].map(([title, desc, href, btn], i) => (
+                <div key={i} className="rounded-xl bg-white/70 p-4">
+                  <p className="text-sm font-semibold">{title}</p>
+                  <p className="mt-1 text-xs leading-5 text-ink/55">{desc}</p>
+                  {href
+                    ? <Link to={href as string} className="mt-2 inline-block text-xs text-accent hover:underline">{btn}</Link>
+                    : <button onClick={() => { if (i === 1) setOpen(true); else { localStorage.setItem('am_onboarded', '1'); setOnboarded(true); } }} className="mt-2 inline-block text-xs text-accent hover:underline">{btn}</button>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold">你好，{user?.display_name}</h1>
@@ -74,6 +115,38 @@ export default function Home() {
               </Link>
             ))}
           </div>
+        )}
+        {projects.length > 0 && projects.length < projTotal && (
+          <div className="mt-6 text-center">
+            <Button variant="subtle" onClick={loadMore} disabled={loadingMore} className="text-sm">
+              {loadingMore ? '加载中…' : '加载更多作品（' + projects.length + ' / ' + projTotal + '）'}
+            </Button>
+          </div>
+        )}
+
+        {convs.length > 0 && (
+          <section className="mt-10">
+            <div className="mb-4 flex items-end justify-between">
+              <h2 className="font-serif text-xl font-semibold">最近会话</h2>
+              <span className="text-xs text-ink/40">继续上次没聊完的创作</span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {convs.slice(0, 6).map(c => (
+                <Link key={c.id} to={'/workspace?project=' + (c.project_id || '') + '&chat=1&conv=' + c.id}
+                  className="group flex items-center gap-3 rounded-2xl border border-ink/5 bg-white/70 px-4 py-3 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-serif text-sm font-semibold text-paper"
+                    style={{ background: c.persona?.avatar_color || '#8b7d6b' }}>
+                    {(c.persona?.name || '黎').slice(0, 1)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium group-hover:text-accent">{c.title}</div>
+                    <div className="truncate text-xs text-ink/45">{c.persona?.name || '黎文'}{c.last_message ? ' · ' + c.last_message : ''}</div>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-ink/30">{c.project?.title || '未关联作品'}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
         )}
       </div>
 

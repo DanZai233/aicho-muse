@@ -3,6 +3,50 @@ import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
 import { runWritingTool, consistencyCheck } from '../ai.js';
 
+function normPara(p) {
+  return p.replace(/[\s，。！？、；：,.!?;:""''「」『』（）()—…·]/g, '').slice(0, 14);
+}
+
+// 基于 LCS 的段落级 diff，返回 [{type:'keep'|'insert'|'delete'|'replace', old?, new?}]
+function diffParagraphs(oldText, newText) {
+  const oldPs = String(oldText || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const newPs = String(newText || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const n = oldPs.length, m = newPs.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = normPara(oldPs[i]) === normPara(newPs[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (normPara(oldPs[i]) === normPara(newPs[j])) {
+      out.push({ type: 'keep', new: newPs[j] });
+      i++; j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ type: 'delete', old: oldPs[i] });
+      i++;
+    } else {
+      out.push({ type: 'insert', new: newPs[j] });
+      j++;
+    }
+  }
+  while (i < n) out.push({ type: 'delete', old: oldPs[i++] });
+  while (j < m) out.push({ type: 'insert', new: newPs[j++] });
+  // 相邻 delete+insert 合并为 replace
+  const merged = [];
+  for (let k = 0; k < out.length; k++) {
+    if (out[k].type === 'delete' && out[k + 1]?.type === 'insert') {
+      merged.push({ type: 'replace', old: out[k].old, new: out[k + 1].new });
+      k++;
+    } else {
+      merged.push(out[k]);
+    }
+  }
+  return merged;
+}
+
 const router = Router();
 router.use(authRequired);
 
@@ -35,6 +79,7 @@ router.post('/rewrite', async (req, res) => {
   if (!text || !text.trim()) return res.status(400).json({ code: 40001, message: '没有可处理的文本' });
   try {
     const out = await runWritingTool(mode, text, instruction);
+    const diff = diffParagraphs(text, out.result || '');
     // 记录工具调用
     if (chapter_id) {
       const ch = ownChapter(req, chapter_id);
@@ -44,7 +89,7 @@ router.post('/rewrite', async (req, res) => {
       }
     }
     saveDb();
-    res.json({ code: 0, data: out });
+    res.json({ code: 0, data: { ...out, diff } });
   } catch (e) {
     res.status(500).json({ code: 50001, message: e.message });
   }

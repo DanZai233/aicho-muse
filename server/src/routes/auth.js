@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { registerUser, signToken, checkPassword, authRequired, publicUser, findUserByEmail, findUserById } from '../auth.js';
 import { db, saveDb } from '../db.js';
+import { checkIpRate, getClientIp } from '../quota.js';
 
 const router = Router();
 
 router.post('/register', (req, res) => {
   try {
+    const rate = checkIpRate(getClientIp(req));
+    if (!rate.allowed) return res.status(429).set('Retry-After', String(rate.retryAfter)).json({ code: 42901, message: '请求太频繁，请 ' + rate.retryAfter + ' 秒后再试' });
     const user = registerUser(req.body || {});
     res.json({ code: 0, data: { token: signToken(user), user: publicUser(user) } });
   } catch (e) {
@@ -14,6 +17,8 @@ router.post('/register', (req, res) => {
 });
 
 router.post('/login', (req, res) => {
+  const rate = checkIpRate(getClientIp(req));
+  if (!rate.allowed) return res.status(429).set('Retry-After', String(rate.retryAfter)).json({ code: 42901, message: '登录尝试过于频繁，请 ' + rate.retryAfter + ' 秒后再试' });
   const { email, password } = req.body || {};
   const user = findUserByEmail(email);
   if (!user || !checkPassword(password, user.password_hash)) {

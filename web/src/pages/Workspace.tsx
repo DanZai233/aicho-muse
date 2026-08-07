@@ -7,6 +7,7 @@ import MarkdownEditor from '../components/MarkdownEditor';
 import BookCover from '../components/BookCover';
 import DiffReview from '../components/DiffReview';
 import { getSpeechRecognition, speak, stopSpeak } from '../lib/speech';
+import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
@@ -81,6 +82,7 @@ export default function Workspace() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const projectId = params.get('project') || '';
+  const convParam = params.get('conv') || '';
 
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -100,11 +102,13 @@ export default function Workspace() {
   const [newPersona, setNewPersona] = useState('preset-liwen');
   const [newVoice, setNewVoice] = useState('preset-voice-warm');
 
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(params.get('chat') === '1');
   const [bookView, setBookView] = useState<'write' | 'preview'>('write');
   const [diffMsg, setDiffMsg] = useState<Message | null>(null);
   const [showCover, setShowCover] = useState(false);
   const [coverDraft, setCoverDraft] = useState({ title: '', subtitle: '', author_name: '', cover_color: '#8b7d6b' });
+  const [showProjSettings, setShowProjSettings] = useState(false);
+  const [projDraft, setProjDraft] = useState({ genre: 'biography', theme: '', target_audience: '', goal_word_count: 0 });
 
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
@@ -117,6 +121,9 @@ export default function Workspace() {
   const [showVersions, setShowVersions] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [adoptDone, setAdoptDone] = useState<string | null>(null);
+  const [undoInfo, setUndoInfo] = useState<{ kind: string; id: string; label: string } | null>(null);
+  const [draftRestored, setDraftRestored] = useState<string | null>(null);
+  const [showPersonaCard, setShowPersonaCard] = useState(false);
 
   const msgsRef = useRef<HTMLDivElement>(null);
   const recRef = useRef<any>(null);
@@ -141,7 +148,18 @@ export default function Workspace() {
       const ch = await api.post<{ chapter: Chapter }>('/projects/' + id + '/chapters', { title: '第一章', content: '' });
       setChapters([ch.chapter]); setChapter(ch.chapter);
     } else {
-      setChapter(prev => prev && d.chapters.find(c => c.id === prev.id) ? d.chapters.find(c => c.id === prev.id)! : d.chapters[0]);
+      setChapter(prev => {
+        const ch = prev && d.chapters.find(c => c.id === prev.id) ? d.chapters.find(c => c.id === prev.id)! : d.chapters[0];
+        const pending = getDraft(ch.id);
+        if (pending && (pending.content !== ch.content || pending.title !== ch.title)) {
+          queueMicrotask(() => {
+            setDraftRestored('已恢复「' + pending.title + '」的离线草稿');
+            setTimeout(() => setDraftRestored(null), 4000);
+          });
+          return { ...ch, content: pending.content, title: pending.title, word_count: pending.content.length };
+        }
+        return ch;
+      });
     }
   }, [loadStructure]);
   const loadConvs = useCallback(async () => {
@@ -158,10 +176,26 @@ export default function Workspace() {
   useEffect(() => { if (projectId) loadProject(projectId); }, [projectId, loadProject]);
   useEffect(() => { if (conv) loadMessages(conv.id); }, [conv?.id]);
   useEffect(() => {
+    const flush = async () => {
+      for (const d of listPending()) {
+        try {
+          await api.patch('/chapters/' + d.id, { content: d.content, note: '离线草稿同步' });
+          clearDraft(d.id);
+        } catch { /* 仍离线则保留 */ }
+      }
+    };
+    window.addEventListener('online', flush);
+    return () => window.removeEventListener('online', flush);
+  }, []);
+  useEffect(() => {
     if (!project) return;
     const match = convs.find(c => c.project_id === project.id);
-    setConv(prev => prev && convs.find(c => c.id === prev.id) ? prev : (match || null));
-  }, [project, convs]);
+    setConv(prev => {
+      if (prev && convs.find(c => c.id === prev.id)) return prev;
+      const target = convParam ? convs.find(c => c.id === convParam) : null;
+      return target || match || null;
+    });
+  }, [project, convs, convParam]);
 
   const loadMessages = async (cid: string) => {
     try { setMessages((await api.get<{ list: Message[] }>('/conversations/' + cid + '/messages?limit=100')).list); } catch { /* ignore */ }
@@ -242,8 +276,15 @@ export default function Workspace() {
   };
 
   const saveChapter = async (ch: Chapter) => {
-    const d = await api.patch<{ chapter: Chapter }>('/chapters/' + ch.id, { content: ch.content, note: '编辑器自动保存' });
-    setChapters(prev => prev.map(c => c.id === d.chapter.id ? d.chapter : c));
+    try {
+      const d = await api.patch<{ chapter: Chapter }>('/chapters/' + ch.id, { content: ch.content, note: '编辑器自动保存' });
+      clearDraft(ch.id);
+      setChapters(prev => prev.map(c => c.id === d.chapter.id ? d.chapter : c));
+    } catch {
+      saveDraft(ch.id, ch.content, ch.title);
+      setDraftRestored('当前处于离线状态，内容已保存在本地，联网后自动同步');
+      setTimeout(() => setDraftRestored(null), 4000);
+    }
     if (project) loadProject(project.id);
   };
   const updateContent = (content: string) => {
@@ -258,11 +299,22 @@ export default function Workspace() {
   };
   const deleteChapter = async () => {
     if (!chapter) return;
-    if (!confirm('删除章节「' + chapter.title + '」？')) return;
+    if (!confirm('删除章节「' + chapter.title + '」？30 秒内可撤销。')) return;
+    const removed = chapter;
     await api.del('/chapters/' + chapter.id);
     const rest = chapters.filter(c => c.id !== chapter.id);
     setChapters(rest); setChapter(rest[0] || null);
     if (project) loadProject(project.id);
+    setUndoInfo({ kind: 'chapter', id: removed.id, label: removed.title });
+    setTimeout(() => setUndoInfo(prev => prev && prev.id === removed.id ? null : prev), 30000);
+  };
+  const undoDelete = async () => {
+    if (!undoInfo) return;
+    try {
+      await api.post('/trash/restore', { kind: undoInfo.kind, id: undoInfo.id });
+      setUndoInfo(null);
+      if (project) loadProject(project.id);
+    } catch { /* ignore */ }
   };
   const loadVersions = async () => {
     if (!chapter) return;
@@ -279,12 +331,13 @@ export default function Workspace() {
   const [toolMode, setToolMode] = useState<'polish' | 'expand' | 'condense' | 'continue' | 'restyle'>('polish');
   const [toolBusy, setToolBusy] = useState(false);
   const [toolResult, setToolResult] = useState('');
+  const [toolDiff, setToolDiff] = useState<{ type: string; old?: string; new?: string }[]>([]);
   const runTool = async (mode: typeof toolMode) => {
     if (!chapter) return;
-    setToolMode(mode); setToolBusy(true); setToolResult('');
+    setToolMode(mode); setToolBusy(true); setToolResult(''); setToolDiff([]);
     try {
-      const d = await api.post<{ result: string }>('/tools/rewrite', { chapter_id: chapter.id, mode });
-      setToolResult(d.result);
+      const d = await api.post<{ result: string; diff?: { type: string; old?: string; new?: string }[] }>('/tools/rewrite', { chapter_id: chapter.id, mode });
+      setToolResult(d.result); setToolDiff(d.diff || []);
     } catch (e: any) { setToolResult('出错了：' + e.message); }
     finally { setToolBusy(false); }
   };
@@ -293,7 +346,7 @@ export default function Workspace() {
     await api.post('/tools/apply', { chapter_id: chapter.id, text: toolResult });
     await loadProject(project!.id);
     const fresh = (await api.get<{ chapter: Chapter }>('/chapters/' + chapter.id)).chapter;
-    setChapter(fresh); setToolResult('');
+    setChapter(fresh); setToolResult(''); setToolDiff([]);
   };
   const runCheck = async () => {
     if (!chapter) return;
@@ -327,6 +380,18 @@ export default function Workspace() {
     if (project) loadProject(project.id);
   };
 
+  const openProjSettings = () => {
+    if (!project) return;
+    setProjDraft({ genre: project.genre, theme: project.theme || '', target_audience: project.target_audience || '', goal_word_count: project.goal_word_count || 0 });
+    setShowProjSettings(true);
+  };
+  const saveProjSettings = async () => {
+    if (!project) return;
+    const d = await api.patch<{ project: Project }>('/projects/' + project.id, { ...projDraft, goal_word_count: Number(projDraft.goal_word_count) || 0 });
+    setProject(d.project); setShowProjSettings(false);
+    if (project) loadProject(project.id);
+  };
+
   const exportMd = () => {
     if (!project) return;
     const a = document.createElement('a');
@@ -357,7 +422,18 @@ export default function Workspace() {
                 <button onClick={() => setShowSidebar(false)} className="text-ink/40 hover:text-ink md:hidden">✕</button>
               </div>
               {project && <p className="mt-0.5 text-xs text-ink/40">{GENRE_LABEL[project.genre]} · {project.chapter_count ?? 0} 章 · {project.word_count ?? 0} 字</p>}
-              {project && <button onClick={openCover} className="mt-1 text-xs text-accent hover:underline">🖌 编辑封面</button>}
+              {project && project.goal_word_count > 0 && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="h-1 flex-1 overflow-hidden rounded-full bg-ink/10">
+                    <span className="block h-full rounded-full bg-accent" style={{ width: Math.min(100, Math.round(((project.word_count || 0) / project.goal_word_count) * 100)) + '%' }} />
+                  </span>
+                  <span className="text-[10px] text-ink/40">{Math.min(100, Math.round(((project.word_count || 0) / project.goal_word_count) * 100))}%</span>
+                </div>
+              )}
+              <div className="mt-1 flex gap-2">
+                {project && <button onClick={openCover} className="text-xs text-accent hover:underline">🖌 封面</button>}
+                {project && <button onClick={openProjSettings} className="text-xs text-accent hover:underline">⚙ 作品设置</button>}
+              </div>
             </div>
           </div>
           <div className="flex gap-0.5 border-b border-ink/5 px-2 py-2 text-xs">
@@ -529,6 +605,19 @@ export default function Workspace() {
                     )}
                     {toolResult && (
                       <div className="mt-2 animate-fade-up">
+                        {toolDiff.length > 0 && (
+                          <div className="mb-2 max-h-44 overflow-y-auto rounded-lg border border-ink/10 bg-white/70 p-2">
+                            <p className="mb-1.5 text-[10px] font-medium text-ink/40">改动预览：<span className="text-emerald-600">绿色=新增</span> · <span className="text-red-500">红色=删除</span></p>
+                            {toolDiff.map((d, idx) => (
+                              <div key={idx} className={'mb-0.5 rounded px-2 py-1 text-xs leading-5 ' + (d.type === 'insert' ? 'bg-emerald-50 text-emerald-800' : d.type === 'delete' ? 'bg-red-50 text-red-600 line-through' : d.type === 'replace' ? 'bg-amber-50 text-amber-800' : 'text-ink/45')}>
+                                {d.type === 'insert' && '＋ ' + d.new}
+                                {d.type === 'delete' && '－ ' + d.old}
+                                {d.type === 'replace' && <>⇄ 旧：{d.old} → 新：{d.new}</>}
+                                {d.type === 'keep' && d.new}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <textarea value={toolResult} onChange={e => setToolResult(e.target.value)} rows={5}
                           className="font-creative w-full rounded-lg border border-ink/10 bg-paper/60 px-3 py-2 text-sm leading-6 outline-none" />
                         <div className="mt-1.5 flex gap-2">
@@ -557,7 +646,10 @@ export default function Workspace() {
               <div className="flex items-center gap-2.5">
                 {conv?.persona ? <Avatar name={conv.persona.name} color={conv.persona.avatar_color} size="sm" /> : <Avatar name="黎文" size="sm" />}
                 <div>
-                  <div className="text-sm font-medium">{conv?.persona?.name || '黎文'}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium">{conv?.persona?.name || '黎文'}</span>
+                    <button onClick={() => setShowPersonaCard(true)} title="查看当前人设配置" className="text-[10px] text-accent hover:underline">人设卡</button>
+                  </div>
                   <div className="text-xs text-ink/40">{conv?.persona?.tagline || '安静的倾听者'}{conv?.voice ? ' · ' + conv.voice.display_name : ''}</div>
                 </div>
               </div>
@@ -681,6 +773,74 @@ export default function Workspace() {
         </div>
       </Modal>
 
+      <Modal open={showProjSettings} onClose={() => setShowProjSettings(false)} title="作品设置">
+        <div className="space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">体裁</span>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(GENRE_LABEL).map(([k, v]) => (
+                <button key={k} onClick={() => setProjDraft({ ...projDraft, genre: k })}
+                  className={'rounded-full px-3.5 py-1.5 text-sm transition ' + (projDraft.genre === k ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>{v}</button>
+              ))}
+            </div>
+          </label>
+          <Input label="主题（一句话）" value={projDraft.theme} onChange={v => setProjDraft({ ...projDraft, theme: v })} placeholder="例如：一个江南小镇青年的成长" />
+          <Input label="目标读者" value={projDraft.target_audience} onChange={v => setProjDraft({ ...projDraft, target_audience: v })} placeholder="例如：家人与朋友 / 悬疑小说读者" />
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">创作目标字数</span>
+            <input type="number" min={0} step={1000} value={projDraft.goal_word_count || ''}
+              onChange={e => setProjDraft({ ...projDraft, goal_word_count: Number(e.target.value) })}
+              className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" placeholder="例如：30000" />
+            <span className="mt-1 block text-xs text-ink/40">设置后侧栏会显示完成进度条</span>
+          </label>
+          <Button onClick={saveProjSettings} className="w-full">保存作品设置</Button>
+        </div>
+      </Modal>
+
+      <Modal open={showPersonaCard} onClose={() => setShowPersonaCard(false)} title="当前人设">
+        {(() => {
+          const p = conv?.persona_id ? personas.find(x => x.id === conv.persona_id) : null;
+          if (!p) return <p className="py-6 text-center text-sm text-ink/40">未找到人设信息</p>;
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={p.name} color={p.avatar_color} size="lg" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-serif text-lg font-semibold">{p.name}</span>
+                    {p.is_preset && <Badge color="accent">预设</Badge>}
+                  </div>
+                  <p className="text-sm text-ink/45">{p.tagline}</p>
+                </div>
+              </div>
+              {p.background && <p className="text-sm leading-6 text-ink/65">{p.background}</p>}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-ink/45">性格</p>
+                  <div className="flex flex-wrap gap-1">{(p.personality || []).map(t => <Badge key={t}>{t}</Badge>)}</div>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-ink/45">价值观</p>
+                  <div className="flex flex-wrap gap-1">{(p.values || []).map(t => <Badge key={t}>{t}</Badge>)}</div>
+                </div>
+              </div>
+              {p.speaking_style && (
+                <div className="rounded-xl bg-paper/60 p-3 text-sm text-ink/70">
+                  <p className="mb-1 text-xs font-medium text-ink/45">说话风格：{p.speaking_style.tone || '自然'}</p>
+                  {p.speaking_style.preferences?.length > 0 && <p className="text-xs text-ink/55">偏好：{(p.speaking_style.preferences || []).join('、')}</p>}
+                  {p.speaking_style.avoid?.length > 0 && <p className="text-xs text-ink/55">避免：{(p.speaking_style.avoid || []).join('、')}</p>}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink/45">
+                {p.relationship && <span>关系：{p.relationship}</span>}
+                {p.expertise?.length > 0 && <span>擅长：{(p.expertise || []).join('、')}</span>}
+                {p.greeting && <span className="w-full">开场白：{p.greeting}</span>}
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
       <Modal open={showVersions} onClose={() => setShowVersions(false)} title={"版本历史 · " + (chapter?.title || '')} wide>
         <div className="max-h-80 space-y-2 overflow-y-auto">
           {versions.length === 0 && <p className="py-6 text-center text-sm text-ink/40">还没有历史版本，编辑章节后自动生成</p>}
@@ -697,6 +857,14 @@ export default function Workspace() {
       </Modal>
 
       {adoptDone && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{adoptDone}</div>}
+      {undoInfo && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">
+          <span>已删除「{undoInfo.label}」</span>
+          <button onClick={undoDelete} className="font-medium text-accentlight hover:underline">撤销</button>
+          <span className="text-xs text-paper/50">30s</span>
+        </div>
+      )}
+      {draftRestored && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{draftRestored}</div>}
     </Layout>
   );
 }

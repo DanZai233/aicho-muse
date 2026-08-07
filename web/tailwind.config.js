@@ -4,10 +4,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        paper: '#faf7f2',
-        ink: '#2d2a26',
-        accent: '#8b7d6b',
-        accentlight: '#e8e2d8',
+        paper: 'rgb(var(--paper) / <alpha-value>)',
+        ink: 'rgb(var(--ink) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
+        accentlight: 'rgb(var(--accentlight) / <alpha-value>)',
       },
       fontFamily: {
         serif: ['"Noto Serif SC"', '"Songti SC"', 'Georgia', 'serif'],

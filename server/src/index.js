@@ -19,6 +19,7 @@ import conversationRoutes from './routes/conversations.js';
 import toolRoutes from './routes/tools.js';
 import exportRoutes from './routes/export.js';
 import adminRoutes from './routes/admin.js';
+import trashRoutes, { startTrashReaper } from './routes/trash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 await initStorage();
@@ -53,6 +54,9 @@ app.use('/api/v1', structureRoutes);
 app.use('/api/v1/memories', memoryRoutes);
 app.use('/api/v1', chapterRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/trash', trashRoutes);
+
+startTrashReaper();
 
 // 前端静态资源（生产构建后）
 const webDist = fs.existsSync(path.join(__dirname, '..', 'public'))

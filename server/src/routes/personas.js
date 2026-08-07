@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
+import { generateCoachReply } from '../ai.js';
 
 const router = Router();
 router.use(authRequired);
@@ -49,6 +50,25 @@ router.post('/', (req, res) => {
   d.personas.push(p);
   saveDb();
   res.json({ code: 0, data: { persona: p } });
+});
+
+// 试聊预览：使用未保存的人设草稿生成一条回复，不入库
+router.post('/preview', async (req, res) => {
+  const b = req.body || {};
+  const persona = b.persona && typeof b.persona === 'object' ? b.persona : null;
+  const input = (b.input || '').toString().trim();
+  if (!persona || !persona.name) return res.status(400).json({ code: 40001, message: '请先填写人设名称' });
+  if (!input) return res.status(400).json({ code: 40001, message: '试聊内容不能为空' });
+  try {
+    const { reply, replyType, source } = await generateCoachReply({
+      persona: { ...persona, name: persona.name, tagline: persona.tagline || '试聊中' },
+      input, history: Array.isArray(b.history) ? b.history.slice(-8) : [],
+      userId: req.user.id,
+    });
+    res.json({ code: 0, data: { reply, reply_type: replyType, source } });
+  } catch (e) {
+    res.status(500).json({ code: 50001, message: '生成失败：' + e.message });
+  }
 });
 
 router.post('/:id/clone', (req, res) => {

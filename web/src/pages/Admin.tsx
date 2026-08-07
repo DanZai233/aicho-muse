@@ -81,7 +81,7 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen bg-ink/95 text-paper">
+    <div className="admin-root min-h-screen bg-ink/95 text-paper">
       <div className="mx-auto max-w-6xl px-4 py-6">
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -204,6 +204,10 @@ export default function Admin() {
                   <label className="block">
                     <span className="mb-1 block text-xs text-paper/50">每日消息</span>
                     <input type="number" value={settings.quota.daily_messages} onChange={e => setSettings({ ...settings, quota: { ...settings.quota, daily_messages: Number(e.target.value) } })} className={inputCls + ' bg-ink/80'} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">消息/分钟</span>
+                    <input type="number" value={settings.quota.messages_per_minute ?? 30} onChange={e => setSettings({ ...settings, quota: { ...settings.quota, messages_per_minute: Number(e.target.value) } })} className={inputCls + ' bg-ink/80'} />
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-xs text-paper/50">TTS/小时</span>

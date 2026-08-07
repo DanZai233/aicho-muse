@@ -78,10 +78,17 @@ docker compose up --build -d
 | 长期记忆 | 自动记住创作偏好与设定并注入对话，设置页可查看/删除 |
 | 创作项目 | 多作品、分章节、大纲/人物卡/时间线/灵感箱、自动保存、写作工具、版本历史 |
 | Diff 采纳 | 对话侧栏里 AI 回复按段高亮 diff，逐段“采纳此段”或“采纳全部”写入当前章节/新章节 |
+| 深色模式 | 顶部一键切换亮/暗主题，偏好持久化，首帧无闪烁 |
+| 30 秒撤销 | 误删章节 / 作品可立即「撤销」恢复，后台自动清理过期回收站 |
+| 断网草稿 | 章节内容自动暂存浏览器本地，网络恢复后自动同步，不怕丢稿 |
+| 人设试聊 | 编辑人设时可先「试聊」验证语气，无需保存入库 |
+| 人设卡 | 对话中随时查看当前助手完整人设档案 |
+| 限流防护 | 登录 IP 限流 + 对话分钟级限流，管理后台可配置 |
+| 首页与引导 | 最近会话直达、项目分页加载更多、首次访问三步引导（选人设→新建书→开口说） |
 | 导出 | Markdown / PDF / DOCX 一键导出 |
 | 管理后台 | 数据统计、用户管理、AI/配额/站点设置、预设管理 |
 | 主次分明 | 文章始终是主视图（书页式全宽编辑器），聊天为右侧可折叠面板，不抢占主区域 |
-| 多端适配 | 响应式布局，PWA 可安装 |
+| 多端适配 | 响应式布局，PWA 可安装，桌面 / 平板 / 手机均可写作 |
 
 ## 文档导航
 
@@ -101,9 +108,11 @@ aicho-muse/
 ├── server/                # 后端（Express + JSON 存储）
 │   └── src/
 │       ├── index.js       # 入口
-│       ├── db.js          # 数据层（JSON 持久化 + 预设种子）
+│       ├── db.js          # 数据层（JSON/MySQL 双模式 + 预设种子）
+│       ├── mysql.js       # MySQL 存储层（环境变量切换、周期落库）
+│       ├── quota.js       # 配额与限流（日/分钟级 + IP 限流）
 │       ├── ai.js          # AI 编排（LLM 可插拔 + 内置规则教练）
-│       └── routes/        # auth/projects/chapters/personas/voices/conversations/tools/export/admin
+│       └── routes/        # auth/projects/chapters/trash/personas/voices/conversations/tools/export/admin
 ├── web/                   # 前端（React + Vite + Tailwind）
 │   └── src/
 │       ├── pages/         # Login/Home/Workspace/Personas/Voices/Settings/Admin

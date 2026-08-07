@@ -9,14 +9,18 @@ const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script'];
 
 router.get('/', (req, res) => {
   const d = db();
-  const list = d.projects.filter(p => p.user_id === req.user.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const all = d.projects.filter(p => p.user_id === req.user.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 20));
+  const total = all.length;
+  const list = all.slice((page - 1) * pageSize, page * pageSize);
   const withMeta = list.map(p => {
     const chapters = d.chapters.filter(c => c.project_id === p.id);
     const words = chapters.reduce((s, c) => s + (c.content || '').length, 0);
     const persona = p.default_persona_id ? d.personas.find(x => x.id === p.default_persona_id) : null;
     return { ...p, chapter_count: chapters.length, word_count: words, default_persona: persona ? { id: persona.id, name: persona.name, avatar_color: persona.avatar_color } : null };
   });
-  res.json({ code: 0, data: { list: withMeta, total: withMeta.length } });
+  res.json({ code: 0, data: { list: withMeta, total, page, page_size: pageSize } });
 });
 
 router.post('/', (req, res) => {
@@ -72,19 +76,31 @@ router.delete('/:id', (req, res) => {
   const d = db();
   const p = d.projects.find(x => x.id === req.params.id && x.user_id === req.user.id);
   if (!p) return res.status(404).json({ code: 40401, message: '作品不存在' });
-  d.projects = d.projects.filter(x => x.id !== p.id);
   const chapterIds = d.chapters.filter(c => c.project_id === p.id).map(c => c.id);
+  const convIds = d.conversations.filter(c => c.project_id === p.id).map(c => c.id);
+  const snapshot = {
+    project: p,
+    chapters: d.chapters.filter(c => c.project_id === p.id),
+    snapshots: d.snapshots.filter(s => chapterIds.includes(s.chapter_id)),
+    conversations: d.conversations.filter(c => c.project_id === p.id),
+    messages: d.messages.filter(m => convIds.includes(m.conversation_id)),
+    outline_nodes: d.outline_nodes.filter(n => n.project_id === p.id),
+    character_cards: d.character_cards.filter(c => c.project_id === p.id),
+    timeline_events: d.timeline_events.filter(t => t.project_id === p.id),
+    idea_notes: d.idea_notes.filter(i => i.project_id === p.id),
+  };
+  d.projects = d.projects.filter(x => x.id !== p.id);
   d.chapters = d.chapters.filter(c => c.project_id !== p.id);
   d.snapshots = d.snapshots.filter(s => !chapterIds.includes(s.chapter_id));
-  const convIds = d.conversations.filter(c => c.project_id === p.id).map(c => c.id);
   d.conversations = d.conversations.filter(c => c.project_id !== p.id);
   d.messages = d.messages.filter(m => !convIds.includes(m.conversation_id));
   d.outline_nodes = d.outline_nodes.filter(n => n.project_id !== p.id);
   d.character_cards = d.character_cards.filter(c => c.project_id !== p.id);
   d.timeline_events = d.timeline_events.filter(t => t.project_id !== p.id);
   d.idea_notes = d.idea_notes.filter(i => i.project_id !== p.id);
+  d.trash.push({ id: p.id, kind: 'project', deleted_at: new Date().toISOString(), data: snapshot });
   saveDb();
-  res.json({ code: 0, data: { ok: true } });
+  res.json({ code: 0, data: { ok: true, undo_until: Date.now() + 30000 } });
 });
 
 export default router;

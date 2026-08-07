@@ -37,6 +37,7 @@ const COLLECTIONS = {
   idea_notes: { json: ['tags'] },
   memories: { json: [] },
   admin_users: { json: [] },
+  trash: { json: [] },
 };
 
 // 每张表一个 JSON 列存整行，字段名即 key

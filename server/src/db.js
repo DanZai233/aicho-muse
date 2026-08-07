@@ -98,7 +98,7 @@ function seed() {
     messages: [],
     settings: {
       ai: { provider: 'none', base_url: '', api_key: '', model: 'gpt-4o-mini', system_prompt_mode: 'default', llm_provider: 'none', llm_api_key: '', llm_model: '' },
-      quota: { daily_messages: 100, tts_per_hour: 60, stt_minutes_per_day: 30 },
+      quota: { daily_messages: 100, messages_per_minute: 30, tts_per_hour: 60, stt_minutes_per_day: 30 },
       site: { site_name: 'Aicho Muse', announcement: '' },
       tts: { voice_uri: '', rate: 1, pitch: 1 },
     },
@@ -110,6 +110,7 @@ function seed() {
     character_cards: [],
     timeline_events: [],
     idea_notes: [],
+    trash: [],
     stats: { conversations_created: 0, messages_sent: 0, projects_created: 0 },
   };
 }

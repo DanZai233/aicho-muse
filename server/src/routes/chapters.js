@@ -101,12 +101,19 @@ router.delete('/chapters/:id', (req, res) => {
   const d = db();
   const ch = d.chapters.find(c => c.id === req.params.id);
   if (!ch || !ownProject(req, ch.project_id)) return res.status(404).json({ code: 40401, message: '章节不存在' });
+  const snapshots = d.snapshots.filter(s => s.chapter_id === ch.id);
   d.chapters = d.chapters.filter(c => c.id !== ch.id);
   d.snapshots = d.snapshots.filter(s => s.chapter_id !== ch.id);
+  d.trash.push({
+    id: ch.id,
+    kind: 'chapter',
+    deleted_at: new Date().toISOString(),
+    data: { chapter: ch, snapshots },
+  });
   const proj = d.projects.find(p => p.id === ch.project_id);
   if (proj) proj.updated_at = new Date().toISOString();
   saveDb();
-  res.json({ code: 0, data: { ok: true } });
+  res.json({ code: 0, data: { ok: true, undo_until: Date.now() + 30000 } });
 });
 
 export default router;

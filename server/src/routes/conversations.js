@@ -97,7 +97,10 @@ router.post('/:id/messages', (req, res) => {
   if (!content || !content.trim()) return res.status(400).json({ code: 40001, message: '消息不能为空' });
   const q = checkQuota('message', req.user.id);
   if (!q.allowed) return res.status(429).json({ code: 42901, message: '今日消息配额已用完（' + q.limit + ' 条），请明天再试', quota: q });
+  const qm = checkQuota('message_minute', req.user.id);
+  if (!qm.allowed) return res.status(429).json({ code: 42901, message: '发送太快了，请稍后再试（每分钟 ' + qm.limit + ' 条）', quota: qm });
   consumeQuota('message', req.user.id);
+  consumeQuota('message_minute', req.user.id);
   const now = new Date().toISOString();
   const msg = { id: uuid(), conversation_id: c.id, role: 'user', content: content.trim(), reply_as_voice: !!reply_as_voice, created_at: now };
   d.messages.push(msg);

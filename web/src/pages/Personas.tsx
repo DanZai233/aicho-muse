@@ -21,6 +21,9 @@ export default function Personas() {
   const [values, setValues] = useState('');
   const [expertise, setExpertise] = useState('');
   const [busy, setBusy] = useState(false);
+  const [previewMsgs, setPreviewMsgs] = useState<{ role: string; content: string }[]>([]);
+  const [previewInput, setPreviewInput] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   const load = async () => { setList((await api.get<{ list: Persona[] }>('/personas')).list); };
   useEffect(() => { load(); }, []);
@@ -34,6 +37,8 @@ export default function Personas() {
     setAvoids((p?.speaking_style?.avoid || []).join('、'));
     setValues((p?.values || []).join('、'));
     setExpertise((p?.expertise || []).join('、'));
+    setPreviewMsgs([]);
+    setPreviewInput('');
   };
 
   const save = async () => {
@@ -56,6 +61,27 @@ export default function Personas() {
     if (!confirm(`确定删除人设「${p.name}」？`)) return;
     await api.del(`/personas/${p.id}`);
     await load();
+  };
+
+  const tryChat = async () => {
+    const content = previewInput.trim();
+    if (!content || previewBusy || !form.name) return;
+    const next = [...previewMsgs, { role: 'user', content }];
+    setPreviewMsgs(next);
+    setPreviewInput('');
+    setPreviewBusy(true);
+    try {
+      const d = await api.post<{ reply: string; reply_type: string }>('/personas/preview', {
+        persona: form,
+        input: content,
+        history: next,
+      });
+      setPreviewMsgs(prev => [...prev, { role: 'assistant', content: d.reply }]);
+    } catch (e: any) {
+      setPreviewMsgs(prev => [...prev, { role: 'assistant', content: '（出错了：' + e.message + '）' }]);
+    } finally {
+      setPreviewBusy(false);
+    }
   };
 
   const inputCls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
@@ -114,7 +140,31 @@ export default function Personas() {
           <Input label="开场白" value={form.greeting} onChange={v => setForm({ ...form, greeting: v })} placeholder="今天想讲点什么？" />
           <Input label="头像颜色" value={form.avatar_color} onChange={v => setForm({ ...form, avatar_color: v })} type="color" />
         </div>
-        <div className="mt-5 flex gap-2">
+        <div className="mt-5 rounded-xl border border-ink/10 bg-paper/60 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-ink/60">💬 试聊预览（不保存）</p>
+            <span className="text-[10px] text-ink/35">用当前配置即时生成回复</span>
+          </div>
+          <div className="mb-2 max-h-44 space-y-2 overflow-y-auto pr-1">
+            {previewMsgs.length === 0 && <p className="py-3 text-center text-xs text-ink/35">先输入一句话，试试这个人设聊起来是什么感觉。</p>}
+            {previewMsgs.map((m, idx) => (
+              <div key={idx} className={'flex ' + (m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                <div className={'max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-5 ' + (m.role === 'user' ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md border border-ink/5 bg-white shadow-soft')}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {previewBusy && <p className="text-xs text-ink/40">正在思考…</p>}
+          </div>
+          <div className="flex gap-2">
+            <input value={previewInput} onChange={e => setPreviewInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryChat(); } }}
+              placeholder={form.name ? '和「' + (form.name || '') + '」说句话…' : '先填写人设名称'}
+              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+            <Button onClick={tryChat} disabled={previewBusy || !previewInput.trim() || !form.name} className="px-3 text-xs">发送</Button>
+          </div>
+        </div>
+        <div className="mt-3 flex gap-2">
           <Button onClick={save} disabled={busy || !form.name} className="flex-1">{busy ? '保存中…' : '保存人设'}</Button>
           <Button variant="ghost" onClick={() => setEdit(null)}>取消</Button>
         </div>
