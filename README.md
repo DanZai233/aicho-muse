@@ -27,27 +27,40 @@ Aicho Muse 是一款面向创作场景的 AI 创作伴侣：你可以通过 **�
 
 ## 文档导航
 
+**总览**
+
 - [产品设计](docs/PRODUCT_DESIGN.md) — 愿景、用户、场景、功能与设计原则
 - [系统架构](docs/ARCHITECTURE.md) — 技术选型与整体架构
-- [人设与声色系统](docs/VOICE_PERSONA.md) — 助手人格与声音的设计
 - [路线图](docs/ROADMAP.md) — 里程碑与验收标准
+
+**详细设计**
+
+- [数据模型](docs/DATA_MODEL.md) — 核心表结构、关系、索引与数据生命周期
+- [API 设计](docs/API_DESIGN.md) — REST 接口、SSE 流式对话、语音与限流
+- [AI 提示词工程](docs/PROMPT_ENGINEERING.md) — 系统提示模板、回复类型、引导边界与质量指标
+- [人设与声色系统](docs/VOICE_PERSONA.md) — 人设卡 / 声色卡结构与运行时组装
+- [界面与交互设计](docs/UX_DESIGN.md) — 信息架构、工作台三栏布局、核心交互流程
 
 ## 仓库结构
 
 ```text
 aicho-muse/
 ├── README.md
-├── docs/                 # 设计文档
-│   ├── PRODUCT_DESIGN.md
-│   ├── ARCHITECTURE.md
-│   ├── VOICE_PERSONA.md
-│   └── ROADMAP.md
+├── docs/
+│   ├── PRODUCT_DESIGN.md       # 产品设计
+│   ├── ARCHITECTURE.md         # 系统架构
+│   ├── DATA_MODEL.md           # 数据模型
+│   ├── API_DESIGN.md           # API 设计
+│   ├── PROMPT_ENGINEERING.md   # AI 提示词工程
+│   ├── VOICE_PERSONA.md        # 人设与声色
+│   ├── UX_DESIGN.md            # 界面与交互
+│   └── ROADMAP.md              # 路线图
 └── (后续按里程碑新增 web/、server/ 等目录)
 ```
 
 ## 路线图速览
 
-- **M0 设计验证**：本文档体系 + 可交互原型（打字对话）
+- **M0 设计验证**：文档体系 + 可交互原型（打字对话）
 - **M1 MVP**：Web 应用、打字对话、人设预设与自定义、创作项目、语音回复
 - **M2 语音闭环**：语音输入、语音对话、章节管理、润色改写、导出 Markdown
 - **M3 智能增强**：长期记忆（RAG）、声音克隆、多人设音色库、移动端封装
