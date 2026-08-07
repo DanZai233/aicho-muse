@@ -37,6 +37,32 @@ router.get('/me', authRequired, (req, res) => {
   res.json({ code: 0, data: { user: publicUser(user) } });
 });
 
+// 用户自助注销：级联清除全部数据（架构文档 §8 完整账号删除与数据清除流程）
+router.delete('/me', authRequired, (req, res) => {
+  const d = db();
+  const u = findUserById(req.user.id);
+  if (!u) return res.status(404).json({ code: 40401, message: '用户不存在' });
+  d.users = d.users.filter(x => x.id !== u.id);
+  const projectIds = d.projects.filter(p => p.user_id === u.id).map(p => p.id);
+  const chapterIds = d.chapters.filter(c => projectIds.includes(c.project_id)).map(c => c.id);
+  const convIds = d.conversations.filter(c => c.user_id === u.id).map(c => c.id);
+  d.projects = d.projects.filter(p => p.user_id !== u.id);
+  d.chapters = d.chapters.filter(c => !projectIds.includes(c.project_id));
+  d.snapshots = d.snapshots.filter(sn => !chapterIds.includes(sn.chapter_id));
+  d.conversations = d.conversations.filter(c => c.user_id !== u.id);
+  d.messages = d.messages.filter(m => !convIds.includes(m.conversation_id));
+  d.personas = d.personas.filter(p => !p.is_preset && p.user_id !== u.id);
+  d.voices = d.voices.filter(v => !v.is_preset && v.user_id !== u.id);
+  d.outline_nodes = d.outline_nodes.filter(n => !projectIds.includes(n.project_id));
+  d.character_cards = d.character_cards.filter(c => !projectIds.includes(c.project_id));
+  d.timeline_events = d.timeline_events.filter(t => !projectIds.includes(t.project_id));
+  d.idea_notes = d.idea_notes.filter(i => !projectIds.includes(i.project_id));
+  d.memories = d.memories.filter(m => m.user_id !== u.id);
+  d.trash = d.trash.filter(t => t.kind === 'project' ? !projectIds.includes(t.id) : !chapterIds.includes(t.id));
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
+});
+
 router.patch('/me', authRequired, (req, res) => {
   const user = findUserById(req.user.id);
   if (!user) return res.status(404).json({ code: 40401, message: '用户不存在' });

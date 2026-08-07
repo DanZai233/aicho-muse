@@ -74,6 +74,12 @@ router.delete('/users/:id', (req, res) => {
   d.messages = d.messages.filter(m => !convIds.includes(m.conversation_id));
   d.personas = d.personas.filter(p => !p.is_preset && p.user_id !== u.id);
   d.voices = d.voices.filter(v => !v.is_preset && v.user_id !== u.id);
+  d.outline_nodes = d.outline_nodes.filter(n => !projectIds.includes(n.project_id));
+  d.character_cards = d.character_cards.filter(c => !projectIds.includes(c.project_id));
+  d.timeline_events = d.timeline_events.filter(t => !projectIds.includes(t.project_id));
+  d.idea_notes = d.idea_notes.filter(i => !projectIds.includes(i.project_id));
+  d.memories = d.memories.filter(m => m.user_id !== u.id);
+  d.trash = d.trash.filter(t => t.kind === 'project' ? !projectIds.includes(t.id) : !chapterIds.includes(t.id));
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });

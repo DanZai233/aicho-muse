@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
-import { Button, Input } from '../components/ui';
+import { Button, Input, Modal } from '../components/ui';
 
 type UserPrefs = { assistant_name: string; my_name: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
 
@@ -12,6 +13,10 @@ export default function Settings() {
   const [prefs, setPrefs] = useState<UserPrefs | null>(null);
   const [saved, setSaved] = useState(false);
   const [memories, setMemories] = useState<any[]>([]);
+  const [delOpen, setDelOpen] = useState(false);
+  const [delConfirm, setDelConfirm] = useState('');
+  const [delBusy, setDelBusy] = useState(false);
+  const nav = useNavigate();
 
   const load = async () => {
     try {
@@ -29,6 +34,17 @@ export default function Settings() {
     if (!confirm('删除这条创作记忆？')) return;
     await api.del(`/memories/${id}`);
     setMemories(prev => prev.filter(x => x.id !== id));
+  };
+
+  const deleteAccount = async () => {
+    if (delConfirm !== (user?.email || '')) return;
+    setDelBusy(true);
+    try {
+      await api.del('/auth/me');
+      localStorage.removeItem('am_token');
+      localStorage.removeItem('am_user');
+      nav('/login');
+    } finally { setDelBusy(false); }
   };
 
   const saveUser = async () => {
@@ -137,6 +153,23 @@ export default function Settings() {
             <p>🎙 语音输入使用浏览器本地语音识别；外部 STT/TTS 仅在管理后台配置密钥后才会调用。</p>
           </div>
         </section>
+
+        <section className="mt-6 rounded-2xl border border-red-200 bg-red-50/40 p-6">
+          <h2 className="mb-2 font-serif text-lg font-semibold text-red-700">注销账号</h2>
+          <p className="mb-3 text-sm leading-6 text-ink/55">注销将永久删除你的账号、作品、章节、对话、人设与记忆，且不可恢复。所有创作内容属于你，删除是对数据清除权的尊重。</p>
+          <button onClick={() => setDelOpen(true)} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700">注销我的账号</button>
+        </section>
+
+        <Modal open={delOpen} onClose={() => { setDelOpen(false); setDelConfirm(''); }} title="确认注销">
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-ink/60">此操作不可撤销。请输入你的邮箱 <b className="text-ink">{user?.email}</b> 以确认。</p>
+            <Input label="输入邮箱确认" value={delConfirm} onChange={setDelConfirm} placeholder={user?.email || ''} />
+            <div className="flex gap-2">
+              <Button onClick={deleteAccount} disabled={delBusy || delConfirm !== (user?.email || '')} className="flex-1 bg-red-600 text-white hover:bg-red-700">{delBusy ? '删除中…' : '永久删除'}</Button>
+              <Button variant="ghost" onClick={() => { setDelOpen(false); setDelConfirm(''); }}>取消</Button>
+            </div>
+          </div>
+        </Modal>
 
         {saved && <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">已保存 ✓</p>}
       </div>
