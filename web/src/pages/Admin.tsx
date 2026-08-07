@@ -31,6 +31,8 @@ export default function Admin() {
   const [settings, setSettings] = useState<any>(null);
   const [presets, setPresets] = useState<any>(null);
   const [providers, setProviders] = useState<any[]>([]);
+  const [models, setModels] = useState<{ id: string; recommended?: boolean; disabled?: boolean; note?: string }[] | null>(null);
+  const [modelsBusy, setModelsBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
@@ -44,6 +46,12 @@ export default function Admin() {
   const loadPresets = async () => { setPresets(await adminGet('/presets')); };
   const loadProviders = async () => {
     try { setProviders((await adminGet<{ providers: any[] }>('/llm-providers')).providers); } catch (e: any) { setErr(e.message); }
+  };
+  const loadModels = async () => {
+    setModelsBusy(true); setModels(null);
+    try { setModels((await adminGet<{ models: any[] }>('/ai/models')).models); setErr(''); }
+    catch (e: any) { setModels([]); setErr('模型列表查询失败：' + e.message); }
+    finally { setModelsBusy(false); }
   };
 
   useEffect(() => {
@@ -194,6 +202,32 @@ export default function Admin() {
                     )}
                   </>
                 )}
+                <div className="flex items-center gap-2">
+                  <label className="block flex-1">
+                    <span className="mb-1 block text-xs text-paper/50">模型（可点击下方列表快速选择）</span>
+                    <input value={settings.ai.llm_model} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, llm_model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="deepseek-v4-flash / qwen-plus / gemini-2.5-flash…" />
+                  </label>
+                  <button onClick={loadModels} disabled={modelsBusy} className="mt-5 shrink-0 rounded-lg border border-paper/20 px-3 py-2 text-xs text-paper/70 transition hover:bg-white/10 hover:text-paper disabled:opacity-40">
+                    {modelsBusy ? '查询中…' : '📡 查询可用模型'}
+                  </button>
+                </div>
+                {models && (
+                  <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-xl bg-ink/60 p-2.5 animate-fade-up">
+                    {models.length === 0 && <p className="py-2 text-center text-xs text-paper/40">没有查到模型，请检查 API Key 与厂商端点后重试</p>}
+                    {models.map(m => (
+                      <button key={m.id} disabled={m.disabled} title={m.note || m.id} onClick={() => setSettings({ ...settings, ai: { ...settings.ai, llm_model: m.id } })}
+                        className={"flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition disabled:cursor-not-allowed " + (m.disabled ? "bg-white/5 text-paper/30 line-through" : m.recommended ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25" : "bg-white/5 text-paper/80 hover:bg-white/15")}>
+                        <span className="truncate">{m.id}</span>
+                        <span className="shrink-0">
+                          {m.recommended && <Badge color="green">推荐</Badge>}
+                          {m.disabled && <Badge color="amber">禁用</Badge>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {settings.ai.llm_provider === 'deepseek' && <p className="text-xs text-amber-300/80">DeepSeek 当前仅允许 v4-flash 模型，pro 系列已自动禁用。</p>}
+
                 <p className="text-xs text-paper/40">接入 14+ 厂商：OpenAI / Claude / Gemini / 豆包 / DeepSeek / Kimi / 通义 / 智谱 / Grok / Ollama 等，通过 uniLLM SDK 统一驱动。</p>
               </div>
             </div>

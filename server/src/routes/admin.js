@@ -90,6 +90,56 @@ router.get('/llm-providers', async (req, res) => {
   }
 });
 
+// 查询当前厂商的可用模型列表（OpenAI 兼容 /models；失败时回退厂商默认列表）
+router.get('/ai/models', async (req, res) => {
+  const d = db();
+  const s = d.settings.ai;
+  const provider = String(process.env.LLM_PROVIDER || s.llm_provider || s.provider || '').toLowerCase();
+  const apiKey = String(process.env.LLM_API_KEY || s.llm_api_key || s.api_key || '');
+  const baseUrl = String(process.env.LLM_BASE_URL || s.base_url || '').replace(/\/+$/, '');
+  const COMPAT_BASES = {
+    deepseek: 'https://api.deepseek.com',
+    openai: 'https://api.openai.com/v1',
+    moonshot: 'https://api.moonshot.cn/v1',
+    kimi: 'https://api.moonshot.cn/v1',
+    zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+    qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    doubao: 'https://ark.cn-beijing.volces.com/api/v3',
+    volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
+    grok: 'https://api.x.ai/v1',
+  };
+  const base = baseUrl || COMPAT_BASES[provider] || '';
+  let models = [];
+  if (base && apiKey) {
+    try {
+      const r = await fetch(base + '/models', { headers: { Authorization: 'Bearer ' + apiKey }, signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const data = await r.json();
+        models = (data.data || []).map(m => (typeof m === 'string' ? m : m.id)).filter(Boolean);
+      }
+    } catch (e) { /* 端点不可达时回退到厂商默认列表 */ }
+  }
+  if (!models.length) {
+    try {
+      const lib = await import(process.env.UNILLM_PATH || 'unillm-sdk');
+      const p = (lib.PROVIDERS || []).find(x => String(x.id).toLowerCase() === provider);
+      models = p?.defaultModels || [];
+    } catch { /* ignore */ }
+  }
+  const list = models.map(id => {
+    const pid = String(id);
+    const isFlash = /v4-flash|flash/i.test(pid);
+    const isPro = /pro|thinking|reasoner/i.test(pid);
+    return {
+      id: pid,
+      recommended: provider === 'deepseek' && isFlash,
+      disabled: provider === 'deepseek' && isPro,
+      note: provider === 'deepseek' && isPro ? 'pro 模型已禁用（当前仅允许 v4-flash）' : undefined,
+    };
+  });
+  res.json({ code: 0, data: { provider, base_url: base, models: list } });
+});
+
 router.get('/settings', (req, res) => {
   const s = db().settings;
   res.json({ code: 0, data: { settings: s } });

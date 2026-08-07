@@ -125,10 +125,17 @@ function coachReply(input, persona, project, chapter, history) {
 
 async function callLLM(messages, opts = {}) {
   const s = db().settings.ai;
+  const provider = String(process.env.LLM_PROVIDER || s.llm_provider || s.provider || '').toLowerCase();
+  let model = String(process.env.LLM_MODEL || s.llm_model || s.model || '').trim();
+  // DeepSeek 硬性约束：只允许 v4-flash，禁用 pro/thinking/reasoner 系列
+  if (provider === 'deepseek' && !/v4-flash/i.test(model)) {
+    console.warn('[AI] DeepSeek 仅允许 v4-flash，自动切换: ' + (model || '未配置') + ' -> deepseek-v4-flash');
+    model = 'deepseek-v4-flash';
+  }
   const envAI = {
     llm_provider: process.env.LLM_PROVIDER || s.llm_provider,
     llm_api_key: process.env.LLM_API_KEY || s.llm_api_key,
-    llm_model: process.env.LLM_MODEL || s.llm_model,
+    llm_model: model,
     base_url: process.env.LLM_BASE_URL || s.base_url,
   };
   const hasUniKey = envAI.llm_api_key && envAI.llm_provider && envAI.llm_provider !== 'none';
@@ -164,7 +171,7 @@ async function callLLM(messages, opts = {}) {
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + s.api_key },
-      body: JSON.stringify({ model: s.model || 'gpt-4o-mini', messages, temperature: opts.temperature ?? 0.8, max_tokens: opts.max_tokens ?? 800, stream: false }),
+      body: JSON.stringify({ model: model || 'gpt-4o-mini', messages, temperature: opts.temperature ?? 0.8, max_tokens: opts.max_tokens ?? 800, stream: false }),
     });
     if (!resp.ok) throw new Error('LLM 调用失败 (' + resp.status + '): ' + (await resp.text().catch(() => '')).slice(0, 200));
     const data = await resp.json();
@@ -230,7 +237,9 @@ ${memoryText}` : '',
 
 export async function runWritingTool(mode, text, instruction) {
   const s = db().settings.ai;
-  if (s.api_key && s.provider !== 'none') {
+  const hasUni = (process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none';
+  const hasLegacy = s.api_key && s.provider !== 'none';
+  if (hasUni || hasLegacy) {
     try {
       const modeMap = {
         polish: '润色',

@@ -15,12 +15,12 @@ const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写',
 
 type StructItem = { id: string; [k: string]: any };
 
-function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged }: {
+function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, emptyHint = '还没有内容' }: {
   kind: 'outline' | 'characters' | 'timeline' | 'ideas';
   items: StructItem[]; setItems: (fn: (prev: StructItem[]) => StructItem[]) => void;
   title: string; addLabel: string;
   fields: { key: string; label: string; placeholder: string; textarea?: boolean }[];
-  projectId: string; onChanged: () => void;
+  projectId: string; onChanged: () => void; emptyHint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -72,7 +72,7 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
             </div>
           </div>
         ))}
-        {items.length === 0 && <p className="px-2 py-3 text-center text-xs text-ink/30">还没有内容</p>}
+        {items.length === 0 && <p className="px-2 py-3 text-center text-xs leading-5 text-ink/30">{emptyHint}</p>}
       </div>
     </div>
   );
@@ -126,6 +126,7 @@ export default function Workspace() {
   const [showPersonaCard, setShowPersonaCard] = useState(false);
 
   const msgsRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const recRef = useRef<any>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -474,22 +475,22 @@ export default function Workspace() {
             {leftTab === 'outline' && project && (
               <StructurePanel kind="outline" items={outline} setItems={setOutline} title="大纲节点" addLabel="＋ 添加大纲节点"
                 fields={[{ key: 'title', label: '标题', placeholder: '例如：离家前夜' }, { key: 'summary', label: '内容概述', placeholder: '这一节发生什么…' }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" />
             )}
             {leftTab === 'characters' && project && (
               <StructurePanel kind="characters" items={characters} setItems={setCharacters} title="人物卡" addLabel="＋ 添加人物"
                 fields={[{ key: 'name', label: '姓名', placeholder: '主角名' }, { key: 'role', label: '身份', placeholder: '主角/配角/反派' }, { key: 'description', label: '描述', placeholder: '外貌、性格、背景…', textarea: true }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有人物卡，为关键角色写一张设定卡" />
             )}
             {leftTab === 'timeline' && project && (
               <StructurePanel kind="timeline" items={timeline} setItems={setTimeline} title="时间线" addLabel="＋ 添加事件"
                 fields={[{ key: 'when', label: '时间', placeholder: '1987 年夏 / 第三章前' }, { key: 'event', label: '事件', placeholder: '发生了什么…' }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有时间线事件，把重要时刻记下来" />
             )}
             {leftTab === 'ideas' && project && (
               <StructurePanel kind="ideas" items={ideas} setItems={setIdeas} title="灵感箱" addLabel="＋ 记录灵感"
                 fields={[{ key: 'content', label: '灵感', placeholder: '一句话灵感…', textarea: true }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="随手一句话也可能成为故事的核心。" />
             )}
           </div>
         </aside>
@@ -706,12 +707,22 @@ export default function Workspace() {
             </div>
 
             <div className="border-t border-ink/5 bg-white/50 p-2.5">
+              {conv && (
+                <div className="mb-1.5 flex flex-wrap items-center gap-1">
+                  <span className="mr-0.5 text-[10px] text-ink/35">快捷：</span>
+                  <button onClick={() => { setInput(p => (p ? p + ' ' : '') + '@' + (chapter?.title || '当前章节') + ' '); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="在输入中引用当前章节">@当前章节</button>
+                  <button onClick={() => { setInput(p => (p ? p + ' ' : '') + '把这句话记进灵感箱：'); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="把要说的话记成一条灵感">💡 灵感</button>
+                  {chapter?.content && (
+                    <button onClick={() => { const last = chapter.content.split(/\n+/).filter(Boolean).pop() || ''; setInput('帮我润色这段话：' + (last.length > 60 ? last.slice(0, 60) + '…' : last)); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="请助手润色当前章节最后一段">✨ 帮我润色</button>
+                  )}
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <button onClick={toggleRecord} title={recording ? '停止录音' : '语音输入'}
                   className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition " + (recording ? 'bg-red-500 text-white animate-pulse' : 'bg-accentlight text-ink hover:bg-accent/20')}>
                   {recording ? '⏹' : '🎤'}
                 </button>
-                <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
+                <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
                   placeholder={recording ? '正在聆听…' : '说点什么，或输入文字…'}
                   className="max-h-28 min-h-[36px] flex-1 resize-none rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
                 <button onClick={() => send()} disabled={!input.trim() || streaming || !conv}
