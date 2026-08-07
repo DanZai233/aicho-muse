@@ -44,13 +44,13 @@ export type Persona = {
   id: string; name: string; tagline: string; background: string;
   personality: string[]; speaking_style: { tone: string; preferences: string[]; avoid: string[] };
   values: string[]; relationship: string; expertise: string[];
-  greeting: string; avatar_color: string; is_preset: boolean; version: number;
+  greeting: string; avatar_color: string; is_preset: boolean; is_public?: boolean; version: number;
 };
 
 export type VoiceProfile = {
   id: string; display_name: string; provider: string; voice_id: string;
   params: { rate: number; pitch: number; emotion: string; energy: number };
-  speech_notes: string; is_preset: boolean;
+  speech_notes: string; is_preset: boolean; is_public?: boolean;
 };
 
 export type Project = {

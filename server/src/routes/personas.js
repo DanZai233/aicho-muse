@@ -7,7 +7,7 @@ const router = Router();
 router.use(authRequired);
 
 function visiblePersonas(req) {
-  return db().personas.filter(p => p.is_preset || p.user_id === req.user.id);
+  return db().personas.filter(p => p.is_preset || p.user_id === req.user.id || p.is_public);
 }
 
 router.get('/', (req, res) => {
@@ -15,12 +15,13 @@ router.get('/', (req, res) => {
   let list = visiblePersonas(req);
   if (scope === 'preset') list = list.filter(p => p.is_preset);
   if (scope === 'mine') list = list.filter(p => !p.is_preset);
+  if (scope === 'public') list = list.filter(p => p.is_public);
   res.json({ code: 0, data: { list, total: list.length } });
 });
 
 router.get('/:id', (req, res) => {
   const p = db().personas.find(x => x.id === req.params.id);
-  if (!p || (!p.is_preset && p.user_id !== req.user.id)) return res.status(404).json({ code: 40401, message: '人设不存在' });
+  if (!p || (!p.is_preset && p.user_id !== req.user.id && !p.is_public)) return res.status(404).json({ code: 40401, message: '人设不存在' });
   res.json({ code: 0, data: { persona: p } });
 });
 
@@ -43,6 +44,7 @@ router.post('/', (req, res) => {
     greeting: b.greeting || '',
     avatar_color: b.avatar_color || '#8b7d6b',
     is_preset: false,
+    is_public: !!b.is_public,
     version: 1,
     created_at: now,
     updated_at: now,
@@ -74,7 +76,8 @@ router.post('/preview', async (req, res) => {
 router.post('/:id/clone', (req, res) => {
   const d = db();
   const src = d.personas.find(x => x.id === req.params.id);
-  if (!src || (!src.is_preset && src.user_id !== req.user.id)) return res.status(404).json({ code: 40401, message: '人设不存在' });
+  if (!src || (!src.is_preset && src.user_id !== req.user.id && !src.is_public)) return res.status(404).json({ code: 40401, message: '人设不存在' });
+  if (src.user_id === req.user.id && !src.is_preset) return res.status(400).json({ code: 40001, message: '这是你的人设，无需克隆' });
   const now = new Date().toISOString();
   const p = { ...JSON.parse(JSON.stringify(src)), id: uuid(), user_id: req.user.id, is_preset: false, name: `${src.name}（我的版本）`, version: 1, created_at: now, updated_at: now };
   d.personas.push(p);
@@ -86,7 +89,7 @@ router.patch('/:id', (req, res) => {
   const d = db();
   const p = d.personas.find(x => x.id === req.params.id && !x.is_preset && x.user_id === req.user.id);
   if (!p) return res.status(404).json({ code: 40401, message: '人设不存在或为预设' });
-  for (const k of ['name', 'tagline', 'background', 'personality', 'speaking_style', 'values', 'relationship', 'expertise', 'greeting', 'avatar_color']) {
+  for (const k of ['name', 'tagline', 'background', 'personality', 'speaking_style', 'values', 'relationship', 'expertise', 'greeting', 'avatar_color', 'is_public']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
   }
   p.version++;

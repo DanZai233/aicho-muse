@@ -6,7 +6,7 @@ import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 const EMPTY: Omit<Persona, 'id' | 'is_preset' | 'version'> = {
   name: '', tagline: '', background: '', personality: [],
   speaking_style: { tone: '', preferences: [], avoid: [] },
-  values: [], relationship: '', expertise: [], greeting: '', avatar_color: '#8b7d6b',
+  values: [], relationship: '', expertise: [], greeting: '', avatar_color: '#8b7d6b', is_public: false,
 };
 
 function tagify(v: string) { return v.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean); }
@@ -24,9 +24,11 @@ export default function Personas() {
   const [previewMsgs, setPreviewMsgs] = useState<{ role: string; content: string }[]>([]);
   const [previewInput, setPreviewInput] = useState('');
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [tab, setTab] = useState<'mine' | 'preset' | 'public'>('mine');
+  const [publicList, setPublicList] = useState<Persona[]>([]);
 
-  const load = async () => { setList((await api.get<{ list: Persona[] }>('/personas')).list); };
-  useEffect(() => { load(); }, []);
+  const load = async () => { setList((await api.get<{ list: Persona[] }>('/personas?scope=' + tab)).list); if (tab === 'public') setPublicList((await api.get<{ list: Persona[] }>('/personas?scope=public')).list); };
+  useEffect(() => { load(); }, [tab]);
 
   const openEdit = (p?: Persona) => {
     const base = p ? { ...p, speaking_style: { ...p.speaking_style } } : { ...EMPTY };
@@ -54,6 +56,11 @@ export default function Personas() {
 
   const clonePreset = async (p: Persona) => {
     await api.post(`/personas/${p.id}/clone`);
+    await load();
+  };
+  const clonePublic = async (p: Persona) => {
+    await api.post(`/personas/${p.id}/clone`);
+    setTab('mine');
     await load();
   };
 
@@ -89,16 +96,21 @@ export default function Personas() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-8 flex items-end justify-between">
+        <div className="mb-6 flex items-end justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold">创作人设</h1>
             <p className="mt-1 text-ink/50">给你的缪斯一个灵魂——性格、语气、价值观都可以定义。</p>
           </div>
           <Button onClick={() => openEdit()}>＋ 新建人设</Button>
         </div>
+        <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm">
+          {([['mine', '我的人设'], ['preset', '官方预设'], ['public', '公开分享']] as const).map(([k, v]) => (
+            <button key={k} onClick={() => setTab(k)} className={'flex-1 rounded-lg px-4 py-2 transition ' + (tab === k ? 'bg-white font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
+          ))}
+        </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map(p => (
+          {(tab === 'public' ? publicList : list).map(p => (
             <div key={p.id} className="rounded-2xl border border-ink/5 bg-white p-5 shadow-soft transition hover:shadow-lift">
               <div className="mb-4 flex items-center gap-3">
                 <Avatar name={p.name} color={p.avatar_color} size="lg" />
@@ -106,6 +118,8 @@ export default function Personas() {
                   <div className="flex items-center gap-2">
                     <h3 className="truncate font-serif text-lg font-semibold">{p.name}</h3>
                     {p.is_preset && <Badge color="accent">预设</Badge>}
+                    {p.is_public && !p.is_preset && <Badge color="green">已分享</Badge>}
+                    {tab === 'public' && <Badge color="green">公开</Badge>}
                   </div>
                   <p className="truncate text-sm text-ink/45">{p.tagline}</p>
                 </div>
@@ -115,9 +129,18 @@ export default function Personas() {
                 {(p.personality || []).slice(0, 4).map(t => <Badge key={t}>{t}</Badge>)}
               </div>
               <div className="mt-4 flex items-center justify-between border-t border-ink/5 pt-3">
-                {p.is_preset
-                  ? <Button variant="subtle" onClick={() => clonePreset(p)} className="text-xs">基于预设创建</Button>
-                  : <div className="flex gap-2"><Button variant="ghost" onClick={() => openEdit(p)} className="text-xs">编辑</Button><Button variant="danger" onClick={() => remove(p)} className="text-xs">删除</Button></div>}
+                {tab === 'public'
+                  ? <Button variant="subtle" onClick={() => clonePublic(p)} className="text-xs">＋ 收藏到我的</Button>
+                  : p.is_preset
+                    ? <Button variant="subtle" onClick={() => clonePreset(p)} className="text-xs">基于预设创建</Button>
+                    : <div className="flex items-center gap-2">
+                        <label className="flex cursor-pointer items-center gap-1 text-xs text-ink/45" title="开启后其他用户可看到并收藏这个人设">
+                          <input type="checkbox" checked={!!p.is_public} onChange={async e => { await api.patch('/personas/' + p.id, { is_public: e.target.checked }); await load(); }} className="accent-accent" />
+                          分享
+                        </label>
+                        <Button variant="ghost" onClick={() => openEdit(p)} className="text-xs">编辑</Button>
+                        <Button variant="danger" onClick={() => remove(p)} className="text-xs">删除</Button>
+                      </div>}
                 {!p.is_preset && <span className="text-xs text-ink/30">v{p.version}</span>}
               </div>
             </div>
@@ -138,6 +161,10 @@ export default function Personas() {
           <Input label="避免（、分隔）" value={avoids} onChange={setAvoids} placeholder="说教、替用户做决定" />
           <Input label="擅长领域（、分隔）" value={expertise} onChange={setExpertise} placeholder="叙事结构、人物塑造" />
           <Input label="开场白" value={form.greeting} onChange={v => setForm({ ...form, greeting: v })} placeholder="今天想讲点什么？" />
+          <label className="flex items-center gap-2 rounded-lg border border-ink/10 bg-paper/50 px-3 py-2.5">
+            <input type="checkbox" checked={!!form.is_public} onChange={e => setForm({ ...form, is_public: e.target.checked })} className="accent-accent" />
+            <span className="text-sm text-ink/60">公开分享这个人设（其他用户可收藏）</span>
+          </label>
           <Input label="头像颜色" value={form.avatar_color} onChange={v => setForm({ ...form, avatar_color: v })} type="color" />
         </div>
         <div className="mt-5 rounded-xl border border-ink/10 bg-paper/60 p-3">
