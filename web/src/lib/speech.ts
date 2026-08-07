@@ -37,3 +37,43 @@ export function speak(text: string, opts: { rate?: number; pitch?: number; onEnd
 export function stopSpeak() {
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
+export type QuietRecognition = SpeechRecognitionLike & { autoStop?: boolean; quietMs?: number };
+
+// 静音自动结束录音：2 秒没有新语音结果即自动 stop（对应 UX 文档 4.2）
+export function startQuietRecording(onText: (t: string) => void, onEnd: (final: string) => void, opts: { quietMs?: number } = {}): QuietRecognition | null {
+  const rec = getSpeechRecognition();
+  if (!rec) return null;
+  const quietMs = opts.quietMs || 2000;
+  let final = '';
+  let lastResult = Date.now();
+  let timer: any = null;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      try { rec.stop(); } catch { /* 已结束 */ }
+    }, quietMs);
+  };
+  rec.onresult = (e: any) => {
+    lastResult = Date.now();
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t; else interim += t;
+    }
+    onText((final + interim).trim());
+    arm();
+  };
+  rec.onend = () => {
+    clearTimeout(timer);
+    onEnd(final.trim());
+  };
+  rec.onerror = () => {
+    clearTimeout(timer);
+    onEnd(final.trim());
+  };
+  try { rec.start(); arm(); } catch { /* 已启动 */ }
+  return rec;
+}
+
+export function interruptSpeech() { stopSpeak(); }
+

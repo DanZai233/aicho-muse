@@ -6,7 +6,7 @@ import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 import MarkdownEditor from '../components/MarkdownEditor';
 import BookCover from '../components/BookCover';
 import DiffReview from '../components/DiffReview';
-import { getSpeechRecognition, speak, stopSpeak } from '../lib/speech';
+import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, interruptSpeech } from '../lib/speech';
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', other: '回复' };
@@ -98,6 +98,8 @@ export default function Workspace() {
   const [streamText, setStreamText] = useState('');
   const [speaking, setSpeaking] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [pendingTrans, setPendingTrans] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<{ tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } | null>(null);
   const [showNewConv, setShowNewConv] = useState(false);
   const [newPersona, setNewPersona] = useState('preset-liwen');
   const [newVoice, setNewVoice] = useState('preset-voice-warm');
@@ -172,8 +174,11 @@ export default function Workspace() {
   const loadVoices = useCallback(async () => {
     try { setVoices((await api.get<{ list: VoiceProfile[] }>('/voice-profiles')).list); } catch { /* ignore */ }
   }, []);
+  const loadPrefs = useCallback(async () => {
+    try { setPrefs((await api.get<{ settings: { tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } }>('/auth/me/settings')).settings); } catch { setPrefs({ tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
+  }, []);
 
-  useEffect(() => { loadPersonas(); loadVoices(); loadConvs(); }, []);
+  useEffect(() => { loadPersonas(); loadVoices(); loadConvs(); loadPrefs(); }, []);
   useEffect(() => { if (projectId) loadProject(projectId); }, [projectId, loadProject]);
   useEffect(() => { if (conv) loadMessages(conv.id); }, [conv?.id]);
   useEffect(() => {
@@ -217,7 +222,8 @@ export default function Workspace() {
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || !conv || streaming) return;
-    setInput('');
+    interruptSpeech(); setSpeaking(false);
+    setInput(''); setPendingTrans(null);
     setMessages(prev => [...prev, { id: 'local-' + Date.now(), conversation_id: conv.id, role: 'user', content, created_at: new Date().toISOString() }]);
     setStreaming(true); setStreamText('');
     abortRef.current = new AbortController();
@@ -243,12 +249,15 @@ export default function Workspace() {
             if (event === 'text_delta') { setStreamText(p => p + data.delta); finalText += data.delta; }
             else if (event === 'text_done') { replyType = data.reply_type || 'other'; finalMsgId = data.message_id || ''; }
             else if (event === 'audio_ready' && data.text) {
-              speak(data.text, { rate: data.voice?.params?.rate || 1, pitch: (data.voice?.params?.pitch || 0) / 2 + 1, onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) });
+              speak(data.text, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1), onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) });
             }
           } catch { /* ignore */ }
         }
       }
-      if (finalText) setMessages(prev => [...prev, { id: finalMsgId || 'sse-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: finalText, reply_type: replyType, created_at: new Date().toISOString() }]);
+      if (finalText) {
+        setMessages(prev => [...prev, { id: finalMsgId || 'sse-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: finalText, reply_type: replyType, created_at: new Date().toISOString() }]);
+        if (prefs?.read_aloud) speak(finalText, { rate: prefs.tts_rate ?? 1, pitch: prefs.tts_pitch ?? 1, onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) });
+      }
     } catch (e: any) {
       if (e.name !== 'AbortError') setMessages(prev => [...prev, { id: 'err-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: '（出错了：' + e.message + '）', reply_type: 'other', created_at: new Date().toISOString() }]);
     } finally {
@@ -260,20 +269,26 @@ export default function Workspace() {
   const stopStream = () => abortRef.current?.abort();
 
   const toggleRecord = () => {
-    const rec = getSpeechRecognition();
-    if (!rec) { alert('当前浏览器不支持语音输入，请使用 Chrome/Edge'); return; }
     if (recording) { recRef.current?.stop(); return; }
-    stopSpeak(); setSpeaking(false);
+    interruptSpeech(); setSpeaking(false);
+    const rec = startQuietRecording(
+      (t) => setInput(t),
+      (final) => {
+        setRecording(false); setInput('');
+        if (final) {
+          if (prefs?.auto_send) send(final);
+          else setPendingTrans(final);
+        }
+      },
+      { quietMs: 2000 }
+    );
+    if (!rec) { alert('当前浏览器不支持语音输入，请使用 Chrome/Edge'); return; }
     recRef.current = rec; setRecording(true);
-    let finalText = '';
-    rec.onresult = (e: any) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) finalText += t; else interim += t; }
-      setInput(finalText + interim);
-    };
-    rec.onend = () => { setRecording(false); if (finalText.trim()) send(finalText); };
-    rec.onerror = () => setRecording(false);
-    rec.start();
+  };
+  const confirmTrans = (go: boolean) => {
+    const t = pendingTrans;
+    setPendingTrans(null);
+    if (go && t) send(t);
   };
 
   const saveChapter = async (ch: Chapter) => {
@@ -682,7 +697,7 @@ export default function Workspace() {
                     <div className="whitespace-pre-wrap">{m.content}</div>
                     {m.role === 'assistant' && (
                       <div className="mt-2 flex flex-wrap items-center gap-3">
-                        <button onClick={() => speak(m.content, { onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) })} className="text-xs text-accent hover:underline">🔊 朗读</button>
+                        <button onClick={() => speak(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) })} className="text-xs text-accent hover:underline">🔊 朗读</button>
                         {m.adopted_at ? (
                           <span className="text-xs text-emerald-600">✓ 已采纳到文章</span>
                         ) : (
@@ -707,6 +722,19 @@ export default function Workspace() {
             </div>
 
             <div className="border-t border-ink/5 bg-white/50 p-2.5">
+              {pendingTrans && (
+                <div className="mb-2 rounded-xl border border-accent/25 bg-accentlight/30 p-2.5 animate-fade-up">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-medium text-ink/60">🎙 转写确认</span>
+                    <span className="text-[10px] text-ink/35">静音 2 秒已自动结束</span>
+                  </div>
+                  <textarea value={pendingTrans} onChange={e => setPendingTrans(e.target.value)} rows={2} className="w-full resize-none rounded-lg border border-ink/10 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-accent" />
+                  <div className="mt-1.5 flex gap-2">
+                    <Button onClick={() => confirmTrans(true)} disabled={!pendingTrans.trim() || streaming} className="flex-1 py-1.5 text-xs">✓ 确认发送</Button>
+                    <Button variant="ghost" onClick={() => confirmTrans(false)} className="text-xs">取消</Button>
+                  </div>
+                </div>
+              )}
               {conv && (
                 <div className="mb-1.5 flex flex-wrap items-center gap-1">
                   <span className="mr-0.5 text-[10px] text-ink/35">快捷：</span>
