@@ -88,8 +88,64 @@ function languageNote(lang) {
   return '【作品语言】本作品使用' + name + '创作。请用' + name + '与用户交流，并给出' + name + '的写作建议；专有名词可保留原文。';
 }
 
+// ---------- 写作专用 agent 工作流 ----------
+// 用户明确要求 AI 直接写作（或选定方向/选项后），进入「只写作模式」：
+// 只输出文章正文，供 diff 采纳；不提问、不鼓励、不加标题与说明。
+const WRITE_INTENT_WORDS = [
+  '帮我写', '帮我续', '帮我润', '帮我扩', '帮我改', '你写', '你来写', '代写', '替我写', '帮我生成',
+  '续写', '扩写', '润色', '改写', '重写', '写一段', '写个', '写一篇', '写开头', '写下去',
+  '接着写', '继续写', '直接写', '写出来', '初稿', '成稿', '写正文', '写内容', '你帮我', '请你写',
+  '写这个故事', '写这个开头', '按这个写', '照这个写', '写一章', '写几段', '先写', '开始写',
+  'write', 'continue the story', 'keep writing', 'write a', 'rewrite', 'polish', 'expand',
+];
+const WRITE_INTENT_RE = [
+  /选.{0,6}(第一|第二|第三|第四|[一二三四]|[1234])/, // 选了方向/选项
+  /就.{0,4}(写|用|选|按|来)/,
+  /按.{0,8}(来|写|走|试试)/,
+  /用.{0,8}(写|来|试试)/,
+  /(这个|那个)方向/,
+  /(写|走)(这个|那条|这条|这个)路/,
+  /试试(第一|第二|[1234]|[一二三四])/,
+];
+export function classifyWritingIntent(input) {
+  const t = String(input || '');
+  if (WRITE_INTENT_WORDS.some(w => t.includes(w))) return true;
+  return WRITE_INTENT_RE.some(re => re.test(t));
+}
+
+// 清理写作工具/写作模式的输出：去掉标题行（续写稿：/润色稿：/1) 改写稿 等）与「——编辑注：」说明
+export function cleanWritingOutput(text) {
+  let t = String(text || '').trim();
+  if (!t) return t;
+  // 去掉「【...】」前缀标题
+  t = t.replace(/^【[^】]+】\s*/g, '');
+  // 去掉 markdown 标题行（## 续写稿 / ## 1) 续写稿 等）
+  t = t.replace(/^#{1,6}\s*(?:[0-9一二三四五六七八九十]+[)）、.、]?\s*)?(?:续写|润色|扩写|缩写|改写|重写|写作|风格迁移|翻译|生成)稿?[ \t]*[:：]?.*$/gm, '');
+  // 去掉行首「续写稿：」等标题行（不带 #）
+  t = t.replace(/^(?:[0-9一二三四五六七八九十]+[)）、.、]?\s*)?(?:续写|润色|扩写|缩写|改写|重写|写作|风格迁移|翻译|生成)稿?[ \t]*[:：].*$/gm, '');
+  // 去掉「1) 改写稿」编号标题行
+  t = t.replace(/^(?:[0-9一二三四五六七八九十]+[)）、.、]?\s*)?(?:改写稿|续写稿|润色稿|扩写稿|缩写稿|重写稿)[ \t]*$/gm, '');
+  // 去掉「——编辑注：」整行及末尾说明
+  t = t.replace(/\n+\s*[-—–]+\s*编辑[注按]?\s*[:：].*$/g, '');
+  t = t.replace(/^\s*[-—–]+\s*编辑[注按]?\s*[:：][^\n]*/gm, '');
+  // 清理多余空行，但保留段落间的换行
+  t = t.replace(/\n{3,}/g, '\n\n');
+  return t.trim();
+}
+
+
 
 function coachReply(input, persona, project, chapter, history, userName) {
+  // 写作专用 agent：用户明确要 AI 直接写 / 已选定方向 → 只输出正文
+  if (classifyWritingIntent(input)) {
+    const seed = String(input || '').replace(/[，。！？、；：,.!?;:\s]+/g, ' ').trim().slice(0, 40);
+    const title = project?.title || '我的故事';
+    let reply = seed
+      ? seed + '。那天的风很轻，像有什么话要说，又没说完。我站在原地，忽然想起许多年前的自己——那时还不明白，人生里最好的部分，往往是从一句没说完的话开始的。'
+      : '那天的风很轻，像有什么话要说，又没说完。我站在原地，忽然想起许多年前的自己——那时还不明白，人生里最好的部分，往往是从一句没说完的话开始的。';
+    reply += '\n\n日子就这样一天天过去，有些事记不起来了，有些事却越来越清楚。后来我才明白，写作不是把过去找回来，而是让那些模糊的东西，第一次有了形状。后来我把这段日子写进了《' + title + '》里，像把一粒种子放进了土里。';
+    return { reply, replyType: 'writing' };
+  }
   const cat = categorize(input);
   const name = persona?.name || '黎文';
   const hit = extractHit(input);
@@ -210,6 +266,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
   const hasLegacy = s.api_key && s.provider !== 'none';
   if (hasUni || hasLegacy) {
     try {
+      const writingMode = classifyWritingIntent(input);
       const system = [
         personaPrompt(persona),
         '',
@@ -221,6 +278,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
         '5. 回复长度：常规 80–200 字；',
         '6. 不替用户做创作决定，可以给选项并说明各自效果；',
         '7. 始终保持人设。',
+        writingMode ? '【写作模式】用户明确要求你直接写作（代写/续写/扩写/润色/选定了方向）。请只输出文章正文本身：不要任何标题、编号、前言、说明、提问、鼓励或“编辑注”。保持作品语言与当前语境，直接续写或改写正文。' : '',
         '',
         userName ? '【称呼】用户希望被称为「' + userName + '」。在合适的时机（如鼓励、回应开头）自然地用这个称呼叫用户，不要每句都叫，也不要生硬重复。' : '',
         '',
@@ -237,6 +295,8 @@ ${memoryText}` : '',
       ];
       const text = await callLLM(messages);
       if (text) {
+        // 写作模式：只输出正文，直接标记为可采纳的写作稿
+        if (writingMode) return { reply: cleanWritingOutput(text), replyType: 'writing', source: 'llm' };
         // 尝试结构化判定回复类型
         const lower = text;
         let replyType = 'feedback';
@@ -280,7 +340,7 @@ export async function runWritingTool(mode, text, instruction, language) {
       const lang = languageNote(language);
       if (lang) sys = lang + '\n' + sys;
       const result = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: userContent }], { max_tokens: 1200, temperature: 0.7 });
-      if (result) return { result: result.trim(), source: 'llm' };
+      if (result) return { result: cleanWritingOutput(result), source: 'llm' };
     } catch (e) {
       console.error('[AI] 写作工具降级:', e.message);
     }
@@ -299,7 +359,7 @@ export async function runWritingTool(mode, text, instruction, language) {
   } else if (mode === 'restyle') {
     result = `【按“${instruction || '冷峻克制'}”的风格重写】\n${text.trim()}`;
   }
-  return { result, source: 'rules' };
+  return { result: cleanWritingOutput(result), source: 'rules' };
 }
 
 export function consistencyCheck(text, characters = [], timeline = []) {

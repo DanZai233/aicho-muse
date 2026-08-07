@@ -86,6 +86,8 @@ body {
 .md-preview h2 { font-size: 1.35em; }
 .md-preview h3 { font-size: 1.15em; }
 .md-preview p { margin: 0.55em 0; }
+.md-preview p { text-indent: 2em; }
+.md-preview blockquote p { text-indent: 0; }
 .md-preview ul, .md-preview ol { padding-left: 1.4em; margin: 0.5em 0; }
 .md-preview ul { list-style: disc; }
 .md-preview ol { list-style: decimal; }

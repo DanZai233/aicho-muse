@@ -9,11 +9,11 @@ import DiffReview from '../components/DiffReview';
 import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, interruptSpeech } from '../lib/speech';
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 
-const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', other: '回复' };
+const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
 const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写', condense: '缩写', continue: '续写', restyle: '风格迁移' };
 // 只有带正文建议的回复可进入 diff 与采纳（提问/鼓励/其他不写入文章）
-const ADOPTABLE_TYPES = new Set(['suggestion', 'feedback']);
+const ADOPTABLE_TYPES = new Set(['suggestion', 'feedback', 'writing']);
 const isAdoptable = (t?: string) => !!t && ADOPTABLE_TYPES.has(t);
 
 type StructItem = { id: string; [k: string]: any };
@@ -653,7 +653,7 @@ export default function Workspace() {
                         <span className="text-xs text-ink/35">{c.word_count} 字</span>
                       </div>
                       <h3 className="font-serif text-lg font-semibold group-hover:text-accent">{c.title}</h3>
-                      <p className="mt-2 whitespace-pre-wrap font-creative text-sm leading-7 text-ink/60 line-clamp-4">{c.content || '试着口述一个你最想讲的故事片段。'}</p>
+                      <p className="mt-2 whitespace-pre-wrap font-creative text-sm leading-7 text-ink/60 line-clamp-4 indent-8">{c.content || '试着口述一个你最想讲的故事片段。'}</p>
                     </div>
                   ))}
                 </div>
@@ -673,8 +673,8 @@ export default function Workspace() {
                     </button>
                     <button onClick={deleteChapter} className="ml-auto text-xs text-ink/30 hover:text-red-500">删除章节</button>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8">
-                    <div className="mx-auto max-w-3xl rounded-lg bg-surface px-5 py-6 shadow-soft ring-1 ring-ink/5 sm:px-10">
+                  <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-8">
+                    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/5">
                       <MarkdownEditor value={chapter.content} onChange={updateContent} onSave={() => saveChapter(chapter)} placeholder="在这一页写下你的故事…（支持 Markdown）" />
                     </div>
                   </div>
