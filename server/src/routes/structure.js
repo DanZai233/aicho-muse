@@ -5,21 +5,22 @@ import { db, saveDb, uuid } from '../db.js';
 const router = Router();
 router.use(authRequired);
 
-function ownProject(req, id) {
-  return db().projects.find(p => p.id === id && p.user_id === req.user.id);
-}
+import { projectRole, canView, canEdit } from '../access.js';
+
+function ensureView(req, p) { return !!p && canView(req, p); }
+function ensureEdit(req, p) { return !!p && canEdit(req, p); }
 
 // ---------- 大纲节点 ----------
 router.get('/projects/:pid/outline', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureView(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const list = d.outline_nodes.filter(n => n.project_id === req.params.pid).sort((a, b) => a.order_index - b.order_index);
   res.json({ code: 0, data: { list, total: list.length } });
 });
 
 router.post('/projects/:pid/outline', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureEdit(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const b = req.body || {};
   const maxOrder = d.outline_nodes.filter(n => n.project_id === req.params.pid).reduce((m, n) => Math.max(m, n.order_index), -1);
   const now = new Date().toISOString();
@@ -36,7 +37,8 @@ router.post('/projects/:pid/outline', (req, res) => {
 router.patch('/outline/:id', (req, res) => {
   const d = db();
   const n = d.outline_nodes.find(x => x.id === req.params.id);
-  if (!n || !ownProject(req, n.project_id)) return res.status(404).json({ code: 40401, message: '大纲节点不存在' });
+  if (!n || !ensureView(req, projectOf(n.project_id))) return res.status(404).json({ code: 40401, message: '大纲节点不存在' });
+  if (!ensureEdit(req, projectOf(n.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   for (const k of ['title', 'summary', 'parent_id', 'order_index', 'chapter_id']) {
     if (req.body[k] !== undefined) n[k] = req.body[k];
   }
@@ -48,7 +50,8 @@ router.patch('/outline/:id', (req, res) => {
 router.delete('/outline/:id', (req, res) => {
   const d = db();
   const n = d.outline_nodes.find(x => x.id === req.params.id);
-  if (!n || !ownProject(req, n.project_id)) return res.status(404).json({ code: 40401, message: '大纲节点不存在' });
+  if (!n || !ensureView(req, projectOf(n.project_id))) return res.status(404).json({ code: 40401, message: '大纲节点不存在' });
+  if (!ensureEdit(req, projectOf(n.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   d.outline_nodes = d.outline_nodes.filter(x => x.id !== n.id && x.parent_id !== n.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
@@ -57,14 +60,14 @@ router.delete('/outline/:id', (req, res) => {
 // ---------- 人物卡 ----------
 router.get('/projects/:pid/characters', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureView(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const list = d.character_cards.filter(c => c.project_id === req.params.pid);
   res.json({ code: 0, data: { list, total: list.length } });
 });
 
 router.post('/projects/:pid/characters', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureEdit(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const b = req.body || {};
   const now = new Date().toISOString();
   const card = {
@@ -79,7 +82,8 @@ router.post('/projects/:pid/characters', (req, res) => {
 router.patch('/characters/:id', (req, res) => {
   const d = db();
   const c = d.character_cards.find(x => x.id === req.params.id);
-  if (!c || !ownProject(req, c.project_id)) return res.status(404).json({ code: 40401, message: '人物卡不存在' });
+  if (!c || !ensureView(req, projectOf(c.project_id))) return res.status(404).json({ code: 40401, message: '人物卡不存在' });
+  if (!ensureEdit(req, projectOf(c.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   for (const k of ['name', 'role', 'description', 'arc', 'relationships']) {
     if (req.body[k] !== undefined) c[k] = req.body[k];
   }
@@ -91,7 +95,8 @@ router.patch('/characters/:id', (req, res) => {
 router.delete('/characters/:id', (req, res) => {
   const d = db();
   const c = d.character_cards.find(x => x.id === req.params.id);
-  if (!c || !ownProject(req, c.project_id)) return res.status(404).json({ code: 40401, message: '人物卡不存在' });
+  if (!c || !ensureView(req, projectOf(c.project_id))) return res.status(404).json({ code: 40401, message: '人物卡不存在' });
+  if (!ensureEdit(req, projectOf(c.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   d.character_cards = d.character_cards.filter(x => x.id !== c.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
@@ -100,14 +105,14 @@ router.delete('/characters/:id', (req, res) => {
 // ---------- 时间线 ----------
 router.get('/projects/:pid/timeline', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureView(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const list = d.timeline_events.filter(t => t.project_id === req.params.pid).sort((a, b) => (a.when || '').localeCompare(b.when || ''));
   res.json({ code: 0, data: { list, total: list.length } });
 });
 
 router.post('/projects/:pid/timeline', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureEdit(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const b = req.body || {};
   const now = new Date().toISOString();
   const evt = {
@@ -122,7 +127,8 @@ router.post('/projects/:pid/timeline', (req, res) => {
 router.patch('/timeline/:id', (req, res) => {
   const d = db();
   const t = d.timeline_events.find(x => x.id === req.params.id);
-  if (!t || !ownProject(req, t.project_id)) return res.status(404).json({ code: 40401, message: '时间线事件不存在' });
+  if (!t || !ensureView(req, projectOf(t.project_id))) return res.status(404).json({ code: 40401, message: '时间线事件不存在' });
+  if (!ensureEdit(req, projectOf(t.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   for (const k of ['when', 'event', 'importance', 'linked_chapters']) {
     if (req.body[k] !== undefined) t[k] = req.body[k];
   }
@@ -134,7 +140,8 @@ router.patch('/timeline/:id', (req, res) => {
 router.delete('/timeline/:id', (req, res) => {
   const d = db();
   const t = d.timeline_events.find(x => x.id === req.params.id);
-  if (!t || !ownProject(req, t.project_id)) return res.status(404).json({ code: 40401, message: '时间线事件不存在' });
+  if (!t || !ensureView(req, projectOf(t.project_id))) return res.status(404).json({ code: 40401, message: '时间线事件不存在' });
+  if (!ensureEdit(req, projectOf(t.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   d.timeline_events = d.timeline_events.filter(x => x.id !== t.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
@@ -143,14 +150,14 @@ router.delete('/timeline/:id', (req, res) => {
 // ---------- 灵感碎片 ----------
 router.get('/projects/:pid/ideas', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureView(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const list = d.idea_notes.filter(i => i.project_id === req.params.pid).sort((a, b) => b.created_at.localeCompare(a.created_at));
   res.json({ code: 0, data: { list, total: list.length } });
 });
 
 router.post('/projects/:pid/ideas', (req, res) => {
   const d = db();
-  if (!ownProject(req, req.params.pid)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureEdit(req, projectOf(req.params.pid))) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const b = req.body || {};
   const now = new Date().toISOString();
   const note = {
@@ -165,7 +172,8 @@ router.post('/projects/:pid/ideas', (req, res) => {
 router.patch('/ideas/:id', (req, res) => {
   const d = db();
   const i = d.idea_notes.find(x => x.id === req.params.id);
-  if (!i || !ownProject(req, i.project_id)) return res.status(404).json({ code: 40401, message: '灵感不存在' });
+  if (!i || !ensureView(req, projectOf(i.project_id))) return res.status(404).json({ code: 40401, message: '灵感不存在' });
+  if (!ensureEdit(req, projectOf(i.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   if (req.body.content !== undefined) i.content = req.body.content;
   if (req.body.tags !== undefined) i.tags = req.body.tags;
   saveDb();
@@ -175,7 +183,8 @@ router.patch('/ideas/:id', (req, res) => {
 router.delete('/ideas/:id', (req, res) => {
   const d = db();
   const i = d.idea_notes.find(x => x.id === req.params.id);
-  if (!i || !ownProject(req, i.project_id)) return res.status(404).json({ code: 40401, message: '灵感不存在' });
+  if (!i || !ensureView(req, projectOf(i.project_id))) return res.status(404).json({ code: 40401, message: '灵感不存在' });
+  if (!ensureEdit(req, projectOf(i.project_id))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   d.idea_notes = d.idea_notes.filter(x => x.id !== i.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });

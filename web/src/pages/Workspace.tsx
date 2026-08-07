@@ -123,6 +123,10 @@ export default function Workspace() {
   const [showCover, setShowCover] = useState(false);
   const [coverDraft, setCoverDraft] = useState({ title: '', subtitle: '', author_name: '', cover_color: '#8b7d6b' });
   const [showProjSettings, setShowProjSettings] = useState(false);
+  const [invite, setInvite] = useState<{ active?: boolean; code?: string; role?: string; expires?: string; note?: string } | null>(null);
+  const [collabs, setCollabs] = useState<{ user_id: string; role: string; display_name: string; email?: string }[]>([]);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [collabMsg, setCollabMsg] = useState('');
   const [projDraft, setProjDraft] = useState({ genre: 'biography', language: 'zh-CN', theme: '', target_audience: '', goal_word_count: 0, team_persona_ids: [] as string[] });
 
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
@@ -437,7 +441,41 @@ export default function Workspace() {
     if (!project) return;
     setProjDraft({ genre: project.genre, language: project.language || 'zh-CN', theme: project.theme || '', target_audience: project.target_audience || '', goal_word_count: project.goal_word_count || 0, team_persona_ids: project.team_persona_ids || [] });
     setShowProjSettings(true);
+    setInvite(null); setCollabs([]); loadInvite();
   };
+  const loadInvite = async () => {
+    if (!project) return;
+    try {
+      const d = await api.get<{ active?: boolean; code?: string; role?: string; expires?: string; note?: string }>('/projects/' + project.id + '/invite');
+      setInvite(d);
+    } catch { setInvite(null); }
+    try {
+      const c = await api.get<{ list: { user_id: string; role: string; display_name: string; email?: string }[] }>('/projects/' + project.id + '/collaborators');
+      setCollabs(c.list);
+    } catch { /* viewer 无权查看 */ }
+  };
+  const genInvite = async (role?: string) => {
+    if (!project) return;
+    setInviteBusy(true); setCollabMsg('');
+    try {
+      const d = await api.post<{ code: string; role: string; expires: string; note?: string }>('/projects/' + project.id + '/invite', { role: role || invite?.role || 'editor' });
+      setInvite({ active: true, ...d });
+      setCollabMsg('邀请码已生成，7 天内有效');
+    } catch (e: any) { setCollabMsg(e.message || '生成失败'); }
+    finally { setInviteBusy(false); }
+  };
+  const copyInvite = async () => {
+    if (!invite?.code) return;
+    try { await navigator.clipboard.writeText(invite.code); setCollabMsg('邀请码已复制'); } catch { setCollabMsg('请手动复制邀请码：' + invite.code); }
+  };
+  const changeCollab = async (uid: string, role?: string, remove?: boolean) => {
+    if (!project) return;
+    try {
+      await api.patch('/projects/' + project.id + '/collaborators/' + uid, { role, remove });
+      loadInvite();
+    } catch (e: any) { setCollabMsg(e.message || '操作失败'); }
+  };
+
   const saveProjSettings = async () => {
     if (!project) return;
     const d = await api.patch<{ project: Project }>('/projects/' + project.id, { ...projDraft, goal_word_count: Number(projDraft.goal_word_count) || 0 });
@@ -905,6 +943,52 @@ export default function Workspace() {
               className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" placeholder="例如：30000" />
             <span className="mt-1 block text-xs text-ink/40">设置后侧栏会显示完成进度条</span>
           </label>
+          <div className="rounded-xl border border-ink/10 bg-paper/50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium">团队协作</span>
+              {project?.my_role === 'owner' && (
+                <div className="flex gap-1.5">
+                  <button onClick={() => genInvite('editor')} disabled={inviteBusy} className="rounded-full bg-ink/5 px-2.5 py-1 text-xs text-ink/70 transition hover:bg-ink/10 disabled:opacity-40">可编辑码</button>
+                  <button onClick={() => genInvite('viewer')} disabled={inviteBusy} className="rounded-full bg-ink/5 px-2.5 py-1 text-xs text-ink/70 transition hover:bg-ink/10 disabled:opacity-40">只读码</button>
+                </div>
+              )}
+            </div>
+            {invite?.active && invite.code ? (
+              <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/25 bg-accentlight/30 px-3 py-2">
+                <span className="font-mono text-lg font-semibold tracking-widest">{invite.code}</span>
+                <span className="text-xs text-ink/45">{invite.role === 'viewer' ? '只读' : '可编辑'} · 7 天</span>
+                <button onClick={copyInvite} className="ml-auto shrink-0 rounded-md bg-ink px-2 py-1 text-xs text-paper">复制</button>
+              </div>
+            ) : project?.my_role === 'owner' ? (
+              <p className="mb-2 text-xs text-ink/40">生成邀请码后发给朋友，他们可加入共同创作。</p>
+            ) : (
+              <p className="mb-2 text-xs text-ink/40">邀请码由创建者生成。</p>
+            )}
+            {collabs.length > 0 && (
+              <div className="space-y-1.5">
+                {collabs.map(cb => (
+                  <div key={cb.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-1.5 text-sm">
+                    <Avatar name={cb.display_name || '协作者'} size="sm" />
+                    <span className="truncate">{cb.display_name}{cb.email ? ' · ' + cb.email : ''}</span>
+                    {project?.my_role === 'owner' ? (
+                      <span className="ml-auto flex items-center gap-1">
+                        <select value={cb.role} onChange={e => changeCollab(cb.user_id, e.target.value)}
+                          className="rounded border border-ink/10 bg-surface px-1.5 py-0.5 text-xs outline-none">
+                          <option value="editor">可编辑</option>
+                          <option value="viewer">只读</option>
+                        </select>
+                        <button onClick={() => { if (confirm('移除该协作者？')) changeCollab(cb.user_id, undefined, true); }}
+                          className="text-xs text-ink/30 hover:text-red-500">移除</button>
+                      </span>
+                    ) : (
+                      <span className="ml-auto text-xs text-ink/40">{cb.role === 'viewer' ? '只读' : '可编辑'}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {collabMsg && <p className="mt-1.5 text-xs text-ink/50">{collabMsg}</p>}
+          </div>
           <Button onClick={saveProjSettings} className="w-full">保存作品设置</Button>
         </div>
       </Modal>

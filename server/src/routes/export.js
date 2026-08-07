@@ -3,14 +3,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authRequired } from '../auth.js';
 import { db } from '../db.js';
+import { findProject } from '../access.js';
 
 const router = Router();
 router.use(authRequired);
 
 function projectChapters(req, id) {
   const d = db();
-  const p = d.projects.find(x => x.id === id && x.user_id === req.user.id);
-  if (!p) return null;
+  const f = findProject(req, id);
+  if (!f) return null;
+  const p = f.p;
   const chapters = d.chapters.filter(c => c.project_id === p.id).sort((a, b) => a.order_index - b.order_index);
   return { project: p, chapters };
 }

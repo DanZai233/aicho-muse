@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
+import { projectRole, findProject, canView, canEdit } from '../access.js';
 import { generateCoachReply, extractMemory } from '../ai.js';
 import { checkQuota, consumeQuota } from '../quota.js';
 
@@ -8,7 +9,16 @@ const router = Router();
 router.use(authRequired);
 
 function ownProject(req, id) {
-  return db().projects.find(p => p.id === id && p.user_id === req.user.id);
+  const f = findProject(req, id);
+  return f ? f.p : null;
+}
+function ownConv(req, id) {
+  const c = db().conversations.find(x => x.id === id);
+  if (!c) return null;
+  const proj = c.project_id ? db().projects.find(p => p.id === c.project_id) : null;
+  if (c.user_id === req.user.id) return { c, role: 'owner' };
+  if (proj && canEdit(req, proj)) return { c, role: 'editor' };
+  return null;
 }
 
 function withJoins(c) {
@@ -60,8 +70,9 @@ router.post('/', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const d = db();
-  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
-  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const found = ownConv(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const c = found.c;
   if (req.body.title) c.title = req.body.title;
   if (req.body.persona_id) c.persona_id = req.body.persona_id;
   if (req.body.voice_profile_id !== undefined) c.voice_profile_id = req.body.voice_profile_id;
@@ -78,8 +89,9 @@ router.get('/:id', (req, res) => {
 
 router.get('/:id/messages', (req, res) => {
   const d = db();
-  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
-  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const found = ownConv(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const c = found.c;
   const before = req.query.before || new Date().toISOString();
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   let list = d.messages.filter(m => m.conversation_id === c.id && m.created_at < before)
@@ -91,8 +103,9 @@ router.get('/:id/messages', (req, res) => {
 // 发送消息：返回 message 记录；SSE 通过 /stream 实时推送助手回复
 router.post('/:id/messages', (req, res) => {
   const d = db();
-  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
-  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const found = ownConv(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const c = found.c;
   const { content, reply_as_voice } = req.body || {};
   if (!content || !content.trim()) return res.status(400).json({ code: 40001, message: '消息不能为空' });
   const q = checkQuota('message', req.user.id);
@@ -119,8 +132,9 @@ router.post('/:id/messages', (req, res) => {
 // SSE 流式对话
 router.get('/:id/stream', (req, res) => {
   const d = db();
-  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
-  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const found = ownConv(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const c = found.c;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -184,8 +198,9 @@ router.get('/:id/stream', (req, res) => {
 // 采纳助手回复到文章：追加到指定章节，或新建章节
 router.post('/:id/adopt', (req, res) => {
   const d = db();
-  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
-  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const found = ownConv(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const c = found.c;
   const { message_id, chapter_id, mode, text } = req.body || {};
   const msg = d.messages.find(m => m.id === message_id && m.conversation_id === c.id);
   if (!msg || msg.role !== 'assistant') return res.status(400).json({ code: 40001, message: '消息不存在或不是助手回复' });
@@ -227,8 +242,9 @@ router.post('/:id/adopt', (req, res) => {
 
 router.delete('/:id', (req, res) => {
   const d = db();
-  const c = d.conversations.find(x => x.id === req.params.id && x.user_id === req.user.id);
-  if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const found = ownConv(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
+  const c = found.c;
   d.conversations = d.conversations.filter(x => x.id !== c.id);
   d.messages = d.messages.filter(m => m.conversation_id !== c.id);
   saveDb();

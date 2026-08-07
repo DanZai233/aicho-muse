@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb } from '../db.js';
+import { isOwner, canEdit } from '../access.js';
 
 const router = Router();
 router.use(authRequired);
@@ -26,13 +27,13 @@ router.post('/restore', (req, res) => {
   const item = d.trash[idx];
   if (kind === 'chapter') {
     const ch = item.data.chapter;
-    const owner = d.projects.find(p => p.id === ch.project_id && p.user_id === req.user.id);
-    if (!owner) return res.status(403).json({ code: 40301, message: '无权限恢复' });
+    const proj = d.projects.find(p => p.id === ch.project_id);
+    if (!canEdit(req, proj)) return res.status(403).json({ code: 40301, message: '无权限恢复' });
     d.chapters.push(ch);
     d.snapshots.push(...(item.data.snapshots || []));
   } else {
     const snap = item.data;
-    if (snap.project.user_id !== req.user.id) return res.status(403).json({ code: 40301, message: '无权限恢复' });
+    if (!isOwner(req, snap.project)) return res.status(403).json({ code: 40301, message: '无权限恢复' });
     d.projects.push(snap.project);
     d.chapters.push(...(snap.chapters || []));
     d.snapshots.push(...(snap.snapshots || []));

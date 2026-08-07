@@ -61,6 +61,7 @@ export type Project = {
   goal_word_count: number; status: string; default_persona_id: string | null; team_persona_ids?: string[];
   cover_color: string; subtitle?: string; author_name?: string;
   chapter_count?: number; word_count?: number;
+  my_role?: 'owner' | 'editor' | 'viewer' | null;
   default_persona?: { id: string; name: string; avatar_color: string } | null;
 };
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
+import { projectRole, canView, canEdit } from '../access.js';
 import { runWritingTool, consistencyCheck } from '../ai.js';
 
 function normPara(p) {
@@ -54,8 +55,8 @@ function ownChapter(req, id) {
   const d = db();
   const ch = d.chapters.find(c => c.id === id);
   if (!ch) return null;
-  const proj = d.projects.find(p => p.id === ch.project_id && p.user_id === req.user.id);
-  return proj ? ch : null;
+  const proj = d.projects.find(p => p.id === ch.project_id);
+  return proj && canEdit(req, proj) ? ch : null;
 }
 
 router.post('/rewrite', async (req, res) => {

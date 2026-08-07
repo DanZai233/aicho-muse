@@ -29,6 +29,11 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [undoInfo, setUndoInfo] = useState<{ kind: string; id: string; label: string } | null>(null);
   const [assistantName, setAssistantName] = useState('缪斯');
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinErr, setJoinErr] = useState('');
+  const [joinMsg, setJoinMsg] = useState('');
 
   const load = async () => {
     try {
@@ -48,6 +53,18 @@ export default function Home() {
     finally { setLoadingMore(false); }
   };
   useEffect(() => { load(); }, []);
+
+  const join = async () => {
+    if (!joinCode.trim()) return;
+    setJoinBusy(true); setJoinErr(''); setJoinMsg('');
+    try {
+      const d = await api.post<{ project_id: string; title: string; role: string }>('/projects/join', { code: joinCode.trim() });
+      setJoinMsg('已加入《' + d.title + '》（' + (d.role === 'viewer' ? '只读' : '可编辑') + '）');
+      setJoinCode('');
+      setTimeout(() => { setJoinOpen(false); setJoinMsg(''); load(); }, 1200);
+    } catch (e: any) { setJoinErr(e.message || '加入失败'); }
+    finally { setJoinBusy(false); }
+  };
 
   const create = async () => {
     if (!title.trim()) return;
@@ -117,7 +134,10 @@ export default function Home() {
             <h1 className="font-serif text-3xl font-semibold">你好，{user?.display_name}</h1>
             <p className="mt-1 text-ink/50">今天想写点什么？每一本书都从封面开始慢慢长出来。</p>
           </div>
-          <Button onClick={() => setOpen(true)}>＋ 新建作品</Button>
+          <div className="flex gap-2">
+            <Button variant="subtle" onClick={() => setJoinOpen(true)}>加入协作</Button>
+            <Button onClick={() => setOpen(true)}>＋ 新建作品</Button>
+          </div>
         </div>
 
         {projects.length === 0 ? (
@@ -242,9 +262,23 @@ export default function Home() {
           <Button onClick={create} disabled={!title.trim() || busy} className="w-full">{busy ? '创建中…' : '创建这本书'}</Button>
         </div>
       </Modal>
+      <Modal open={joinOpen} onClose={() => setJoinOpen(false)} title="加入协作">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-ink/60">朋友把作品分享给你时，会给你一个 8 位邀请码。输入后即可进入同一本书共同创作。</p>
+          <Input label="邀请码" value={joinCode} onChange={setJoinCode} placeholder="例如：AB12CD34" />
+          {joinErr && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{joinErr}</p>}
+          {joinMsg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{joinMsg}</p>}
+          <div className="flex gap-2">
+            <Button onClick={join} disabled={joinBusy || !joinCode.trim()} className="flex-1">{joinBusy ? '加入中…' : '加入这本书'}</Button>
+            <Button variant="ghost" onClick={() => setJoinOpen(false)}>取消</Button>
+          </div>
+        </div>
+      </Modal>
+
     </Layout>
   );
 }
+
 
 function BadgeText({ text }: { text: string }) {
   return <span className="inline-flex items-center rounded-full bg-ink/5 px-2 py-0.5 text-xs font-medium text-ink/60">{text}</span>;
