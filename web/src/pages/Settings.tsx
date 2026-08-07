@@ -6,6 +6,14 @@ import Layout from '../components/Layout';
 import { Button, Input, Modal } from '../components/ui';
 
 type UserPrefs = { assistant_name: string; my_name: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
+type ReportData = {
+  totals: { projects: number; chapters: number; words: number; conversations: number; messages: number; draftDays: number; memories: number; firstDate: string | null; lastDate: string | null };
+  genres: { genre: string; label: string; count: number }[];
+  topics: { word: string; count: number }[];
+  tools: { tool: string; label: string; count: number }[];
+  replies: { type: string; label: string; count: number }[];
+  prefs: string[];
+};
 
 export default function Settings() {
   const { user, refresh } = useAuth();
@@ -13,6 +21,9 @@ export default function Settings() {
   const [prefs, setPrefs] = useState<UserPrefs | null>(null);
   const [saved, setSaved] = useState(false);
   const [memories, setMemories] = useState<any[]>([]);
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [reportErr, setReportErr] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState('');
   const [delBusy, setDelBusy] = useState(false);
@@ -29,6 +40,15 @@ export default function Settings() {
     } catch { /* ignore */ }
   };
   useEffect(() => { load(); }, []);
+
+  const loadReport = async () => {
+    setReportBusy(true); setReportErr('');
+    try {
+      const d = await api.get<ReportData>('/insights/report');
+      setReport(d);
+    } catch (e: any) { setReportErr(e.message || '报告生成失败'); }
+    finally { setReportBusy(false); }
+  };
 
   const deleteMemory = async (id: string) => {
     if (!confirm('删除这条创作记忆？')) return;
@@ -133,6 +153,111 @@ export default function Settings() {
                   <button onClick={() => deleteMemory(m.id)} className="ml-2 shrink-0 text-xs text-ink/30 hover:text-red-500">删除</button>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="font-serif text-lg font-semibold">创作足迹</h2>
+              <p className="mt-1 text-sm text-ink/50">回头看看走过的路：字数、体裁、笔下的主题与缪斯陪伴你的方式。</p>
+            </div>
+            <Button variant="ghost" onClick={loadReport} disabled={reportBusy}>{reportBusy ? '生成中…' : (report ? '刷新' : '生成报告')}</Button>
+          </div>
+          {reportErr && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{reportErr}</p>}
+          {!report && !reportErr && <p className="text-sm text-ink/40">尚未生成。点击「生成报告」查看你的创作轨迹。</p>}
+          {report && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {[
+                  ['作品', report.totals.projects],
+                  ['章节', report.totals.chapters],
+                  ['总字数', report.totals.words],
+                  ['对话', report.totals.conversations],
+                  ['创作天数', report.totals.draftDays],
+                  ['记忆', report.totals.memories],
+                ].map(([label, v]) => (
+                  <div key={label as string} className="rounded-xl border border-ink/5 bg-paper/50 p-3 text-center">
+                    <div className="font-serif text-2xl font-semibold text-ink">{v}</div>
+                    <div className="mt-0.5 text-xs text-ink/45">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-ink/40">
+                {report.totals.firstDate ? `首次动笔 ${report.totals.firstDate.slice(0, 10)}` : '尚未开始写作'}
+                {report.totals.lastDate ? ` · 最近更新 ${report.totals.lastDate.slice(0, 10)}` : ''}
+              </p>
+
+              {report.genres.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-ink/70">体裁分布</h3>
+                  <div className="space-y-2">
+                    {report.genres.map(g => (
+                      <div key={g.genre} className="flex items-center gap-3">
+                        <span className="w-12 shrink-0 text-xs text-ink/55">{g.label}</span>
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink/5">
+                          <div className="h-full rounded-full bg-accent" style={{ width: Math.max(4, Math.round((g.count / Math.max(1, report.genres[0].count)) * 100)) + '%' }} />
+                        </div>
+                        <span className="w-6 text-right text-xs text-ink/45">{g.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {report.topics.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-ink/70">笔下的主题</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {report.topics.map(t => (
+                      <span key={t.word} className="rounded-full bg-accentlight/70 px-2.5 py-1 text-xs text-ink/75" title={`出现 ${t.count} 次`}>{t.word}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(report.tools.length > 0 || report.replies.length > 0) && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {report.tools.length > 0 && (
+                    <div>
+                      <h3 className="mb-2 text-sm font-medium text-ink/70">用过的写作工具</h3>
+                      <div className="space-y-1.5">
+                        {report.tools.map(t => (
+                          <div key={t.tool} className="flex items-center justify-between rounded-lg bg-paper/50 px-3 py-1.5 text-sm">
+                            <span className="text-ink/70">{t.label}</span>
+                            <span className="text-xs text-ink/45">{t.count} 次</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {report.replies.length > 0 && (
+                    <div>
+                      <h3 className="mb-2 text-sm font-medium text-ink/70">缪斯的陪伴方式</h3>
+                      <div className="space-y-1.5">
+                        {report.replies.map(r => (
+                          <div key={r.type} className="flex items-center justify-between rounded-lg bg-paper/50 px-3 py-1.5 text-sm">
+                            <span className="text-ink/70">{r.label}</span>
+                            <span className="text-xs text-ink/45">{r.count} 条</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {report.prefs.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-ink/70">缪斯记住的偏好</h3>
+                  <div className="space-y-1">
+                    {report.prefs.map((p, i) => (
+                      <p key={i} className="text-sm leading-6 text-ink/60">· {p}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>

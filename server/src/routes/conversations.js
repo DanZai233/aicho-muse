@@ -189,6 +189,10 @@ router.post('/:id/adopt', (req, res) => {
   const { message_id, chapter_id, mode, text } = req.body || {};
   const msg = d.messages.find(m => m.id === message_id && m.conversation_id === c.id);
   if (!msg || msg.role !== 'assistant') return res.status(400).json({ code: 40001, message: '消息不存在或不是助手回复' });
+  // 只有带正文建议的回复可以采纳；问答/鼓励/其他不写入文章
+  if (!['suggestion', 'feedback'].includes(msg.reply_type)) {
+    return res.status(400).json({ code: 40003, message: '这条回复是问答或鼓励内容，不能作为正文建议采纳' });
+  }
   // 支持部分采纳：mode=segment 时只采纳指定的文本段
   const adoptText = (mode === 'segment' && text) ? String(text).trim() : msg.content;
   if (!adoptText.trim()) return res.status(400).json({ code: 40001, message: '回复内容为空' });

@@ -16,6 +16,14 @@ function isAlreadyIn(body: string[], seg: string) {
   return body.some(b => normalize(b).includes(key));
 }
 
+// 问答性质的段落不进入正文（短问句、寒暄式追问）
+function isQaSegment(seg: string) {
+  const t = seg.trim();
+  if (!t) return true;
+  if (/[？?]s*$/.test(t) && t.length <= 40) return true;
+  return /^(你觉得|你怎么看|怎么样|要不要|想试试|试试看|感兴趣吗|想听|要不要我)/.test(t);
+}
+
 export default function DiffReview({ message, conversationId, chapter, chapters, onAdopted, onClose }: {
   message: Message; conversationId: string; chapter: Chapter | null;
   chapters: Chapter[]; onAdopted: (adoptedText: string, full: boolean) => void; onClose: () => void;
@@ -26,6 +34,9 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
 
   const bodyParagraphs = chapter ? splitParagraphs(chapter.content) : [];
   const segments = splitParagraphs(message.content);
+  const qaFlags = segments.map(isQaSegment);
+  const freshSegments = segments.filter((_, i) => !qaFlags[i] && !isAlreadyIn(bodyParagraphs, segments[i]));
+  const hasAdoptable = freshSegments.length > 0;
   const isFull = message.adopted_at != null;
 
   const adopt = async (seg: string, full: boolean) => {
@@ -67,11 +78,13 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
           <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
             {segments.map((seg, i) => {
               const existing = isAlreadyIn(bodyParagraphs, seg);
+              const qa = qaFlags[i];
               return (
-                <div key={i} className={'group rounded-lg border px-3 py-2 text-xs leading-5 transition ' + (existing ? 'border-ink/5 bg-surface/70 text-ink/45' : 'border-emerald-300 bg-surface shadow-soft')}>
+                <div key={i} className={'group rounded-lg border px-3 py-2 text-xs leading-5 transition ' + (existing || qa ? 'border-ink/5 bg-surface/70 text-ink/45' : 'border-emerald-300 bg-surface shadow-soft')}>
                   <div className="flex items-start justify-between gap-2">
                     <p className={existing ? 'line-through decoration-ink/20' : ''}>{seg}</p>
-                    {!existing && (
+                    {qa && <span className="shrink-0 text-[10px] text-ink/35">对话内容 · 不写入正文</span>}
+                    {!existing && !qa && (
                       <button onClick={() => adopt(seg, false)} disabled={busy}
                         className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50">
                         {adopting === seg.slice(0, 20) ? '写入中…' : '＋ 采纳此段'}
@@ -84,9 +97,13 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
             })}
           </div>
           <div className="mt-2 flex gap-2">
-            <Button onClick={() => adopt(message.content, true)} disabled={busy} className="flex-1 text-xs py-2">
-              {adopting === '__all__' ? '写入中…' : '采纳全部'}
-            </Button>
+            {hasAdoptable ? (
+              <Button onClick={() => adopt(freshSegments.join('\n\n'), true)} disabled={busy} className="flex-1 text-xs py-2">
+                {adopting === '__all__' ? '写入中…' : '采纳全部建议'}
+              </Button>
+            ) : (
+              <p className="flex-1 rounded-lg bg-ink/5 px-3 py-2 text-center text-xs text-ink/40">这条回复没有可写入正文的建议</p>
+            )}
             <Button variant="ghost" onClick={onClose} className="text-xs">忽略</Button>
           </div>
         </>

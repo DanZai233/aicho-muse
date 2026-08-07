@@ -12,6 +12,9 @@ import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
 const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写', condense: '缩写', continue: '续写', restyle: '风格迁移' };
+// 只有带正文建议的回复可进入 diff 与采纳（提问/鼓励/其他不写入文章）
+const ADOPTABLE_TYPES = new Set(['suggestion', 'feedback']);
+const isAdoptable = (t?: string) => !!t && ADOPTABLE_TYPES.has(t);
 
 type StructItem = { id: string; [k: string]: any };
 
@@ -742,9 +745,9 @@ export default function Workspace() {
                         <button onClick={() => speak(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, onStart: () => { setSpeaking(true); setSpeakingId(m.id); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } })} className="text-xs text-accent hover:underline">🔊 朗读</button>
                         {m.adopted_at ? (
                           <span className="text-xs text-emerald-600">✓ 已采纳到文章</span>
-                        ) : (
+                        ) : isAdoptable(m.reply_type) ? (
                           <button onClick={() => setDiffMsg(diffMsg?.id === m.id ? null : m)} className={"text-xs hover:underline " + (diffMsg?.id === m.id ? 'text-emerald-700 font-medium' : 'text-accent')}>✏️ 查看建议 diff</button>
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>
