@@ -20,6 +20,7 @@ import toolRoutes from './routes/tools.js';
 import exportRoutes from './routes/export.js';
 import adminRoutes from './routes/admin.js';
 import trashRoutes, { startTrashReaper } from './routes/trash.js';
+import speechRoutes from './routes/speech.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 await initStorage();
@@ -55,6 +56,7 @@ app.use('/api/v1/memories', memoryRoutes);
 app.use('/api/v1', chapterRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/trash', trashRoutes);
+app.use('/api/v1', speechRoutes);
 
 startTrashReaper();
 

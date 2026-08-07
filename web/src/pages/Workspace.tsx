@@ -313,6 +313,24 @@ export default function Workspace() {
     const d = await api.post<{ chapter: Chapter }>('/projects/' + project.id + '/chapters', {});
     setChapters(prev => [...prev, d.chapter]); setChapter(d.chapter);
   };
+  const cycleChapterStatus = async () => {
+    if (!chapter) return;
+    const next = chapter.status === 'final' ? 'draft' : chapter.status === 'reviewed' ? 'final' : 'reviewed';
+    try {
+      const d = await api.patch<{ chapter: Chapter }>('/chapters/' + chapter.id, { status: next });
+      setChapter(d.chapter); setChapters(prev => prev.map(c => c.id === d.chapter.id ? d.chapter : c));
+    } catch { /* ignore */ }
+  };
+
+  const deleteConv = async (cid: string, label: string) => {
+    if (!confirm('删除会话「' + label + '」？会话消息将一并删除，章节内容不受影响。')) return;
+    try {
+      await api.del('/conversations/' + cid);
+      setConvs(prev => prev.filter(x => x.id !== cid));
+      if (conv?.id === cid) { setConv(null); setMessages([]); }
+    } catch { /* ignore */ }
+  };
+
   const deleteChapter = async () => {
     if (!chapter) return;
     if (!confirm('删除章节「' + chapter.title + '」？30 秒内可撤销。')) return;
@@ -478,11 +496,15 @@ export default function Workspace() {
                 ))}
                 <p className="mb-2 mt-6 px-2 text-xs font-medium text-ink/40">{(prefs?.assistant_name || '缪斯')}</p>
                 {convs.filter(c => !project || c.project_id === project.id).map(c => (
-                  <button key={c.id} onClick={() => selectConv(c)}
+                  <div key={c.id} className="group relative mb-1">
+                  <button onClick={() => selectConv(c)}
                     className={"mb-1 w-full rounded-lg px-3 py-2 text-left text-sm transition " + (conv?.id === c.id ? 'bg-accentlight/70 font-medium' : 'text-ink/60 hover:bg-ink/5')}>
-                    <div className="truncate">{c.title}</div>
-                    <div className="truncate text-xs text-ink/35">{c.persona?.name || '黎文'}{c.last_message ? ' · ' + c.last_message : ''}</div>
-                  </button>
+                      <div className="truncate">{c.title}</div>
+                      <div className="truncate text-xs text-ink/35">{c.persona?.name || '黎文'}{c.last_message ? ' · ' + c.last_message : ''}</div>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteConv(c.id, c.title); }}
+                      className="absolute right-1 top-1.5 z-10 rounded-full px-1.5 text-[10px] text-ink/25 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500" title="删除会话">✕</button>
+                  </div>
                 ))}
                 <button onClick={() => setShowNewConv(true)} className="mt-2 w-full rounded-lg border border-dashed border-ink/15 px-3 py-2 text-sm text-ink/40 hover:border-accent hover:text-accent">＋ 新会话</button>
               </>
@@ -589,7 +611,9 @@ export default function Workspace() {
                     <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
                       className="w-1/3 min-w-40 bg-transparent font-serif text-base font-semibold outline-none" />
                     <span className="text-xs text-ink/35">{chapter.word_count} 字</span>
-                    <Badge>{chapter.status === 'final' ? '已定稿' : chapter.status === 'reviewed' ? '修改中' : '初稿'}</Badge>
+                    <button onClick={cycleChapterStatus} title="点击推进章节状态：初稿 → 修改中 → 已定稿" className={"rounded-full px-2 py-0.5 text-xs font-medium transition " + (chapter.status === 'final' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : chapter.status === 'reviewed' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>
+                      {chapter.status === 'final' ? '✓ 已定稿' : chapter.status === 'reviewed' ? '● 修改中' : '○ 初稿'}
+                    </button>
                     <button onClick={deleteChapter} className="ml-auto text-xs text-ink/30 hover:text-red-500">删除章节</button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8">
@@ -657,7 +681,7 @@ export default function Workspace() {
         </section>
 
         {chatOpen && (
-          <aside className="flex w-[340px] shrink-0 flex-col border-l border-ink/5 bg-white/95">
+          <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-ink/5 bg-white/95 md:static md:z-auto md:w-[340px] md:shrink-0">
             <div className="flex items-center justify-between border-b border-ink/5 bg-white/70 px-4 py-2.5">
               <div className="flex items-center gap-2.5">
                 {conv?.persona ? <Avatar name={conv.persona.name} color={conv.persona.avatar_color} size="sm" /> : <Avatar name="黎文" size="sm" />}

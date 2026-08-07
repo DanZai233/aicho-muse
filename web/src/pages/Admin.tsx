@@ -232,6 +232,40 @@ export default function Admin() {
               </div>
             </div>
             <div className="rounded-2xl bg-white/5 p-5">
+              <h2 className="mb-4 font-serif text-lg font-semibold">语音服务（STT / TTS）</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-paper/45">可选。留空时前端使用浏览器原生语音（Web Speech API），无需任何密钥。填入后可启用 OpenAI 兼容的 TTS / STT 代理端点。</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">TTS API Key</span>
+                    <input value={settings.tts?.api_key || ''} onChange={e => setSettings({ ...settings, tts: { ...settings.tts, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="sk-..." />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">TTS 音色</span>
+                    <input value={settings.tts?.voice_uri || 'alloy'} onChange={e => setSettings({ ...settings, tts: { ...settings.tts, voice_uri: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="alloy / echo / 火山音色ID" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">TTS 端点（可选）</span>
+                    <input value={settings.tts?.base_url || ''} onChange={e => setSettings({ ...settings, tts: { ...settings.tts, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.openai.com/v1" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">STT API Key</span>
+                    <input value={settings.stt?.api_key || ''} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="sk-..." />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">STT 端点（可选）</span>
+                    <input value={settings.stt?.base_url || ''} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.openai.com/v1" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-paper/50">STT 模型</span>
+                    <input value={settings.stt?.model || 'whisper-1'} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="whisper-1" />
+                  </label>
+                </div>
+                <p className="text-xs text-paper/40">配额：TTS 每小时上限与 STT 每日分钟上限在上方「配额与站点」中配置，超限返回 429。</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white/5 p-5">
               <h2 className="mb-4 font-serif text-lg font-semibold">配额与站点</h2>
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-2">
