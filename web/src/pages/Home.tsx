@@ -16,6 +16,7 @@ export default function Home() {
   const [projPage, setProjPage] = useState(1);
   const [projTotal, setProjTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [convVisible, setConvVisible] = useState(6);
   const [onboarded, setOnboarded] = useState(() => localStorage.getItem('am_onboarded') === '1');
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -174,7 +175,7 @@ export default function Home() {
               <span className="text-xs text-ink/40">继续上次没聊完的创作</span>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {convs.slice(0, 6).map(c => (
+              {convs.slice(0, convVisible).map(c => (
                 <Link key={c.id} to={'/workspace?project=' + (c.project_id || '') + '&chat=1&conv=' + c.id}
                   className="group flex items-center gap-3 rounded-2xl border border-ink/5 bg-white/70 px-4 py-3 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-serif text-sm font-semibold text-paper"
@@ -189,6 +190,11 @@ export default function Home() {
                 </Link>
               ))}
             </div>
+            {convs.length > convVisible && (
+              <div className="mt-5 text-center">
+                <Button variant="subtle" onClick={() => setConvVisible(v => v + 6)} className="text-sm">加载更多会话（{convs.length - convVisible} 条未显示）</Button>
+              </div>
+            )}
           </section>
         )}
       </div>
