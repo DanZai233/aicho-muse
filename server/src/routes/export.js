@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { authRequired } from '../auth.js';
 import { db } from '../db.js';
 
@@ -63,11 +65,11 @@ router.get('/projects/:id/docx', async (req, res) => {
 });
 
 // PDF 导出（pdfkit，中文用系统字体）
-router.get('/projects/:id/pdf', (req, res) => {
+router.get('/projects/:id/pdf', async (req, res) => {
   const data = projectChapters(req, req.params.id);
   if (!data) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const { project: p, chapters } = data;
-  const PDFDocument = require('pdfkit');
+  const PDFDocument = (await import('pdfkit')).default;
   const doc = new PDFDocument({ size: 'A4', margins: { top: 64, bottom: 64, left: 56, right: 56 } });
   const chunks = [];
   doc.on('data', c => chunks.push(c));
@@ -76,16 +78,20 @@ router.get('/projects/:id/pdf', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(`${p.title}.pdf`)}"`);
     res.send(Buffer.concat(chunks));
   });
-  // 中文字体：优先系统 PingFang，找不到则用内置 Helvetica（中文可能显示为方块）
+  // 中文字体：仓库内置思源黑体（本地/Docker 通用），找不到则回退系统字体
+  const __dirname2 = path.dirname(fileURLToPath(import.meta.url));
   const fonts = [
+    path.join(__dirname2, '..', '..', 'fonts', 'NotoSansSC-Regular.otf'),
+    '/app/fonts/NotoSansSC-Regular.otf',
     '/System/Library/Fonts/PingFang.ttc',
     '/System/Library/Fonts/STHeiti Light.ttc',
     '/System/Library/Fonts/Supplemental/Songti.ttc',
   ];
   let fontLoaded = false;
   for (const f of fonts) {
-    try { doc.font(f, 'PingFangSC-Regular'); fontLoaded = true; break; } catch { /* try next */ }
+    try { doc.font(f); fontLoaded = true; break; } catch (e) { if (!fontLoaded) console.error('[PDF] 字体加载失败: ' + f + ' -> ' + e.message); }
   }
+  if (!fontLoaded) console.error('[PDF] 所有中文字体加载失败，将使用默认字体（中文可能无法显示）');
   doc.fontSize(26).text(p.title, { align: 'center' });
   doc.moveDown(0.5);
   doc.fontSize(11).fillColor('#666666').text(`体裁：${p.genre} ｜ 主题：${p.theme || '未设置'}`, { align: 'center' });

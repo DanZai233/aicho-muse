@@ -11,8 +11,9 @@ FROM node:22-alpine
 WORKDIR /app
 
 # 系统字体（PDF 中文渲染）
-RUN apk add --no-cache fontconfig ttf-dejavu ttf-freefont
+RUN apk add --no-cache fontconfig ttf-dejavu ttf-freefont font-wqy-zenhei
 
+COPY server/fonts ./fonts
 COPY server/package*.json ./
 RUN npm install --omit=dev
 

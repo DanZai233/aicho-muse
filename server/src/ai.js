@@ -82,7 +82,7 @@ function personaPrompt(persona) {
   return `你是${persona.name}：${persona.tagline}。背景：${persona.background}。性格：${persona.personality.join('、')}。说话风格：${persona.speaking_style?.tone || '自然'}，偏好：${(persona.speaking_style?.preferences || []).join('、')}，避免：${(persona.speaking_style?.avoid || []).join('、')}。`;
 }
 
-function coachReply(input, persona, project, chapter, history) {
+function coachReply(input, persona, project, chapter, history, userName) {
   const cat = categorize(input);
   const name = persona?.name || '黎文';
   const hit = extractHit(input);
@@ -110,6 +110,9 @@ function coachReply(input, persona, project, chapter, history) {
     replyType = 'feedback';
     reply = pick(FEEDBACK_OPENERS).replace('{hit}', hit) + ' ' + pick(FEEDBACK_QUESTIONS);
   }
+
+  // 用户称呼：自然地带进回复开头（仅规则兜底时；LLM 由提示词约束）
+  if (userName && !reply.startsWith(userName + '，')) reply = userName + '，' + reply;
 
   // 人设化口吻
   const style = persona?.speaking_style?.tone || '';
@@ -183,6 +186,7 @@ async function callLLM(messages, opts = {}) {
 export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId }) {
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
+  const userName = (userPrefs?.my_name || '').trim();
   // 记忆检索：项目级优先（与当前作品强相关），再按 importance 排序，最多注入 5 条（Prompt Engineering §1/§9）
   const memories = userId ? (db().memories || [])
     .filter(m => m.user_id === userId)
@@ -211,6 +215,8 @@ export async function generateCoachReply({ persona, project, chapter, input, his
         '6. 不替用户做创作决定，可以给选项并说明各自效果；',
         '7. 始终保持人设。',
         '',
+        userName ? '【称呼】用户希望被称为「' + userName + '」。在合适的时机（如鼓励、回应开头）自然地用这个称呼叫用户，不要每句都叫，也不要生硬重复。' : '',
+        '',
         project ? `【项目上下文】作品《${project.title}》（${project.genre || ''}），主题：${project.theme || '未设置'}。` : '',
         chapter ? `当前章节：${chapter.title}。` : '',
         memories.length ? `【记忆上下文】你记得这些关于用户的创作信息：
@@ -235,7 +241,7 @@ ${memoryText}` : '',
       console.error('[AI] LLM 调用失败，降级到规则引擎:', e.message);
     }
   }
-  const r = coachReply(input, persona, project, chapter, history);
+  const r = coachReply(input, persona, project, chapter, history, userName);
   console.warn('[AI] 本次未调用 LLM（无有效 key 或调用失败），回退内置规则引擎。hasUni=' + hasUni + ' hasLegacy=' + hasLegacy);
   if (memoryText) r.reply = r.reply.replace('如果你愿意，可以闭上眼睛回到那一刻', '记得你说过：' + memoryText.split('\n')[0].replace('- ', '') + '。如果你愿意，可以闭上眼睛回到那一刻');
   return { ...r, source: 'rules' };

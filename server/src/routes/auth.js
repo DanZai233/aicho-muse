@@ -51,7 +51,7 @@ router.patch('/me', authRequired, (req, res) => {
 router.get('/me/settings', authRequired, (req, res) => {
   const user = findUserById(req.user.id);
   if (!user) return res.status(404).json({ code: 40401, message: '用户不存在' });
-  res.json({ code: 0, data: { settings: user.prefs || { assistant_name: '缪斯', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true } } });
+  res.json({ code: 0, data: { settings: user.prefs || { assistant_name: '缪斯', my_name: '', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true } } });
 });
 
 router.patch('/me/settings', authRequired, (req, res) => {

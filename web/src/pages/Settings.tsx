@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, Input } from '../components/ui';
 
-type UserPrefs = { assistant_name: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
+type UserPrefs = { assistant_name: string; my_name: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
 
 export default function Settings() {
   const { user, refresh } = useAuth();
@@ -17,7 +17,7 @@ export default function Settings() {
     try {
       const d = await api.get<{ settings: UserPrefs }>('/auth/me/settings');
       setPrefs(d.settings);
-    } catch { setPrefs({ assistant_name: '缪斯', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
+    } catch { setPrefs({ assistant_name: '缪斯', my_name: '', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
     try {
       const m = await api.get<{ list: any[] }>('/memories');
       setMemories(m.list);
@@ -60,9 +60,13 @@ export default function Settings() {
         </section>
 
         <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
-          <h2 className="mb-4 font-serif text-lg font-semibold">助手称呼</h2>
-          <p className="mb-3 text-sm text-ink/50">你对这位写作陪伴的称呼——默认「缪斯」，可以换成任何你喜欢的名字。</p>
-          <Input label="称呼" value={prefs?.assistant_name || '缪斯'} onChange={v => setPrefs(p => p ? { ...p, assistant_name: v } : p)} placeholder="缪斯" />
+          <h2 className="mb-4 font-serif text-lg font-semibold">彼此称呼</h2>
+          <p className="mb-3 text-sm text-ink/50">给这段创作关系一个专属称呼：你对缪斯的称呼，以及它该怎样称呼你。</p>
+          <Input label="对缪斯的称呼" value={prefs?.assistant_name || '缪斯'} onChange={v => setPrefs(p => p ? { ...p, assistant_name: v } : p)} placeholder="缪斯" />
+          <div className="mt-3">
+            <Input label="缪斯如何称呼你（可选）" value={prefs?.my_name || ''} onChange={v => setPrefs(p => p ? { ...p, my_name: v } : p)} placeholder="例如：小舟、阿澈…" />
+            <p className="mt-1 text-xs text-ink/40">填写后，AI 回复会自动带上这个称呼，让对话更亲近。</p>
+          </div>
           <div className="mt-3"><Button onClick={savePrefs}>保存称呼</Button></div>
         </section>
 
