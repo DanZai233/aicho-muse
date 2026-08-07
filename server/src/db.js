@@ -105,6 +105,7 @@ function seed() {
     admin_users: [
       { id: 'admin-root', username: 'admin', password_hash: '$2a$10$zi2vYGtrKf4SyKDjvOiMH.7hP4GRKmKDUEU8ZEoRto41GXYdCuymq', role: 'superadmin', created_at: now },
     ],
+    memories: [],
     outline_nodes: [],
     character_cards: [],
     timeline_events: [],
@@ -114,6 +115,21 @@ function seed() {
 }
 
 let cache = null;
+
+export function mysqlMode() {
+  return !!(process.env.MYSQL_HOST || process.env.DB_HOST);
+}
+
+export async function initStorage() {
+  loadDb();
+  if (mysqlMode()) {
+    const m = await import('./mysql.js');
+    await m.mysqlLoad(cache);
+    console.log('[DB] MySQL 模式已启用');
+  } else {
+    console.log('[DB] JSON 文件模式（设置 MYSQL_HOST 可切换 MySQL）');
+  }
+}
 
 export function loadDb() {
   if (cache) return cache;
@@ -135,6 +151,10 @@ export function loadDb() {
 
 export function saveDb() {
   if (!cache) return;
+  if (mysqlMode()) {
+    import('./mysql.js').then(m => m.mysqlScheduleSave(cache)).catch(e => console.error('[DB] MySQL 调度失败:', e.message));
+    return;
+  }
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = DB_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(cache, null, 2));

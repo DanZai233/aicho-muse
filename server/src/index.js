@@ -5,13 +5,14 @@ import fs from 'node:fs';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'node:url';
-import { db, loadDb, saveDb } from './db.js';
+import { db, initStorage } from './db.js';
 import { signToken } from './auth.js';
 
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import chapterRoutes from './routes/chapters.js';
 import structureRoutes from './routes/structure.js';
+import memoryRoutes from './routes/memories.js';
 import personaRoutes from './routes/personas.js';
 import voiceRoutes from './routes/voices.js';
 import conversationRoutes from './routes/conversations.js';
@@ -20,7 +21,7 @@ import exportRoutes from './routes/export.js';
 import adminRoutes from './routes/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-loadDb();
+await initStorage();
 
 const app = express();
 app.use(cors());
@@ -49,11 +50,14 @@ app.use('/api/v1/conversations', conversationRoutes);
 app.use('/api/v1/tools', toolRoutes);
 app.use('/api/v1/export', exportRoutes);
 app.use('/api/v1', structureRoutes);
+app.use('/api/v1/memories', memoryRoutes);
 app.use('/api/v1', chapterRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
 // 前端静态资源（生产构建后）
-const webDist = path.join(__dirname, '..', '..', 'web', 'dist');
+const webDist = fs.existsSync(path.join(__dirname, '..', 'public'))
+  ? path.join(__dirname, '..', 'public')        // Docker 内：public 为前端产物
+  : path.join(__dirname, '..', '..', 'web', 'dist'); // 本地开发构建
 if (fs.existsSync(webDist)) {
   app.use(express.static(webDist));
   app.get(/^\/(?!api\/).*/, (req, res) => {

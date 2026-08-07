@@ -1,0 +1,49 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: aicho-muse-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-aicho_muse}
+      MYSQL_USER: ${MYSQL_USER:-aicho}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-aicho123}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: aicho-muse-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-aicho_muse}
+      MYSQL_USER: ${MYSQL_USER:-aicho}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-aicho123}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # AI 配置（可选，未配置则用内置教练；可留空并在管理后台配置）
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+    ports:
+      - "3001:3001"
+    volumes:
+      - app_data:/app/data
+
+volumes:
+  mysql_data:
+  app_data:

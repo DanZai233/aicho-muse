@@ -108,7 +108,7 @@ router.post('/:id/messages', (req, res) => {
     c.title = first ? (first.content.slice(0, 20) + (first.content.length > 20 ? '…' : '')) : c.title;
   }
   const mem = extractMemory(content, c.project_id);
-  mem.forEach(m => d.memories?.push ? d.memories.push({ ...m, id: uuid(), user_id: req.user.id, created_at: now }) : null);
+  mem.forEach(m => d.memories.push({ ...m, id: uuid(), user_id: req.user.id, created_at: now }));
   saveDb();
   res.status(202).json({ code: 0, data: { message: msg } });
 });
@@ -142,7 +142,7 @@ router.get('/:id/stream', (req, res) => {
     try {
       send('start', { ok: true });
       const { reply, replyType, source } = await generateCoachReply({
-        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice,
+        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id,
       });
       // 流式输出：按句分片
       const chunks = reply.split(/(?<=[。！？!?；;])/).filter(s => s.trim());

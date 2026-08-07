@@ -7,7 +7,8 @@ Aicho Muse 是一款面向创作场景的 AI 创作伴侣：你可以通过 **�
 ## 技术栈
 
 - **前端**：React 18 + TypeScript + Vite + Tailwind CSS（响应式，移动/平板/桌面三栏工作台）
-- **后端**：Node.js + Express（轻量、零原生依赖，JSON 文件持久化，开箱即用）
+- **后端**：Node.js + Express（默认 JSON 文件持久化开箱即用；设置 MYSQL_HOST 自动切换 MySQL）
+- **部署**：Docker Compose 一键起 MySQL 8 + 应用，多阶段镜像构建前端
 - **语音**：浏览器原生 Web Speech API（STT 语音输入 + TTS 朗读，无需密钥）
 - **AI**：通过 **UniLLM SDK** 统一接入 14+ 厂商（OpenAI / Claude / Gemini / 豆包 / DeepSeek / Kimi / 通义 / 智谱 / Grok / Ollama 等）；未配置密钥时使用内置创作教练规则引擎
 - **管理后台**：数据概览 / 用户管理 / AI 与配额设置 / 预设人设与音色管理
@@ -27,6 +28,16 @@ npm run serve
 ```
 
 打开 http://localhost:3001 即可使用。
+
+### Docker 部署（推荐生产）
+
+```bash
+# 一键构建并启动（MySQL 8 + 应用）
+docker compose up --build -d
+
+# 打开 http://localhost:3001（管理后台 /admin，admin/admin123）
+# 数据自动持久化到 Docker volume，可配置 .env 中的 MySQL 账号与 AI Key
+```
 
 ### 默认账号
 

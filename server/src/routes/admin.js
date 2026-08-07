@@ -73,7 +73,7 @@ router.delete('/users/:id', (req, res) => {
 // UniLLM 厂商列表（供管理后台选择）
 router.get('/llm-providers', async (req, res) => {
   try {
-    const lib = await import(process.env.UNILLM_PATH || '/Users/dan_zai/Git/unillm-sdk/dist/index.js');
+    const lib = await import(process.env.UNILLM_PATH || 'unillm-sdk');
     const providers = (lib.PROVIDERS || []).map(p => ({ id: p.id, label: p.label, needsApiKey: p.needsApiKey, defaultModels: p.defaultModels || [] }));
     res.json({ code: 0, data: { providers } });
   } catch (e) {

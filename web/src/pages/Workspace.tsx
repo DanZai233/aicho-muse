@@ -113,6 +113,7 @@ export default function Workspace() {
   const [checkBusy, setCheckBusy] = useState(false);
   const [versions, setVersions] = useState<any[]>([]);
   const [showVersions, setShowVersions] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
 
   const msgsRef = useRef<HTMLDivElement>(null);
   const recRef = useRef<any>(null);
@@ -336,14 +337,27 @@ export default function Workspace() {
     const a = document.createElement('a');
     a.href = `/api/v1/export/projects/${project.id}/markdown`; a.download = `${project.title}.md`; a.click();
   };
+  const exportPdf = () => {
+    if (!project) return;
+    const a = document.createElement('a');
+    a.href = `/api/v1/export/projects/${project.id}/pdf`; a.download = `${project.title}.pdf`; a.click();
+  };
+  const exportDocx = () => {
+    if (!project) return;
+    const a = document.createElement('a');
+    a.href = `/api/v1/export/projects/${project.id}/docx`; a.download = `${project.title}.docx`; a.click();
+  };
 
   return (
     <Layout>
       <div className="mx-auto flex h-[calc(100vh-56px)] max-w-[1400px] overflow-hidden">
         {/* 左栏：项目结构 */}
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-ink/5 bg-white/60 md:flex">
+        <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-ink/5 bg-white shadow-lift transition-transform duration-200 md:static md:z-auto md:translate-x-0 md:shadow-none ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="border-b border-ink/5 p-4">
+            <div className="flex items-center justify-between">
             <h2 className="truncate font-serif text-base font-semibold">{project?.title || '选择作品'}</h2>
+            <button onClick={() => setShowSidebar(false)} className="text-ink/40 hover:text-ink md:hidden">✕</button>
+          </div>
             {project && <p className="mt-0.5 text-xs text-ink/40">{GENRE_LABEL[project.genre]} · {project.word_count ?? 0} 字</p>}
           </div>
           <div className="flex gap-0.5 border-b border-ink/5 px-2 py-2 text-xs">
@@ -402,16 +416,27 @@ export default function Workspace() {
 
         {/* 右侧主区：文章 / 对话 独立视图 */}
         <section className="flex min-w-0 flex-1 flex-col">
+      {/* 移动端侧栏遮罩 */}
+      {showSidebar && <div className="fixed inset-0 z-30 bg-ink/30 md:hidden" onClick={() => setShowSidebar(false)} />}
           {/* 视图切换 */}
           <div className="flex items-center justify-between border-b border-ink/5 bg-white/70 px-4 py-2">
+            <div className="flex items-center gap-2">
+            <button onClick={() => setShowSidebar(true)} className="rounded-lg px-2 py-1.5 text-sm text-ink/60 hover:bg-ink/5 md:hidden">☰</button>
             <div className="flex rounded-lg bg-ink/5 p-0.5 text-sm">
               <button onClick={() => switchView('article')}
                 className={`rounded-md px-4 py-1.5 transition ${view === 'article' ? 'bg-white text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink'}`}>📄 文章</button>
               <button onClick={() => switchView('chat')}
                 className={`rounded-md px-4 py-1.5 transition ${view === 'chat' ? 'bg-white text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink'}`}>💬 对话</button>
             </div>
+            </div>
             <div className="flex items-center gap-2 text-xs text-ink/45">
-              {project && <button onClick={exportMd} className="rounded-md px-2.5 py-1 hover:bg-ink/5">⬇ 导出</button>}
+              {project && (
+              <span className="flex items-center gap-0.5">
+                <button onClick={exportMd} className="rounded-md px-2 py-1 hover:bg-ink/5" title="Markdown">MD</button>
+                <button onClick={exportPdf} className="rounded-md px-2 py-1 hover:bg-ink/5" title="PDF">PDF</button>
+                <button onClick={exportDocx} className="rounded-md px-2 py-1 hover:bg-ink/5" title="Word">DOCX</button>
+              </span>
+            )}
               {view === 'article' && chapter && (
                 <>
                   <button onClick={loadVersions} className="rounded-md px-2.5 py-1 hover:bg-ink/5">🕘 版本历史</button>

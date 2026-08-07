@@ -5,7 +5,7 @@ import { db } from './db.js';
 let unillmPromise = null;
 function loadUnillm() {
   if (!unillmPromise) {
-    const p = process.env.UNILLM_PATH || '/Users/dan_zai/Git/unillm-sdk/dist/index.js';
+    const p = process.env.UNILLM_PATH || 'unillm-sdk';
     unillmPromise = import(p).catch(e => {
       console.error('[AI] unillm-sdk 加载失败（回退内置规则）:', e.message);
       return null;
@@ -125,7 +125,13 @@ function coachReply(input, persona, project, chapter, history) {
 
 async function callLLM(messages, opts = {}) {
   const s = db().settings.ai;
-  const hasUniKey = s.llm_api_key && s.llm_provider && s.llm_provider !== 'none';
+  const envAI = {
+    llm_provider: process.env.LLM_PROVIDER || s.llm_provider,
+    llm_api_key: process.env.LLM_API_KEY || s.llm_api_key,
+    llm_model: process.env.LLM_MODEL || s.llm_model,
+    base_url: process.env.LLM_BASE_URL || s.base_url,
+  };
+  const hasUniKey = envAI.llm_api_key && envAI.llm_provider && envAI.llm_provider !== 'none';
   const hasLegacyKey = s.api_key && s.provider !== 'none';
 
   // 优先 UniLLM（多厂商）
@@ -134,10 +140,10 @@ async function callLLM(messages, opts = {}) {
     if (lib && lib.createLLM) {
       try {
         const llm = lib.createLLM({
-          provider: s.llm_provider,
-          apiKey: s.llm_api_key,
-          baseUrl: s.base_url || undefined,
-          model: s.llm_model || undefined,
+          provider: envAI.llm_provider,
+          apiKey: envAI.llm_api_key,
+          baseUrl: envAI.base_url || undefined,
+          model: envAI.llm_model || undefined,
           temperature: opts.temperature ?? 0.8,
           maxTokens: opts.max_tokens ?? 800,
           timeoutMs: 60000,
@@ -167,13 +173,18 @@ async function callLLM(messages, opts = {}) {
   return null;
 }
 
-export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice }) {
+export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId }) {
+  const memories = userId ? (db().memories || []).filter(m => m.user_id === userId).sort((a, b) => (b.importance || 0) - (a.importance || 0)).slice(0, 5) : [];
+  const memoryText = memories.length ? memories.map(m => '- ' + m.content).join('\n') : '';
+
   const s = db().settings.ai;
   const personaName = persona?.name || '黎文';
   const styleNote = persona?.speaking_style?.tone ? `说话风格：${persona.speaking_style.tone}。` : '';
 
-  // 始终先尝试 LLM
-  if (s.api_key && s.provider !== 'none') {
+  // 始终先尝试 LLM（UniLLM 多厂商 或 旧版 OpenAI 兼容）
+  const hasUni = (process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none';
+  const hasLegacy = s.api_key && s.provider !== 'none';
+  if (hasUni || hasLegacy) {
     try {
       const system = [
         personaPrompt(persona),
@@ -189,6 +200,8 @@ export async function generateCoachReply({ persona, project, chapter, input, his
         '',
         project ? `【项目上下文】作品《${project.title}》（${project.genre || ''}），主题：${project.theme || '未设置'}。` : '',
         chapter ? `当前章节：${chapter.title}。` : '',
+        memories.length ? `【记忆上下文】你记得这些关于用户的创作信息：
+${memoryText}` : '',
       ].filter(Boolean).join('\n');
       const messages = [
         { role: 'system', content: system },
@@ -210,6 +223,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
     }
   }
   const r = coachReply(input, persona, project, chapter, history);
+  if (memoryText) r.reply = r.reply.replace('如果你愿意，可以闭上眼睛回到那一刻', '记得你说过：' + memoryText.split('\n')[0].replace('- ', '') + '。如果你愿意，可以闭上眼睛回到那一刻');
   return { ...r, source: 'rules' };
 }
 
