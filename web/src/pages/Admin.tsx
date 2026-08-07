@@ -30,6 +30,7 @@ export default function Admin() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [presets, setPresets] = useState<any>(null);
+  const [providers, setProviders] = useState<any[]>([]);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
@@ -41,9 +42,12 @@ export default function Admin() {
   const loadUsers = async () => { setUsers((await adminGet<{ list: AdminUser[] }>('/users')).list); };
   const loadSettings = async () => { const s = (await adminGet<{ settings: any }>('/settings')).settings; setSettings({ ...s, ai: { ...s.ai, api_key: s.ai.api_key ? '******' : '' } }); };
   const loadPresets = async () => { setPresets(await adminGet('/presets')); };
+  const loadProviders = async () => {
+    try { setProviders((await adminGet<{ providers: any[] }>('/llm-providers')).providers); } catch (e: any) { setErr(e.message); }
+  };
 
   useEffect(() => {
-    loadStats(); loadUsers(); loadSettings(); loadPresets();
+    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders();
   }, []);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
@@ -59,7 +63,7 @@ export default function Admin() {
   const saveSettings = async () => {
     if (!settings) return;
     try {
-      const body = { ...settings, ai: { ...settings.ai, api_key: settings.ai.api_key === '******' ? '' : settings.ai.api_key } };
+      const body = { ...settings, ai: { ...settings.ai, api_key: settings.ai.api_key === '******' ? '' : settings.ai.api_key, llm_api_key: settings.ai.llm_api_key === '******' ? '' : settings.ai.llm_api_key } };
       await adminSend('/settings', 'PATCH', body);
       setErr(''); flash('设置已保存');
       loadSettings();
@@ -142,24 +146,34 @@ export default function Admin() {
               <h2 className="mb-4 font-serif text-lg font-semibold">AI 配置</h2>
               <div className="space-y-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs text-paper/50">提供商</span>
-                  <select value={settings.ai.provider} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, provider: e.target.value } })} className={inputCls + ' bg-ink/80'}>
-                    <option value="none">内置规则教练</option>
-                    <option value="openai-compatible">OpenAI 兼容</option>
+                  <span className="mb-1 block text-xs text-paper/50">LLM 引擎（UniLLM 多厂商）</span>
+                  <select value={settings.ai.llm_provider || 'none'} onChange={e => {
+                    const p = providers.find(x => x.id === e.target.value);
+                    setSettings({ ...settings, ai: { ...settings.ai, llm_provider: e.target.value, llm_model: p?.defaultModels?.[0] || '' } });
+                  }} className={inputCls + ' bg-ink/80'}>
+                    <option value="none">内置规则教练（无需 Key）</option>
+                    {providers.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs text-paper/50">Base URL</span>
-                  <input value={settings.ai.base_url} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.openai.com/v1" />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs text-paper/50">API Key</span>
-                  <input value={settings.ai.api_key} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="sk-..." />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs text-paper/50">模型</span>
-                  <input value={settings.ai.model} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="gpt-4o-mini" />
-                </label>
+                {settings.ai.llm_provider && settings.ai.llm_provider !== 'none' && (
+                  <>
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-paper/50">API Key（UniLLM）</span>
+                      <input value={settings.ai.llm_api_key} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, llm_api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="sk-... 或火山/通义等对应 Key" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-paper/50">模型（默认取厂商推荐，可改）</span>
+                      <input value={settings.ai.llm_model} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, llm_model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="deepseek-chat / qwen-plus / gemini-2.5-flash…" />
+                    </label>
+                    {settings.ai.llm_provider === 'custom' && (
+                      <label className="block">
+                        <span className="mb-1 block text-xs text-paper/50">Base URL（自定义 OpenAI 兼容端点）</span>
+                        <input value={settings.ai.base_url} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://your-endpoint/v1" />
+                      </label>
+                    )}
+                  </>
+                )}
+                <p className="text-xs text-paper/40">接入 14+ 厂商：OpenAI / Claude / Gemini / 豆包 / DeepSeek / Kimi / 通义 / 智谱 / Grok / Ollama 等，通过 uniLLM SDK 统一驱动。</p>
               </div>
             </div>
             <div className="rounded-2xl bg-white/5 p-5">

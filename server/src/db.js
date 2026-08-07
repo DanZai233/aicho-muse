@@ -97,7 +97,7 @@ function seed() {
     conversations: [],
     messages: [],
     settings: {
-      ai: { provider: 'none', base_url: '', api_key: '', model: 'gpt-4o-mini', system_prompt_mode: 'default' },
+      ai: { provider: 'none', base_url: '', api_key: '', model: 'gpt-4o-mini', system_prompt_mode: 'default', llm_provider: 'none', llm_api_key: '', llm_model: '' },
       quota: { daily_messages: 100, tts_per_hour: 60, stt_minutes_per_day: 30 },
       site: { site_name: 'Aicho Muse', announcement: '' },
       tts: { voice_uri: '', rate: 1, pitch: 1 },
@@ -105,6 +105,10 @@ function seed() {
     admin_users: [
       { id: 'admin-root', username: 'admin', password_hash: '$2a$10$zi2vYGtrKf4SyKDjvOiMH.7hP4GRKmKDUEU8ZEoRto41GXYdCuymq', role: 'superadmin', created_at: now },
     ],
+    outline_nodes: [],
+    character_cards: [],
+    timeline_events: [],
+    idea_notes: [],
     stats: { conversations_created: 0, messages_sent: 0, projects_created: 0 },
   };
 }

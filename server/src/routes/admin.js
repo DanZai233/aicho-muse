@@ -22,6 +22,10 @@ router.get('/stats', (req, res) => {
       conversations: d.conversations.length,
       messages: d.messages.length,
       personas: d.personas.filter(p => !p.is_preset).length + 4,
+      outline_nodes: d.outline_nodes.length,
+      character_cards: d.character_cards.length,
+      timeline_events: d.timeline_events.length,
+      idea_notes: d.idea_notes.length,
       messages_today: messagesToday,
       conversations_today: convToday,
       ai_provider: d.settings.ai.provider,
@@ -66,6 +70,17 @@ router.delete('/users/:id', (req, res) => {
 });
 
 // ---------- 系统设置 ----------
+// UniLLM 厂商列表（供管理后台选择）
+router.get('/llm-providers', async (req, res) => {
+  try {
+    const lib = await import(process.env.UNILLM_PATH || '/Users/dan_zai/Git/unillm-sdk/dist/index.js');
+    const providers = (lib.PROVIDERS || []).map(p => ({ id: p.id, label: p.label, needsApiKey: p.needsApiKey, defaultModels: p.defaultModels || [] }));
+    res.json({ code: 0, data: { providers } });
+  } catch (e) {
+    res.status(500).json({ code: 50001, message: 'UniLLM 加载失败: ' + e.message });
+  }
+});
+
 router.get('/settings', (req, res) => {
   const s = db().settings;
   res.json({ code: 0, data: { settings: s } });

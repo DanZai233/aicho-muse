@@ -47,3 +47,43 @@ body {
 }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Markdown 预览样式 */
+.md-preview h1, .md-preview h2, .md-preview h3 {
+  font-weight: 600;
+  margin: 0.8em 0 0.4em;
+  line-height: 1.4;
+}
+.md-preview h1 { font-size: 1.6em; }
+.md-preview h2 { font-size: 1.35em; }
+.md-preview h3 { font-size: 1.15em; }
+.md-preview p { margin: 0.55em 0; }
+.md-preview ul, .md-preview ol { padding-left: 1.4em; margin: 0.5em 0; }
+.md-preview ul { list-style: disc; }
+.md-preview ol { list-style: decimal; }
+.md-preview blockquote {
+  border-left: 3px solid #8b7d6b;
+  padding-left: 1em;
+  color: rgba(45, 42, 38, 0.65);
+  margin: 0.6em 0;
+  font-style: italic;
+}
+.md-preview code {
+  background: rgba(45, 42, 38, 0.06);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+.md-preview pre {
+  background: rgba(45, 42, 38, 0.05);
+  padding: 0.8em 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.md-preview pre code { background: transparent; padding: 0; }
+.md-preview a { color: #8b7d6b; text-decoration: underline; }
+.md-preview img { max-width: 100%; border-radius: 8px; }
+.md-preview hr { border: none; border-top: 1px solid rgba(45, 42, 38, 0.1); margin: 1.2em 0; }
+.md-preview table { border-collapse: collapse; margin: 0.6em 0; }
+.md-preview th, .md-preview td { border: 1px solid rgba(45, 42, 38, 0.12); padding: 0.4em 0.7em; }

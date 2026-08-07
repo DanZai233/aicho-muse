@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
-import { runWritingTool } from '../ai.js';
+import { runWritingTool, consistencyCheck } from '../ai.js';
 
 const router = Router();
 router.use(authRequired);
@@ -48,6 +48,23 @@ router.post('/rewrite', async (req, res) => {
   } catch (e) {
     res.status(500).json({ code: 50001, message: e.message });
   }
+});
+
+// 一致性检查：人物 / 时间线 / 重复段落
+router.post('/check', (req, res) => {
+  const { chapter_id, content } = req.body || {};
+  let text = content || '';
+  if (chapter_id) {
+    const ch = ownChapter(req, chapter_id);
+    if (!ch) return res.status(404).json({ code: 40401, message: '章节不存在' });
+    text = ch.content || '';
+  }
+  if (!text || !text.trim()) return res.status(400).json({ code: 40001, message: '没有可检查的文本' });
+  const d = db();
+  const proj = d.projects.find(p => p.id === (chapter_id ? ownChapter(req, chapter_id)?.project_id : null));
+  const characters = proj ? d.character_cards.filter(c => c.project_id === proj.id) : [];
+  const timeline = proj ? d.timeline_events.filter(t => t.project_id === proj.id) : [];
+  res.json({ code: 0, data: { issues: consistencyCheck(text, characters, timeline) } });
 });
 
 router.post('/apply', (req, res) => {

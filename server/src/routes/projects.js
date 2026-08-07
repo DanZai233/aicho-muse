@@ -77,6 +77,10 @@ router.delete('/:id', (req, res) => {
   const convIds = d.conversations.filter(c => c.project_id === p.id).map(c => c.id);
   d.conversations = d.conversations.filter(c => c.project_id !== p.id);
   d.messages = d.messages.filter(m => !convIds.includes(m.conversation_id));
+  d.outline_nodes = d.outline_nodes.filter(n => n.project_id !== p.id);
+  d.character_cards = d.character_cards.filter(c => c.project_id !== p.id);
+  d.timeline_events = d.timeline_events.filter(t => t.project_id !== p.id);
+  d.idea_notes = d.idea_notes.filter(i => i.project_id !== p.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });

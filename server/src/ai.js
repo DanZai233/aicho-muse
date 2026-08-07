@@ -1,5 +1,21 @@
 import { db } from './db.js';
 
+// ---------- UniLLM 统一大模型接入 ----------
+// 复用 DanZai233/unillm-sdk：一份配置接入 14+ 厂商
+let unillmPromise = null;
+function loadUnillm() {
+  if (!unillmPromise) {
+    const p = process.env.UNILLM_PATH || '/Users/dan_zai/Git/unillm-sdk/dist/index.js';
+    unillmPromise = import(p).catch(e => {
+      console.error('[AI] unillm-sdk 加载失败（回退内置规则）:', e.message);
+      return null;
+    });
+  }
+  return unillmPromise;
+}
+
+
+
 // ---------- 规则引擎：内置创作教练（无 API Key 时的兜底） ----------
 
 const QUOTE_POOL = [
@@ -105,30 +121,50 @@ function coachReply(input, persona, project, chapter, history) {
   return { reply, replyType };
 }
 
-// ---------- LLM 提供商（OpenAI 兼容） ----------
+// ---------- LLM 提供商（UniLLM 统一接入 / OpenAI 兼容兜底） ----------
 
 async function callLLM(messages, opts = {}) {
   const s = db().settings.ai;
-  if (!s.api_key || s.provider === 'none') return null;
-  const base = (s.base_url || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const url = `${base}/chat/completions`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.api_key}` },
-    body: JSON.stringify({
-      model: s.model || 'gpt-4o-mini',
-      messages,
-      temperature: opts.temperature ?? 0.8,
-      max_tokens: opts.max_tokens ?? 800,
-      stream: false,
-    }),
-  });
-  if (!resp.ok) {
-    const err = await resp.text().catch(() => '');
-    throw new Error(`LLM 调用失败 (${resp.status}): ${err.slice(0, 200)}`);
+  const hasUniKey = s.llm_api_key && s.llm_provider && s.llm_provider !== 'none';
+  const hasLegacyKey = s.api_key && s.provider !== 'none';
+
+  // 优先 UniLLM（多厂商）
+  if (hasUniKey) {
+    const lib = await loadUnillm();
+    if (lib && lib.createLLM) {
+      try {
+        const llm = lib.createLLM({
+          provider: s.llm_provider,
+          apiKey: s.llm_api_key,
+          baseUrl: s.base_url || undefined,
+          model: s.llm_model || undefined,
+          temperature: opts.temperature ?? 0.8,
+          maxTokens: opts.max_tokens ?? 800,
+          timeoutMs: 60000,
+        });
+        const res = await llm.chat(messages, { signal: opts.signal });
+        if (res?.text) return res.text.trim();
+      } catch (e) {
+        console.error('[AI] UniLLM 调用失败:', e.message);
+        if (opts.noFallback) throw e;
+      }
+    }
   }
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content ?? null;
+
+  // 兼容旧配置：OpenAI 兼容直连
+  if (hasLegacyKey && !hasUniKey) {
+    const base = (s.base_url || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const url = base + '/chat/completions';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + s.api_key },
+      body: JSON.stringify({ model: s.model || 'gpt-4o-mini', messages, temperature: opts.temperature ?? 0.8, max_tokens: opts.max_tokens ?? 800, stream: false }),
+    });
+    if (!resp.ok) throw new Error('LLM 调用失败 (' + resp.status + '): ' + (await resp.text().catch(() => '')).slice(0, 200));
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content ?? null;
+  }
+  return null;
 }
 
 export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice }) {
@@ -211,6 +247,41 @@ export async function runWritingTool(mode, text, instruction) {
     result = `【按“${instruction || '冷峻克制'}”的风格重写】\n${text.trim()}`;
   }
   return { result, source: 'rules' };
+}
+
+export function consistencyCheck(text, characters = [], timeline = []) {
+  const issues = [];
+  const names = characters.map(c => c.name).filter(Boolean);
+  for (const n of names) {
+    const re = new RegExp(n, 'g');
+    const matches = (text.match(re) || []).length;
+    if (matches > 0) {
+      const card = characters.find(c => c.name === n);
+      if (card?.role && !text.includes(card.role)) {
+        // 人物在正文出现但身份交代不明（弱提示）
+        issues.push({ level: 'info', message: '人物「' + n + '」在正文中出现，建议在首次出现时交代身份（' + card.role + '）。' });
+      }
+    }
+  }
+  // 时间线冲突：正文提到的时间点与时间线事件顺序对比（简化：检查年份/时间表述是否乱序）
+  if (timeline.length > 1) {
+    const sorted = [...timeline].sort((a, b) => (a.when || '').localeCompare(b.when || ''));
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].when && sorted[i - 1].when && sorted[i].when === sorted[i - 1].when) {
+        issues.push({ level: 'warn', message: '时间线「' + sorted[i].when + '」有多个事件，请确认先后顺序与因果。' });
+      }
+    }
+  }
+  // 代词与重复：检测明显的重复段落（>30 字完全相同）
+  const seen = new Set();
+  const paras = text.split(/\n+/).filter(p => p.trim().length > 30);
+  for (const p of paras) {
+    const key = p.trim().slice(0, 30);
+    if (seen.has(key)) issues.push({ level: 'warn', message: '存在重复段落：「' + p.trim().slice(0, 25) + '…」，建议合并或删减。' });
+    seen.add(key);
+  }
+  if (!issues.length) issues.push({ level: 'ok', message: '未发现明显的人物、时间线或重复问题。' });
+  return issues;
 }
 
 // ---------- 记忆提取（简单关键词记忆，M3 简化版） ----------

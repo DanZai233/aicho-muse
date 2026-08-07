@@ -1,0 +1,12 @@
+{
+  "name": "Aicho Muse · 声创",
+  "short_name": "Aicho Muse",
+  "description": "用对话和声音，把灵感写成作品。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#8b7d6b",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

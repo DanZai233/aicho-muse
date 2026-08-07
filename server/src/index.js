@@ -11,6 +11,7 @@ import { signToken } from './auth.js';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import chapterRoutes from './routes/chapters.js';
+import structureRoutes from './routes/structure.js';
 import personaRoutes from './routes/personas.js';
 import voiceRoutes from './routes/voices.js';
 import conversationRoutes from './routes/conversations.js';
@@ -47,6 +48,7 @@ app.use('/api/v1/voice-profiles', voiceRoutes);
 app.use('/api/v1/conversations', conversationRoutes);
 app.use('/api/v1/tools', toolRoutes);
 app.use('/api/v1/export', exportRoutes);
+app.use('/api/v1', structureRoutes);
 app.use('/api/v1', chapterRoutes);
 app.use('/api/v1/admin', adminRoutes);
 

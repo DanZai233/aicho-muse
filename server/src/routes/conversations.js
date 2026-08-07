@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
 import { generateCoachReply, extractMemory } from '../ai.js';
+import { checkQuota, consumeQuota } from '../quota.js';
 
 const router = Router();
 router.use(authRequired);
@@ -94,6 +95,9 @@ router.post('/:id/messages', (req, res) => {
   if (!c) return res.status(404).json({ code: 40401, message: '会话不存在' });
   const { content, reply_as_voice } = req.body || {};
   if (!content || !content.trim()) return res.status(400).json({ code: 40001, message: '消息不能为空' });
+  const q = checkQuota('message', req.user.id);
+  if (!q.allowed) return res.status(429).json({ code: 42901, message: '今日消息配额已用完（' + q.limit + ' 条），请明天再试', quota: q });
+  consumeQuota('message', req.user.id);
   const now = new Date().toISOString();
   const msg = { id: uuid(), conversation_id: c.id, role: 'user', content: content.trim(), reply_as_voice: !!reply_as_voice, created_at: now };
   d.messages.push(msg);
