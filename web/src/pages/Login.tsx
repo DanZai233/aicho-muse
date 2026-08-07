@@ -36,11 +36,11 @@ export default function Login() {
           <h1 className="font-serif text-2xl font-semibold">Aicho Muse</h1>
           <p className="mt-1 text-sm text-ink/50">用对话和声音，把灵感写成作品</p>
         </div>
-        <div className="rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <div className="rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <div className="mb-5 flex rounded-lg bg-ink/5 p-1 text-sm">
             {(['login', 'register'] as const).map(m => (
               <button key={m} onClick={() => setMode(m)}
-                className={`flex-1 rounded-md py-1.5 font-medium transition ${mode === m ? 'bg-white text-ink shadow-sm' : 'text-ink/50'}`}>
+                className={`flex-1 rounded-md py-1.5 font-medium transition ${mode === m ? 'bg-surface text-ink shadow-sm' : 'text-ink/50'}`}>
                 {m === 'login' ? '登录' : '注册'}
               </button>
             ))}

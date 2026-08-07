@@ -66,7 +66,7 @@ export default function Settings() {
       <div className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="mb-8 font-serif text-3xl font-semibold">设置</h1>
 
-        <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-4 font-serif text-lg font-semibold">个人资料</h2>
           <div className="space-y-3">
             <Input label="昵称" value={name} onChange={setName} />
@@ -75,7 +75,7 @@ export default function Settings() {
           </div>
         </section>
 
-        <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-4 font-serif text-lg font-semibold">彼此称呼</h2>
           <p className="mb-3 text-sm text-ink/50">给这段创作关系一个专属称呼：你对缪斯的称呼，以及它该怎样称呼你。</p>
           <Input label="对缪斯的称呼" value={prefs?.assistant_name || '缪斯'} onChange={v => setPrefs(p => p ? { ...p, assistant_name: v } : p)} placeholder="缪斯" />
@@ -86,7 +86,7 @@ export default function Settings() {
           <div className="mt-3"><Button onClick={savePrefs}>保存称呼</Button></div>
         </section>
 
-        <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-4 font-serif text-lg font-semibold">语音偏好</h2>
           {prefs ? (
             <>
@@ -117,7 +117,7 @@ export default function Settings() {
           ) : <p className="text-sm text-ink/50">加载中…</p>}
         </section>
 
-        <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-3 font-serif text-lg font-semibold">创作记忆（{memories.length}）</h2>
           <p className="mb-3 text-sm text-ink/50">对话中助手自动记住的创作偏好与设定，会注入到后续回复中。</p>
           {memories.length === 0 ? (
@@ -137,14 +137,14 @@ export default function Settings() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <section className="rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-3 font-serif text-lg font-semibold">关于 AI 模型</h2>
           <p className="text-sm leading-6 text-ink/50">
             AI 模型与系统级配置由管理后台统一管理（<span className="text-accent">/admin</span>）。未配置外部模型时，Aicho Muse 使用内置创作缪斯，同样提供提问、反馈、建议与鼓励。
           </p>
         </section>
 
-        <section className="rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+        <section className="rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-3 font-serif text-lg font-semibold">隐私与数据</h2>
           <div className="space-y-2 text-sm leading-6 text-ink/50">
             <p>🔒 你的创作内容属于你自己。Aicho Muse 将作品、章节、对话保存在你自己的部署环境中（本机或你配置的 MySQL 数据库），不会上传到任何第三方。</p>

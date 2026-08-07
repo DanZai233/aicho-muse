@@ -54,7 +54,7 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
 
       <div className="mb-2">
         <select value={chapterId} onChange={e => setChapterId(e.target.value)}
-          className="w-full rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs outline-none">
+          className="w-full rounded-lg border border-emerald-200 bg-surface px-2.5 py-1.5 text-xs outline-none">
           <option value="new">＋ 写入新章节</option>
           {chapters.map(c => <option key={c.id} value={c.id}>写入：{c.title}</option>)}
         </select>
@@ -68,7 +68,7 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
             {segments.map((seg, i) => {
               const existing = isAlreadyIn(bodyParagraphs, seg);
               return (
-                <div key={i} className={'group rounded-lg border px-3 py-2 text-xs leading-5 transition ' + (existing ? 'border-ink/5 bg-white/70 text-ink/45' : 'border-emerald-300 bg-white shadow-soft')}>
+                <div key={i} className={'group rounded-lg border px-3 py-2 text-xs leading-5 transition ' + (existing ? 'border-ink/5 bg-surface/70 text-ink/45' : 'border-emerald-300 bg-surface shadow-soft')}>
                   <div className="flex items-start justify-between gap-2">
                     <p className={existing ? 'line-through decoration-ink/20' : ''}>{seg}</p>
                     {!existing && (

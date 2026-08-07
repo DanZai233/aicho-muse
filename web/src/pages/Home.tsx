@@ -100,7 +100,7 @@ export default function Home() {
                 ['② 新建一本书', '书名、封面、体裁，一本书从封面开始长出来。', null, '新建作品'],
                 ['③ 开口说第一句', '进入作品后点右上「💬 对话」，口述或打字，' + assistantName + ' 会提问、反馈、鼓励你。', null, '知道了'],
               ].map(([title, desc, href, btn], i) => (
-                <div key={i} className="rounded-xl bg-white/70 p-4">
+                <div key={i} className="rounded-xl bg-surface/70 p-4">
                   <p className="text-sm font-semibold">{title}</p>
                   <p className="mt-1 text-xs leading-5 text-ink/55">{desc}</p>
                   {href
@@ -125,7 +125,7 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map(p => (
-              <div key={p.id} className="group relative rounded-2xl border border-ink/5 bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+              <div key={p.id} className="group relative rounded-2xl border border-ink/5 bg-surface p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
                 <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProject(p); }}
                   className="absolute right-3 top-3 z-10 rounded-full px-2 py-0.5 text-[11px] text-ink/25 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100">删除</button>
                 <Link to={'/workspace?project=' + p.id} className="flex items-start gap-4">
@@ -177,7 +177,7 @@ export default function Home() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {convs.slice(0, convVisible).map(c => (
                 <Link key={c.id} to={'/workspace?project=' + (c.project_id || '') + '&chat=1&conv=' + c.id}
-                  className="group flex items-center gap-3 rounded-2xl border border-ink/5 bg-white/70 px-4 py-3 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+                  className="group flex items-center gap-3 rounded-2xl border border-ink/5 bg-surface/70 px-4 py-3 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-serif text-sm font-semibold text-paper"
                     style={{ background: c.persona?.avatar_color || '#8b7d6b' }}>
                     {(c.persona?.name || '黎').slice(0, 1)}

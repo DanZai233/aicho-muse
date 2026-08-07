@@ -8,6 +8,7 @@ export default {
         ink: 'rgb(var(--ink) / <alpha-value>)',
         accent: 'rgb(var(--accent) / <alpha-value>)',
         accentlight: 'rgb(var(--accentlight) / <alpha-value>)',
+        surface: 'rgb(var(--surface) / <alpha-value>)',
       },
       fontFamily: {
         serif: ['"Noto Serif SC"', '"Songti SC"', 'Georgia', 'serif'],

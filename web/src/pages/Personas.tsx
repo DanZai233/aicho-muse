@@ -91,7 +91,7 @@ export default function Personas() {
     }
   };
 
-  const inputCls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
+  const inputCls = 'w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
   return (
     <Layout>
@@ -105,13 +105,13 @@ export default function Personas() {
         </div>
         <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm">
           {([['mine', '我的人设'], ['preset', '官方预设'], ['public', '公开分享']] as const).map(([k, v]) => (
-            <button key={k} onClick={() => setTab(k)} className={'flex-1 rounded-lg px-4 py-2 transition ' + (tab === k ? 'bg-white font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
+            <button key={k} onClick={() => setTab(k)} className={'flex-1 rounded-lg px-4 py-2 transition ' + (tab === k ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
           ))}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(tab === 'public' ? publicList : list).map(p => (
-            <div key={p.id} className="rounded-2xl border border-ink/5 bg-white p-5 shadow-soft transition hover:shadow-lift">
+            <div key={p.id} className="rounded-2xl border border-ink/5 bg-surface p-5 shadow-soft transition hover:shadow-lift">
               <div className="mb-4 flex items-center gap-3">
                 <Avatar name={p.name} color={p.avatar_color} size="lg" />
                 <div className="min-w-0">
@@ -176,7 +176,7 @@ export default function Personas() {
             {previewMsgs.length === 0 && <p className="py-3 text-center text-xs text-ink/35">先输入一句话，试试这个人设聊起来是什么感觉。</p>}
             {previewMsgs.map((m, idx) => (
               <div key={idx} className={'flex ' + (m.role === 'user' ? 'justify-end' : 'justify-start')}>
-                <div className={'max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-5 ' + (m.role === 'user' ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md border border-ink/5 bg-white shadow-soft')}>
+                <div className={'max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-5 ' + (m.role === 'user' ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md border border-ink/5 bg-surface shadow-soft')}>
                   {m.content}
                 </div>
               </div>
@@ -187,7 +187,7 @@ export default function Personas() {
             <input value={previewInput} onChange={e => setPreviewInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryChat(); } }}
               placeholder={form.name ? '和「' + (form.name || '') + '」说句话…' : '先填写人设名称'}
-              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
             <Button onClick={tryChat} disabled={previewBusy || !previewInput.trim() || !form.name} className="px-3 text-xs">发送</Button>
           </div>
         </div>

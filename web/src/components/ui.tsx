@@ -17,7 +17,7 @@ export function Button({ children, onClick, variant = 'primary', type = 'button'
 export function Input({ label, value, onChange, placeholder, type = 'text', textarea = false, rows = 3 }: {
   label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; textarea?: boolean; rows?: number;
 }) {
-  const cls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
+  const cls = 'w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
   return (
     <label className="block">
       {label && <span className="mb-1.5 block text-xs font-medium text-ink/60">{label}</span>}
@@ -34,7 +34,7 @@ export function Modal({ open, onClose, title, children, wide = false }: {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className={`${wide ? 'max-w-2xl' : 'max-w-md'} w-full rounded-2xl bg-white p-6 shadow-lift animate-fade-up`} onClick={e => e.stopPropagation()}>
+      <div className={`${wide ? 'max-w-2xl' : 'max-w-md'} w-full rounded-2xl bg-surface p-6 shadow-lift animate-fade-up`} onClick={e => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
           <button onClick={onClose} className="rounded-full p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink">✕</button>
@@ -72,7 +72,7 @@ export function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 
 export function EmptyState({ icon, title, desc, action }: { icon: string; title: string; desc?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-ink/15 bg-white/50 px-6 py-14 text-center">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-ink/15 bg-surface/50 px-6 py-14 text-center">
       <div className="mb-3 text-4xl">{icon}</div>
       <h3 className="font-serif text-lg font-semibold text-ink/80">{title}</h3>
       {desc && <p className="mt-1 max-w-sm text-sm text-ink/50">{desc}</p>}

@@ -120,7 +120,7 @@ export default function MarkdownEditor({ value, onChange, onSave, placeholder, f
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* 工具栏 */}
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-ink/5 bg-white/70 px-3 py-1.5">
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-ink/5 bg-surface/70 px-3 py-1.5">
         {TOOLS.map(t => (
           <button key={t.key} title={t.label} onMouseDown={e => e.preventDefault()} onClick={() => runTool(t)}
             className="flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 text-sm text-ink/60 transition hover:bg-accentlight/70 hover:text-ink">
@@ -137,8 +137,8 @@ export default function MarkdownEditor({ value, onChange, onSave, placeholder, f
             {saveState === 'saved' ? '已保存 ✓' : '保存中…'}
           </span>
           <div className="flex rounded-lg bg-ink/5 p-0.5 text-xs">
-            <button onClick={() => setMode('edit')} className={`rounded-md px-2.5 py-1 transition ${mode === 'edit' ? 'bg-white text-ink shadow-sm' : 'text-ink/50'}`}>编辑</button>
-            <button onClick={() => setMode('preview')} className={`rounded-md px-2.5 py-1 transition ${mode === 'preview' ? 'bg-white text-ink shadow-sm' : 'text-ink/50'}`}>预览</button>
+            <button onClick={() => setMode('edit')} className={`rounded-md px-2.5 py-1 transition ${mode === 'edit' ? 'bg-surface text-ink shadow-sm' : 'text-ink/50'}`}>编辑</button>
+            <button onClick={() => setMode('preview')} className={`rounded-md px-2.5 py-1 transition ${mode === 'preview' ? 'bg-surface text-ink shadow-sm' : 'text-ink/50'}`}>预览</button>
           </div>
         </div>
       </div>
@@ -155,7 +155,7 @@ export default function MarkdownEditor({ value, onChange, onSave, placeholder, f
         />
       ) : (
         <div
-          className="md-preview font-creative flex-1 overflow-y-auto bg-white/30 px-6 py-4 text-base leading-8"
+          className="md-preview font-creative flex-1 overflow-y-auto bg-surface/30 px-6 py-4 text-base leading-8"
           dangerouslySetInnerHTML={{ __html: html() }}
         />
       )}

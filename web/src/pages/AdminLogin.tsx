@@ -24,7 +24,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink/95 px-4">
+    <div className="admin-root flex min-h-screen items-center justify-center bg-ink/95 px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lift">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-ink font-serif text-xl font-bold text-paper">A</div>

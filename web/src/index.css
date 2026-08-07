@@ -8,6 +8,7 @@
   --ink: 45 42 38;
   --accent: 139 125 107;
   --accentlight: 232 226 216;
+  --surface: 255 255 255;
 }
 
 .dark {
@@ -16,6 +17,7 @@
   --ink: 236 231 223;
   --accent: 168 151 128;
   --accentlight: 60 54 47;
+  --surface: 47 42 37;
 }
 
 /* 管理后台固定使用深色外观，不受主题切换影响 */
@@ -24,6 +26,7 @@
   --ink: 45 42 38;
   --accent: 139 125 107;
   --accentlight: 232 226 216;
+  --surface: 255 255 255;
 }
 
 html.dark {
@@ -87,7 +90,7 @@ body {
 .md-preview ul { list-style: disc; }
 .md-preview ol { list-style: decimal; }
 .md-preview blockquote {
-  border-left: 3px solid #8b7d6b;
+  border-left: 3px solid rgb(var(--accent));
   padding-left: 1em;
   color: rgb(var(--ink) / 0.65);
   margin: 0.6em 0;
@@ -107,7 +110,7 @@ body {
   margin: 0.6em 0;
 }
 .md-preview pre code { background: transparent; padding: 0; }
-.md-preview a { color: #8b7d6b; text-decoration: underline; }
+.md-preview a { color: rgb(var(--accent)); text-decoration: underline; }
 .md-preview img { max-width: 100%; border-radius: 8px; }
 .md-preview hr { border: none; border-top: 1px solid rgb(var(--ink) / 0.12); margin: 1.2em 0; }
 .md-preview table { border-collapse: collapse; margin: 0.6em 0; }

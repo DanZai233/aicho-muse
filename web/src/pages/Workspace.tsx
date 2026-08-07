@@ -53,7 +53,7 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
           {kind === 'outline' && chapters && (
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-ink/60">关联章节（可选）</span>
-              <select value={draft.chapter_id || ''} onChange={e => setDraft({ ...draft, chapter_id: e.target.value })} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none">
+              <select value={draft.chapter_id || ''} onChange={e => setDraft({ ...draft, chapter_id: e.target.value })} className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none">
                 <option value="">暂不关联</option>
                 {chapters.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
@@ -67,7 +67,7 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
       )}
       <div className="space-y-1.5">
         {items.map(i => (
-          <div key={i.id} className="group rounded-xl border border-ink/5 bg-white px-3 py-2.5 shadow-soft">
+          <div key={i.id} className="group rounded-xl border border-ink/5 bg-surface px-3 py-2.5 shadow-soft">
             <div className="flex items-start justify-between gap-1">
               <div className="min-w-0">
                 <div className="text-sm font-medium">{i.title || i.name || i.event || i.content?.slice(0, 24)}</div>
@@ -463,7 +463,7 @@ export default function Workspace() {
   return (
     <Layout>
       <div className="mx-auto flex h-[calc(100vh-56px)] max-w-[1700px] overflow-hidden">
-        <aside className={"fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-ink/5 bg-white shadow-lift transition-transform duration-200 md:static md:z-auto md:translate-x-0 md:shadow-none " + (showSidebar ? 'translate-x-0' : '-translate-x-full')}>
+        <aside className={"fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-ink/5 bg-surface shadow-lift transition-transform duration-200 md:static md:z-auto md:translate-x-0 md:shadow-none " + (showSidebar ? 'translate-x-0' : '-translate-x-full')}>
           <div className="flex items-center gap-3 border-b border-ink/5 p-3">
             {project && <BookCover project={project} size="sm" showMeta={false} />}
             <div className="min-w-0 flex-1">
@@ -551,7 +551,7 @@ export default function Workspace() {
         <section className="flex min-w-0 flex-1 flex-col">
           {showSidebar && <div className="fixed inset-0 z-30 bg-ink/30 md:hidden" onClick={() => setShowSidebar(false)} />}
 
-          <div className="flex items-center justify-between border-b border-ink/5 bg-white/70 px-4 py-2">
+          <div className="flex items-center justify-between border-b border-ink/5 bg-surface/70 px-4 py-2">
             <div className="flex min-w-0 items-center gap-2">
               <button onClick={() => setShowSidebar(true)} className="rounded-lg px-2 py-1.5 text-sm text-ink/60 hover:bg-ink/5 md:hidden">☰</button>
               <div className="flex min-w-0 items-center gap-2">
@@ -560,9 +560,9 @@ export default function Workspace() {
               </div>
               <div className="ml-2 flex rounded-lg bg-ink/5 p-0.5 text-xs">
                 <button onClick={() => setBookView('write')}
-                  className={"rounded-md px-3 py-1.5 transition " + (bookView === 'write' ? 'bg-white text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>✍ 写作</button>
+                  className={"rounded-md px-3 py-1.5 transition " + (bookView === 'write' ? 'bg-surface text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>✍ 写作</button>
                 <button onClick={() => setBookView('preview')}
-                  className={"rounded-md px-3 py-1.5 transition " + (bookView === 'preview' ? 'bg-white text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>📖 书</button>
+                  className={"rounded-md px-3 py-1.5 transition " + (bookView === 'preview' ? 'bg-surface text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>📖 书</button>
               </div>
             </div>
             <div className="flex items-center gap-1 text-xs text-ink/45">
@@ -600,13 +600,13 @@ export default function Workspace() {
 
                 <div className="mt-8 space-y-5">
                   {chapters.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-ink/15 bg-white/60 px-6 py-12 text-center text-sm text-ink/40">
+                    <div className="rounded-2xl border border-dashed border-ink/15 bg-surface/60 px-6 py-12 text-center text-sm text-ink/40">
                       这本书还是空的。试着口述一个你最想讲的故事片段，让它成为第一章的开端。
                     </div>
                   )}
                   {chapters.map((c, idx) => (
                     <div key={c.id} onClick={() => { setChapter(c); setBookView('write'); }}
-                      className="group cursor-pointer rounded-r-xl rounded-l-md bg-white px-6 py-5 shadow-soft ring-1 ring-ink/5 transition hover:-translate-y-0.5 hover:shadow-lift">
+                      className="group cursor-pointer rounded-r-xl rounded-l-md bg-surface px-6 py-5 shadow-soft ring-1 ring-ink/5 transition hover:-translate-y-0.5 hover:shadow-lift">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-xs tracking-[0.2em] text-accent">第 {idx + 1} 章</span>
                         <span className="text-xs text-ink/35">{c.word_count} 字</span>
@@ -622,7 +622,7 @@ export default function Workspace() {
             <div className="flex min-h-0 flex-1">
               {chapter ? (
                 <div className="flex min-h-0 flex-1 flex-col bg-[#f6f2e9]">
-                  <div className="flex items-center gap-2 border-b border-ink/5 bg-white/70 px-5 py-2">
+                  <div className="flex items-center gap-2 border-b border-ink/5 bg-surface/70 px-5 py-2">
                     <span className="text-xs text-ink/35">第 {chapters.findIndex(c => c.id === chapter.id) + 1} 章</span>
                     <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
                       className="w-1/3 min-w-40 bg-transparent font-serif text-base font-semibold outline-none" />
@@ -633,12 +633,12 @@ export default function Workspace() {
                     <button onClick={deleteChapter} className="ml-auto text-xs text-ink/30 hover:text-red-500">删除章节</button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8">
-                    <div className="mx-auto max-w-3xl rounded-lg bg-white px-5 py-6 shadow-soft ring-1 ring-ink/5 sm:px-10">
+                    <div className="mx-auto max-w-3xl rounded-lg bg-surface px-5 py-6 shadow-soft ring-1 ring-ink/5 sm:px-10">
                       <MarkdownEditor value={chapter.content} onChange={updateContent} onSave={() => saveChapter(chapter)} placeholder="在这一页写下你的故事…（支持 Markdown）" />
                     </div>
                   </div>
 
-                  <div className="border-t border-ink/5 bg-white/80 px-4 py-2">
+                  <div className="border-t border-ink/5 bg-surface/80 px-4 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="mr-1 text-xs text-ink/40">AI 工具：</span>
                       {Object.entries(TOOL_LABEL).map(([k, v]) => (
@@ -662,7 +662,7 @@ export default function Workspace() {
                     {toolResult && (
                       <div className="mt-2 animate-fade-up">
                         {toolDiff.length > 0 && (
-                          <div className="mb-2 max-h-44 overflow-y-auto rounded-lg border border-ink/10 bg-white/70 p-2">
+                          <div className="mb-2 max-h-44 overflow-y-auto rounded-lg border border-ink/10 bg-surface/70 p-2">
                             <p className="mb-1.5 text-[10px] font-medium text-ink/40">改动预览：<span className="text-emerald-600">绿色=新增</span> · <span className="text-red-500">红色=删除</span></p>
                             {toolDiff.map((d, idx) => (
                               <div key={idx} className={'mb-0.5 rounded px-2 py-1 text-xs leading-5 ' + (d.type === 'insert' ? 'bg-emerald-50 text-emerald-800' : d.type === 'delete' ? 'bg-red-50 text-red-600 line-through' : d.type === 'replace' ? 'bg-amber-50 text-amber-800' : 'text-ink/45')}>
@@ -697,8 +697,8 @@ export default function Workspace() {
         </section>
 
         {chatOpen && (
-          <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-ink/5 bg-white/95 md:static md:z-auto md:w-[340px] md:shrink-0">
-            <div className="flex items-center justify-between border-b border-ink/5 bg-white/70 px-4 py-2.5">
+          <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-ink/5 bg-surface/95 md:static md:z-auto md:w-[340px] md:shrink-0">
+            <div className="flex items-center justify-between border-b border-ink/5 bg-surface/70 px-4 py-2.5">
               <div className="flex items-center gap-2.5">
                 {conv?.persona ? <Avatar name={conv.persona.name} color={conv.persona.avatar_color} size="sm" /> : <Avatar name="黎文" size="sm" />}
                 <div>
@@ -727,7 +727,7 @@ export default function Workspace() {
               )}
               {messages.map(m => (
                 <div key={m.id} className={"flex " + (m.role === 'user' ? 'justify-end' : 'justify-start') + " animate-fade-up"}>
-                  <div className={"max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed " + (m.role === 'user' ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md border border-ink/5 bg-white shadow-soft')}>
+                  <div className={"max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed " + (m.role === 'user' ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md border border-ink/5 bg-surface shadow-soft')}>
                     {m.role === 'assistant' && m.reply_type && (
                       <div className="mb-1.5 flex items-center gap-2">
                         <Badge color={m.reply_type === 'encouragement' ? 'green' : m.reply_type === 'question' ? 'accent' : m.reply_type === 'feedback' ? 'amber' : 'default'}>{REPLY_LABEL[m.reply_type] || '回复'}</Badge>
@@ -752,7 +752,7 @@ export default function Workspace() {
               ))}
               {streaming && (
                 <div className="flex justify-start animate-fade-up">
-                  <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-ink/5 bg-white px-3.5 py-2.5 shadow-soft">
+                  <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-ink/5 bg-surface px-3.5 py-2.5 shadow-soft">
                     {streamText ? <div className="whitespace-pre-wrap text-sm leading-relaxed">{streamText}</div>
                       : <div className="flex gap-1 py-1"><span className="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40" /><span className="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40" /><span className="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40" /></div>}
                   </div>
@@ -763,14 +763,14 @@ export default function Workspace() {
               )}
             </div>
 
-            <div className="border-t border-ink/5 bg-white/50 p-2.5">
+            <div className="border-t border-ink/5 bg-surface/50 p-2.5">
               {pendingTrans && (
                 <div className="mb-2 rounded-xl border border-accent/25 bg-accentlight/30 p-2.5 animate-fade-up">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className="text-xs font-medium text-ink/60">🎙 转写确认</span>
                     <span className="text-[10px] text-ink/35">静音 2 秒已自动结束</span>
                   </div>
-                  <textarea value={pendingTrans} onChange={e => setPendingTrans(e.target.value)} rows={2} className="w-full resize-none rounded-lg border border-ink/10 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-accent" />
+                  <textarea value={pendingTrans} onChange={e => setPendingTrans(e.target.value)} rows={2} className="w-full resize-none rounded-lg border border-ink/10 bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent" />
                   <div className="mt-1.5 flex gap-2">
                     <Button onClick={() => confirmTrans(true)} disabled={!pendingTrans.trim() || streaming} className="flex-1 py-1.5 text-xs">✓ 确认发送</Button>
                     <Button variant="ghost" onClick={() => confirmTrans(false)} className="text-xs">取消</Button>
@@ -794,7 +794,7 @@ export default function Workspace() {
                 </button>
                 <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
                   placeholder={recording ? '正在聆听…' : '说点什么，或输入文字…'}
-                  className="max-h-28 min-h-[36px] flex-1 resize-none rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+                  className="max-h-28 min-h-[36px] flex-1 resize-none rounded-xl border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
                 <button onClick={() => send()} disabled={!input.trim() || streaming || !conv}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-paper transition hover:bg-ink/85 disabled:opacity-40">↑</button>
               </div>
@@ -889,7 +889,7 @@ export default function Workspace() {
             <span className="mb-1.5 block text-xs font-medium text-ink/60">创作目标字数</span>
             <input type="number" min={0} step={1000} value={projDraft.goal_word_count || ''}
               onChange={e => setProjDraft({ ...projDraft, goal_word_count: Number(e.target.value) })}
-              className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" placeholder="例如：30000" />
+              className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" placeholder="例如：30000" />
             <span className="mt-1 block text-xs text-ink/40">设置后侧栏会显示完成进度条</span>
           </label>
           <Button onClick={saveProjSettings} className="w-full">保存作品设置</Button>
