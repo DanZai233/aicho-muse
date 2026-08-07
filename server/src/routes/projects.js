@@ -21,7 +21,7 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const d = db();
-  const { title, genre, theme, target_audience, goal_word_count, default_persona_id } = req.body || {};
+  const { title, genre, theme, target_audience, goal_word_count, default_persona_id, subtitle, author_name, cover_color } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ code: 40001, message: '作品标题必填' });
   if (genre && !GENRES.includes(genre)) return res.status(400).json({ code: 40001, message: '不支持的体裁' });
   const now = new Date().toISOString();
@@ -35,7 +35,9 @@ router.post('/', (req, res) => {
     goal_word_count: goal_word_count || 0,
     status: 'drafting',
     default_persona_id: default_persona_id || null,
-    cover_color: '#8b7d6b',
+    subtitle: subtitle || '',
+    author_name: author_name || '',
+    cover_color: cover_color || '#8b7d6b',
     created_at: now,
     updated_at: now,
   };
@@ -58,7 +60,7 @@ router.patch('/:id', (req, res) => {
   const d = db();
   const p = d.projects.find(x => x.id === req.params.id && x.user_id === req.user.id);
   if (!p) return res.status(404).json({ code: 40401, message: '作品不存在' });
-  for (const k of ['title', 'genre', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color']) {
+  for (const k of ['title', 'subtitle', 'author_name', 'genre', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
   }
   p.updated_at = new Date().toISOString();

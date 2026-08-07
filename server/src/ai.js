@@ -223,6 +223,7 @@ ${memoryText}` : '',
     }
   }
   const r = coachReply(input, persona, project, chapter, history);
+  console.warn('[AI] 本次未调用 LLM（无有效 key 或调用失败），回退内置规则引擎。hasUni=' + hasUni + ' hasLegacy=' + hasLegacy);
   if (memoryText) r.reply = r.reply.replace('如果你愿意，可以闭上眼睛回到那一刻', '记得你说过：' + memoryText.split('\n')[0].replace('- ', '') + '。如果你愿意，可以闭上眼睛回到那一刻');
   return { ...r, source: 'rules' };
 }

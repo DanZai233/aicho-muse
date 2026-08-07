@@ -1,0 +1,96 @@
+import { useState } from 'react';
+import { api, Chapter, Message } from '../lib/api';
+import { Button } from './ui';
+
+function splitParagraphs(text: string): string[] {
+  return text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+}
+
+function normalize(s: string) {
+  return s.replace(/[\s，。！？、；：,.!?;:""''「」『』（）()—…·]/g, '').toLowerCase();
+}
+
+function isAlreadyIn(body: string[], seg: string) {
+  const key = normalize(seg).slice(0, 12);
+  if (key.length < 4) return false;
+  return body.some(b => normalize(b).includes(key));
+}
+
+export default function DiffReview({ message, conversationId, chapter, chapters, onAdopted, onClose }: {
+  message: Message; conversationId: string; chapter: Chapter | null;
+  chapters: Chapter[]; onAdopted: (adoptedText: string, full: boolean) => void; onClose: () => void;
+}) {
+  const [chapterId, setChapterId] = useState(chapter?.id || 'new');
+  const [adopting, setAdopting] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const bodyParagraphs = chapter ? splitParagraphs(chapter.content) : [];
+  const segments = splitParagraphs(message.content);
+  const isFull = message.adopted_at != null;
+
+  const adopt = async (seg: string, full: boolean) => {
+    if (busy || isFull) return;
+    setAdopting(full ? '__all__' : seg.slice(0, 20));
+    setBusy(true);
+    try {
+      await api.post('/conversations/' + conversationId + '/adopt', {
+        message_id: message.id,
+        chapter_id: chapterId === 'new' ? null : chapterId,
+        mode: full ? undefined : 'segment',
+        text: full ? undefined : seg,
+      });
+      onAdopted(seg, full);
+    } finally {
+      setBusy(false); setAdopting(null);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 animate-fade-up">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-emerald-800">✏️ 建议 diff · 绿色为可采纳的新内容</p>
+        <button onClick={onClose} className="text-xs text-ink/35 hover:text-ink">✕</button>
+      </div>
+
+      <div className="mb-2">
+        <select value={chapterId} onChange={e => setChapterId(e.target.value)}
+          className="w-full rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs outline-none">
+          <option value="new">＋ 写入新章节</option>
+          {chapters.map(c => <option key={c.id} value={c.id}>写入：{c.title}</option>)}
+        </select>
+      </div>
+
+      {isFull ? (
+        <p className="rounded-lg bg-emerald-100 px-3 py-2 text-xs text-emerald-700">✓ 整条回复已采纳到文章</p>
+      ) : (
+        <>
+          <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+            {segments.map((seg, i) => {
+              const existing = isAlreadyIn(bodyParagraphs, seg);
+              return (
+                <div key={i} className={'group rounded-lg border px-3 py-2 text-xs leading-5 transition ' + (existing ? 'border-ink/5 bg-white/70 text-ink/45' : 'border-emerald-300 bg-white shadow-soft')}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={existing ? 'line-through decoration-ink/20' : ''}>{seg}</p>
+                    {!existing && (
+                      <button onClick={() => adopt(seg, false)} disabled={busy}
+                        className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50">
+                        {adopting === seg.slice(0, 20) ? '写入中…' : '＋ 采纳此段'}
+                      </button>
+                    )}
+                    {existing && <span className="shrink-0 text-[10px] text-emerald-600">✓ 已含</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Button onClick={() => adopt(message.content, true)} disabled={busy} className="flex-1 text-xs py-2">
+              {adopting === '__all__' ? '写入中…' : '采纳全部'}
+            </Button>
+            <Button variant="ghost" onClick={onClose} className="text-xs">忽略</Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

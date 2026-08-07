@@ -56,7 +56,8 @@ export type VoiceProfile = {
 export type Project = {
   id: string; title: string; genre: string; theme: string; target_audience: string;
   goal_word_count: number; status: string; default_persona_id: string | null;
-  cover_color: string; chapter_count?: number; word_count?: number;
+  cover_color: string; subtitle?: string; author_name?: string;
+  chapter_count?: number; word_count?: number;
   default_persona?: { id: string; name: string; avatar_color: string } | null;
 };
 

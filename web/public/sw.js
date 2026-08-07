@@ -1,5 +1,5 @@
-// Aicho Muse Service Worker：基础离线缓存
-const CACHE = 'aicho-muse-v1';
+// Aicho Muse Service Worker：导航网络优先（避免部署后缓存旧 HTML），静态资源缓存优先
+const CACHE = 'aicho-muse-v2';
 const PRECACHE = ['/', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -13,6 +13,17 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.pathname.startsWith('/api/')) return;
+  if (e.request.mode === 'navigate') {
+    // 导航请求：网络优先，失败时回退离线缓存
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const clone = res.clone();
+        if (res.ok) caches.open(CACHE).then(c => c.put(e.request, clone));
+        return res;
+      }).catch(() => caches.match(e.request).then(cached => cached || caches.match('/')))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
       const clone = res.clone();
