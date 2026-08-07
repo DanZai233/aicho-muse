@@ -148,7 +148,7 @@ router.get('/settings', (req, res) => {
 router.patch('/settings', (req, res) => {
   const d = db();
   const b = req.body || {};
-  for (const section of ['ai', 'quota', 'site', 'tts', 'stt']) {
+  for (const section of ['ai', 'quota', 'site', 'tts', 'stt', 'voice_clone']) {
     if (b[section] && typeof b[section] === 'object') {
       d.settings[section] = { ...d.settings[section], ...b[section] };
     }

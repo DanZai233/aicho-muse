@@ -74,4 +74,36 @@ router.post('/:id/clone', (req, res) => {
   res.json({ code: 0, data: { voice: vc } });
 });
 
+// 声音克隆（授权制）：上传 10-60 秒授权音频样本，调用外部克隆服务生成音色
+// 合规：仅在用户明确勾选授权后受理；样本只用于本次克隆，不入库
+router.post('/clone/from-audio', async (req, res) => {
+  const { display_name, audio_base64, mime, consent } = req.body || {};
+  if (!display_name || !display_name.trim()) return res.status(400).json({ code: 40001, message: '音色名称必填' });
+  if (!audio_base64 || String(audio_base64).length < 5000) return res.status(400).json({ code: 40001, message: '请上传 10–60 秒的清晰音频样本（录音文件偏小，请重录）' });
+  if (consent !== true) return res.status(400).json({ code: 40001, message: '需要你明确授权：同意将这段样本用于生成专属音色（仅用于本次克隆）' });
+  const cfg = db().settings.voice_clone || {};
+  const apiKey = process.env.VOICE_CLONE_API_KEY || cfg.api_key || '';
+  const baseUrl = String(process.env.VOICE_CLONE_BASE_URL || cfg.base_url || '').replace(/\/+$/, '');
+  if (!apiKey || !baseUrl) {
+    return res.status(501).json({ code: 50101, message: '尚未配置声音克隆服务（管理后台 → 系统设置 → 语音服务 → 克隆配置），配置后可在这里一键生成你的专属音色' });
+  }
+  try {
+    const buf = Buffer.from(audio_base64, 'base64');
+    const fd = new FormData();
+    fd.append('name', display_name.trim());
+    fd.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'sample.' + (mime?.includes('mp3') ? 'mp3' : 'wav'));
+    const r = await fetch(baseUrl + '/voices', { method: 'POST', headers: { Authorization: 'Bearer ' + apiKey }, body: fd, signal: AbortSignal.timeout(60000) });
+    if (!r.ok) throw new Error('克隆服务 ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
+    const data = await r.json();
+    const voiceId = data.voice_id || data.id || '';
+    const now = new Date().toISOString();
+    const vc = { id: uuid(), user_id: req.user.id, display_name: display_name.trim() + '（克隆）', provider: 'fish-audio', voice_id: voiceId, params: { rate: 1, pitch: 0, emotion: 'calm', energy: 0.6 }, speech_notes: '用户授权克隆音色', is_preset: false, is_public: false, created_at: now, updated_at: now };
+    db().voices.push(vc);
+    saveDb();
+    res.json({ code: 0, data: { voice: vc } });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: '克隆失败：' + e.message });
+  }
+});
+
 export default router;

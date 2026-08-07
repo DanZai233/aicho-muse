@@ -11,6 +11,12 @@ export default function Voices() {
   const [edit, setEdit] = useState<VoiceProfile | null>(null);
   const [form, setForm] = useState<VoiceProfile | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneName, setCloneName] = useState('');
+  const [cloneFile, setCloneFile] = useState<File | null>(null);
+  const [cloneConsent, setCloneConsent] = useState(false);
+  const [cloneBusy, setCloneBusy] = useState(false);
+  const [cloneMsg, setCloneMsg] = useState('');
   const [tab, setTab] = useState<'mine' | 'preset' | 'public'>('mine');
   const [publicList, setPublicList] = useState<VoiceProfile[]>([]);
 
@@ -39,6 +45,23 @@ export default function Voices() {
     await load();
   };
 
+  const submitClone = async () => {
+    if (!cloneName.trim() || !cloneFile || !cloneConsent) return;
+    setCloneBusy(true); setCloneMsg('');
+    try {
+      const buf = await cloneFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      await api.post('/voice-profiles/clone/from-audio', {
+        display_name: cloneName, audio_base64: base64, mime: cloneFile.type || 'audio/wav', consent: true,
+      });
+      setCloneMsg('✅ 克隆成功！新音色已加入「我的音色」');
+      setCloneOpen(false); setCloneName(''); setCloneFile(null); setCloneConsent(false);
+      setTab('mine'); await load();
+    } catch (e: any) {
+      setCloneMsg('⚠️ ' + e.message);
+    } finally { setCloneBusy(false); }
+  };
+
   const remove = async (v: VoiceProfile) => {
     if (!confirm(`删除音色「${v.display_name}」？`)) return;
     await api.del(`/voice-profiles/${v.id}`);
@@ -58,7 +81,10 @@ export default function Voices() {
             <h1 className="font-serif text-3xl font-semibold">助手声色</h1>
             <p className="mt-1 text-ink/50">语速、音调、情绪——让缪斯的声音配得上它的性格。</p>
           </div>
-          <Button onClick={() => openEdit()}>＋ 新建音色</Button>
+          <div className="flex gap-2">
+            <Button variant="subtle" onClick={() => { setCloneOpen(true); setCloneMsg(''); }} className="text-xs">🎙 克隆我的声音</Button>
+            <Button onClick={() => openEdit()}>＋ 新建音色</Button>
+          </div>
         </div>
         <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm">
           {([['mine', '我的音色'], ['preset', '官方预设'], ['public', '公开分享']] as const).map(([k, v]) => (
@@ -138,6 +164,28 @@ export default function Voices() {
             <Button onClick={save} disabled={busy || !form.display_name} className="w-full">{busy ? '保存中…' : '保存音色'}</Button>
           </div>
         )}
+      </Modal>
+      <Modal open={cloneOpen} onClose={() => setCloneOpen(false)} title="克隆我的声音">
+        <div className="space-y-4">
+          <p className="rounded-xl bg-accentlight/30 px-3 py-2.5 text-xs leading-5 text-ink/60">
+            🎙 上传一段 <b>10–60 秒</b> 的清晰录音（安静环境、正常语速），Aicho Muse 会通过克隆服务生成一个只属于你的音色。
+            需要你明确授权：这段样本仅用于本次克隆，不会用于其他用途。
+          </p>
+          <Input label="音色名称" value={cloneName} onChange={setCloneName} placeholder="例如：我的声音" />
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">录音样本（wav / mp3 / m4a）</span>
+            <input type="file" accept="audio/*" onChange={e => setCloneFile(e.target.files?.[0] || null)} className="block w-full text-sm text-ink/60 file:mr-3 file:rounded-lg file:border-0 file:bg-accentlight file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-accentlight/70" />
+            {cloneFile && <span className="mt-1 block text-xs text-ink/40">{cloneFile.name} · {(cloneFile.size / 1024).toFixed(0)} KB</span>}
+          </label>
+          <label className="flex items-start gap-2 rounded-lg border border-ink/10 bg-paper/50 px-3 py-2.5 text-sm text-ink/60">
+            <input type="checkbox" checked={cloneConsent} onChange={e => setCloneConsent(e.target.checked)} className="mt-0.5 accent-accent" />
+            <span>我确认这段录音是我的声音，并授权用于生成专属音色（仅本次克隆使用）。</span>
+          </label>
+          {cloneMsg && <p className="rounded-lg bg-paper/70 px-3 py-2 text-xs text-ink/60">{cloneMsg}</p>}
+          <Button onClick={submitClone} disabled={cloneBusy || !cloneName.trim() || !cloneFile || !cloneConsent} className="w-full">
+            {cloneBusy ? '生成中…（约 30 秒）' : '开始克隆'}
+          </Button>
+        </div>
       </Modal>
     </Layout>
   );

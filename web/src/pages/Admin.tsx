@@ -261,6 +261,24 @@ export default function Admin() {
                     <input value={settings.stt?.model || 'whisper-1'} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="whisper-1" />
                   </label>
                 </div>
+                <div className="rounded-xl bg-ink/40 p-3">
+                  <p className="mb-2 text-xs font-semibold text-paper/60">声音克隆（授权制）</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-paper/50">克隆服务 API Key</span>
+                      <input value={settings.voice_clone?.api_key || ''} onChange={e => setSettings({ ...settings, voice_clone: { ...settings.voice_clone, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="Fish Audio / 火山克隆 Key" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-paper/50">克隆服务端点</span>
+                      <input value={settings.voice_clone?.base_url || ''} onChange={e => setSettings({ ...settings, voice_clone: { ...settings.voice_clone, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.fish.audio" />
+                    </label>
+                    <label className="block col-span-2">
+                      <span className="mb-1 block text-xs text-paper/50">克隆模型</span>
+                      <input value={settings.voice_clone?.model || 'fishaudio/fish-speech-1.5'} onChange={e => setSettings({ ...settings, voice_clone: { ...settings.voice_clone, model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="fishaudio/fish-speech-1.5" />
+                    </label>
+                  </div>
+                  <p className="mt-2 text-[10px] text-paper/40">配置后，用户在「助手声色」页可上传 10–60 秒授权音频样本一键生成专属音色。未配置时界面会提示先到后台配置。</p>
+                </div>
                 <p className="text-xs text-paper/40">配额：TTS 每小时上限与 STT 每日分钟上限在上方「配额与站点」中配置，超限返回 429。</p>
               </div>
             </div>

@@ -102,6 +102,7 @@ function seed() {
       site: { site_name: 'Aicho Muse', announcement: '' },
       tts: { voice_uri: '', rate: 1, pitch: 1, api_key: '', base_url: '', model: 'tts-1' },
       stt: { api_key: '', base_url: '', model: 'whisper-1' },
+      voice_clone: { api_key: '', base_url: '', model: 'fishaudio/fish-speech-1.5' },
     },
     admin_users: [
       { id: 'admin-root', username: 'admin', password_hash: '$2a$10$zi2vYGtrKf4SyKDjvOiMH.7hP4GRKmKDUEU8ZEoRto41GXYdCuymq', role: 'superadmin', created_at: now },
