@@ -1,6 +1,7 @@
 // MySQL 存储层：环境变量 MYSQL_HOST 存在时启用，否则回退 JSON 文件
 // 设计：启动时全量加载到内存 cache（路由零改动），保存时防抖整表重写（MVP 规模足够）
 import mysql from 'mysql2/promise';
+import { encryptChapters, decryptChapters } from './crypto.js';
 
 export const mysqlEnabled = () => !!(process.env.MYSQL_HOST || process.env.DB_HOST);
 
@@ -77,6 +78,7 @@ export async function mysqlLoad(cache) {
     for (const [table, list] of Object.entries(grouped)) {
       if (table in cache && Array.isArray(cache[table])) cache[table] = list;
     }
+    decryptChapters(cache);
     // 首次启动（DB 无 users 行）：写入种子数据
     const loaded = rows.some(r => r.key.startsWith('users:'));
     if (!loaded) await mysqlSaveFull(cache);
@@ -93,6 +95,7 @@ export async function mysqlSaveFull(cache) {
   try {
     await conn.beginTransaction();
     await conn.query('DELETE FROM app_data');
+    encryptChapters(cache);
     for (const [table, meta] of Object.entries(COLLECTIONS)) {
       const rows = cache[table];
       if (!rows || !Array.isArray(rows)) continue;
@@ -105,6 +108,7 @@ export async function mysqlSaveFull(cache) {
     await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['settings', JSON.stringify(cache.settings || {})]);
     await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['stats', JSON.stringify(cache.stats || {})]);
     await conn.commit();
+    decryptChapters(cache);
   } catch (e) {
     await conn.rollback();
     throw e;

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { encryptChapters, decryptChapters } from './crypto.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -100,8 +101,8 @@ function seed() {
       ai: { provider: 'none', base_url: '', api_key: '', model: 'gpt-4o-mini', system_prompt_mode: 'default', llm_provider: 'none', llm_api_key: '', llm_model: '' },
       quota: { daily_messages: 100, messages_per_minute: 30, tts_per_hour: 60, stt_minutes_per_day: 30 },
       site: { site_name: 'Aicho Muse', announcement: '' },
-      tts: { voice_uri: '', rate: 1, pitch: 1, api_key: '', base_url: '', model: 'tts-1' },
-      stt: { api_key: '', base_url: '', model: 'whisper-1' },
+      tts: { voice_uri: '', rate: 1, pitch: 1, api_key: '', base_url: '', model: 'tts-1', no_save_audio: false },
+      stt: { api_key: '', base_url: '', model: 'whisper-1', no_save_audio: false },
       voice_clone: { api_key: '', base_url: '', model: 'fishaudio/fish-speech-1.5' },
     },
     admin_users: [
@@ -144,6 +145,7 @@ export function loadDb() {
   } else {
     try {
       cache = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      decryptChapters(cache);
       const s = seed();
       for (const k of Object.keys(s)) if (!(k in cache)) cache[k] = s[k];
     } catch {
@@ -160,9 +162,14 @@ export function saveDb() {
     return;
   }
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = DB_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(cache, null, 2));
-  fs.renameSync(tmp, DB_FILE);
+  encryptChapters(cache);
+  try {
+    const tmp = DB_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(cache, null, 2));
+    fs.renameSync(tmp, DB_FILE);
+  } finally {
+    decryptChapters(cache);
+  }
 }
 
 export function db() { return loadDb(); }

@@ -248,6 +248,10 @@ export default function Admin() {
                     <span className="mb-1 block text-xs text-paper/50">TTS 端点（可选）</span>
                     <input value={settings.tts?.base_url || ''} onChange={e => setSettings({ ...settings, tts: { ...settings.tts, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.openai.com/v1" />
                   </label>
+                  <label className="flex items-center gap-2 rounded-lg bg-ink/40 px-3 py-2">
+                    <input type="checkbox" checked={!!settings.tts?.no_save_audio} onChange={e => setSettings({ ...settings, tts: { ...settings.tts, no_save_audio: e.target.checked } })} className="accent-accent" />
+                    <span className="text-xs text-paper/70">TTS 音频不落盘保存（隐私：播放后即丢弃）</span>
+                  </label>
                   <label className="block">
                     <span className="mb-1 block text-xs text-paper/50">STT API Key</span>
                     <input value={settings.stt?.api_key || ''} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="sk-..." />
@@ -259,6 +263,10 @@ export default function Admin() {
                   <label className="block">
                     <span className="mb-1 block text-xs text-paper/50">STT 模型</span>
                     <input value={settings.stt?.model || 'whisper-1'} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="whisper-1" />
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg bg-ink/40 px-3 py-2">
+                    <input type="checkbox" checked={!!settings.stt?.no_save_audio} onChange={e => setSettings({ ...settings, stt: { ...settings.stt, no_save_audio: e.target.checked } })} className="accent-accent" />
+                    <span className="text-xs text-paper/70">STT 音频不保存（转写后立即丢弃录音）</span>
                   </label>
                 </div>
                 <div className="rounded-xl bg-ink/40 p-3">

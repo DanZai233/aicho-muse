@@ -54,6 +54,12 @@ router.post('/tts/synthesize', authRequired, async (req, res) => {
     });
     if (!r.ok) throw new Error('TTS ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
     const buf = Buffer.from(await r.arrayBuffer());
+    const cfg2 = ttsConfig();
+    if (cfg2.no_save_audio) {
+      // 不落盘：直接回传 base64 流式播放（隐私：不保存音频）
+      consumeQuota('tts', req.user.id, 1);
+      return res.json({ code: 0, data: { audio_base64: buf.toString('base64'), duration: Math.max(1, Math.round(String(text).length / 4)), stream: !!stream, no_save: true } });
+    }
     const file = uuid() + '.mp3';
     fs.writeFileSync(path.join(AUDIO_DIR, file), buf);
     consumeQuota('tts', req.user.id, 1);

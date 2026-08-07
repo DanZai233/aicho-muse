@@ -34,6 +34,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:-aicho}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-aicho123}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # 创作内容加密密钥（AES-256-GCM，架构文档 §8；不设置则明文存储）
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
       # AI 配置（可选，未配置则用内置教练；可留空并在管理后台配置）
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
