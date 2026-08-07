@@ -108,11 +108,11 @@ export async function mysqlSaveFull(cache) {
     await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['settings', JSON.stringify(cache.settings || {})]);
     await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['stats', JSON.stringify(cache.stats || {})]);
     await conn.commit();
-    decryptChapters(cache);
   } catch (e) {
     await conn.rollback();
     throw e;
   } finally {
+    decryptChapters(cache);
     conn.release();
   }
 }
