@@ -53,7 +53,7 @@ export default function Login() {
             <Button type="submit" disabled={busy || !email || !password} className="w-full">{busy ? '请稍候…' : mode === 'login' ? '登录' : '创建账号'}</Button>
           </form>
         </div>
-        <p className="mt-5 text-center text-xs text-ink/40">语音与文字平等 · 人设声色自定义 · 创作教练陪跑</p>
+        <p className="mt-5 text-center text-xs text-ink/40">语音与文字平等 · 人设声色自定义 · 缪斯陪跑</p>
       </div>
     </div>
   );

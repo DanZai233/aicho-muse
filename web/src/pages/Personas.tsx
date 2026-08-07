@@ -92,7 +92,7 @@ export default function Personas() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold">创作人设</h1>
-            <p className="mt-1 text-ink/50">给你的创作教练一个灵魂——性格、语气、价值观都可以定义。</p>
+            <p className="mt-1 text-ink/50">给你的缪斯一个灵魂——性格、语气、价值观都可以定义。</p>
           </div>
           <Button onClick={() => openEdit()}>＋ 新建人设</Button>
         </div>

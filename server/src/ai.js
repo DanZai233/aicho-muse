@@ -16,7 +16,7 @@ function loadUnillm() {
 
 
 
-// ---------- 规则引擎：内置创作教练（无 API Key 时的兜底） ----------
+// ---------- 规则引擎：内置创作缪斯（无 API Key 时的兜底） ----------
 
 const QUOTE_POOL = [
   '写作是雕刻回忆，刀慢一点，画面就深一点。',
@@ -181,6 +181,8 @@ async function callLLM(messages, opts = {}) {
 }
 
 export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId }) {
+  const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
+  const assistantName = userPrefs?.assistant_name || '缪斯';
   const memories = userId ? (db().memories || []).filter(m => m.user_id === userId).sort((a, b) => (b.importance || 0) - (a.importance || 0)).slice(0, 5) : [];
   const memoryText = memories.length ? memories.map(m => '- ' + m.content).join('\n') : '';
 
@@ -196,7 +198,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
       const system = [
         personaPrompt(persona),
         '',
-        '【行为准则】你是用户的创作教练，不是代写机器。除非用户明确要求“帮我写/续写/扩写”，否则：',
+        '【行为准则】你是用户的' + assistantName + '（创作缪斯），不是代写机器。除非用户明确要求“帮我写/续写/扩写”，否则：',
         '1. 先倾听并复述核心内容，让用户感到被理解；',
         '2. 用提问引导用户自己展开细节，一次最多 1–2 个问题；',
         '3. 反馈必须具体：指出哪一段、哪个意象、哪处冲突，并说明为什么；',

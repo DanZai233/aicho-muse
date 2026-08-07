@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import { Button, Badge, Modal, Input } from '../components/ui';
 import { speak, stopSpeak } from '../lib/speech';
 
-const PREVIEW_TEXT = '你好，我是你的创作教练。今天想写点什么？';
+const PREVIEW_TEXT = '你好，我是你的缪斯。今天想写点什么？';
 
 export default function Voices() {
   const [list, setList] = useState<VoiceProfile[]>([]);
@@ -48,7 +48,7 @@ export default function Voices() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold">助手声色</h1>
-            <p className="mt-1 text-ink/50">语速、音调、情绪——让创作教练的声音配得上它的性格。</p>
+            <p className="mt-1 text-ink/50">语速、音调、情绪——让缪斯的声音配得上它的性格。</p>
           </div>
           <Button onClick={() => openEdit()}>＋ 新建音色</Button>
         </div>

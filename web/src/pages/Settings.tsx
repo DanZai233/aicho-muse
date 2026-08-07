@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, Input } from '../components/ui';
 
-type UserPrefs = { tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
+type UserPrefs = { assistant_name: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
 
 export default function Settings() {
   const { user, refresh } = useAuth();
@@ -17,7 +17,7 @@ export default function Settings() {
     try {
       const d = await api.get<{ settings: UserPrefs }>('/auth/me/settings');
       setPrefs(d.settings);
-    } catch { setPrefs({ tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
+    } catch { setPrefs({ assistant_name: '缪斯', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
     try {
       const m = await api.get<{ list: any[] }>('/memories');
       setMemories(m.list);
@@ -57,6 +57,13 @@ export default function Settings() {
             <Input label="邮箱" value={user?.email || ''} onChange={() => {}} />
             <Button onClick={saveUser}>保存资料</Button>
           </div>
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
+          <h2 className="mb-4 font-serif text-lg font-semibold">助手称呼</h2>
+          <p className="mb-3 text-sm text-ink/50">你对这位写作陪伴的称呼——默认「缪斯」，可以换成任何你喜欢的名字。</p>
+          <Input label="称呼" value={prefs?.assistant_name || '缪斯'} onChange={v => setPrefs(p => p ? { ...p, assistant_name: v } : p)} placeholder="缪斯" />
+          <div className="mt-3"><Button onClick={savePrefs}>保存称呼</Button></div>
         </section>
 
         <section className="mb-6 rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
@@ -113,7 +120,7 @@ export default function Settings() {
         <section className="rounded-2xl border border-ink/5 bg-white p-6 shadow-soft">
           <h2 className="mb-3 font-serif text-lg font-semibold">关于 AI 模型</h2>
           <p className="text-sm leading-6 text-ink/50">
-            AI 模型与系统级配置由管理后台统一管理（<span className="text-accent">/admin</span>）。未配置外部模型时，Aicho Muse 使用内置创作教练，同样提供提问、反馈、建议与鼓励。
+            AI 模型与系统级配置由管理后台统一管理（<span className="text-accent">/admin</span>）。未配置外部模型时，Aicho Muse 使用内置创作缪斯，同样提供提问、反馈、建议与鼓励。
           </p>
         </section>
 

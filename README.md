@@ -2,7 +2,7 @@
 
 > 用对话和声音，把灵感写成作品。
 
-Aicho Muse 是一款面向创作场景的 AI 创作伴侣：你可以通过 **语音或打字** 与一位 **人设、性格、声色完全自定义** 的 AI 助手对话，在聊天的过程中完成小说、散文、个人自传、诗歌等文学作品的创作。助手不只是"生成器"，更是你的**陪写教练**——给你反馈、建议、鼓励，陪你一步步把作品打磨成型。
+Aicho Muse 是一款面向创作场景的 AI 创作伴侣：你可以通过 **语音或打字** 与一位 **人设、性格、声色完全自定义** 的 AI 助手对话，在聊天的过程中完成小说、散文、个人自传、诗歌等文学作品的创作。助手不只是"生成器"，更是你的**创作缪斯**——给你反馈、建议、鼓励，陪你一步步把作品打磨成型。
 
 ## 技术栈
 
@@ -10,7 +10,7 @@ Aicho Muse 是一款面向创作场景的 AI 创作伴侣：你可以通过 **�
 - **后端**：Node.js + Express（默认 JSON 文件持久化开箱即用；设置 MYSQL_HOST 自动切换 MySQL）
 - **部署**：Docker Compose 一键起 MySQL 8 + 应用，多阶段镜像构建前端
 - **语音**：浏览器原生 Web Speech API（STT 语音输入 + TTS 朗读，无需密钥）
-- **AI**：通过 **UniLLM SDK** 统一接入 14+ 厂商（OpenAI / Claude / Gemini / 豆包 / DeepSeek / Kimi / 通义 / 智谱 / Grok / Ollama 等）；未配置密钥时使用内置创作教练规则引擎
+- **AI**：通过 **UniLLM SDK** 统一接入 14+ 厂商（OpenAI / Claude / Gemini / 豆包 / DeepSeek / Kimi / 通义 / 智谱 / Grok / Ollama 等）；未配置密钥时使用内置创作缪斯规则引擎
 - **管理后台**：数据概览 / 用户管理 / AI 与配额设置 / 预设人设与音色管理
 
 ## 快速开始
@@ -53,7 +53,7 @@ docker compose up --build -d
 | `LLM_BASE_URL` | 自定义端点（可选） | `https://api.deepseek.com` |
 
 - 数据自动持久化到 Docker volume（`mysql_data` / `app_data`），重启不丢失。
-- 不配置 AI Key 时自动使用内置创作教练规则引擎，功能照常可用。
+- 不配置 AI Key 时自动使用内置创作缪斯规则引擎，功能照常可用。
 
 ### 默认账号
 
@@ -63,7 +63,7 @@ docker compose up --build -d
 ### 语音说明
 
 - 语音输入与朗读使用浏览器原生能力，建议使用 Chrome / Edge。
-- 配置外部 AI：在管理后台「系统设置 → AI 配置」选择厂商（UniLLM 支持 OpenAI/Claude/Gemini/豆包/DeepSeek/Kimi/通义/智谱/Ollama 等 14+ 家）并填入对应 API Key；不配置则使用内置创作教练。
+- 配置外部 AI：在管理后台「系统设置 → AI 配置」选择厂商（UniLLM 支持 OpenAI/Claude/Gemini/豆包/DeepSeek/Kimi/通义/智谱/Ollama 等 14+ 家）并填入对应 API Key；不配置则使用内置创作缪斯。
 - 接入 UniLLM：默认读取 npm 包 `unillm-sdk`，可用环境变量 `UNILLM_PATH` 指向本地源码路径。
 
 ## 功能总览

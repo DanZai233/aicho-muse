@@ -99,7 +99,7 @@ export default function Workspace() {
   const [speaking, setSpeaking] = useState(false);
   const [recording, setRecording] = useState(false);
   const [pendingTrans, setPendingTrans] = useState<string | null>(null);
-  const [prefs, setPrefs] = useState<{ tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } | null>(null);
+  const [prefs, setPrefs] = useState<{ assistant_name?: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } | null>(null);
   const [showNewConv, setShowNewConv] = useState(false);
   const [newPersona, setNewPersona] = useState('preset-liwen');
   const [newVoice, setNewVoice] = useState('preset-voice-warm');
@@ -175,7 +175,7 @@ export default function Workspace() {
     try { setVoices((await api.get<{ list: VoiceProfile[] }>('/voice-profiles')).list); } catch { /* ignore */ }
   }, []);
   const loadPrefs = useCallback(async () => {
-    try { setPrefs((await api.get<{ settings: { tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } }>('/auth/me/settings')).settings); } catch { setPrefs({ tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
+    try { setPrefs((await api.get<{ settings: { assistant_name?: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } }>('/auth/me/settings')).settings); } catch { setPrefs({ assistant_name: '缪斯', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }
   }, []);
 
   useEffect(() => { loadPersonas(); loadVoices(); loadConvs(); loadPrefs(); }, []);
@@ -476,7 +476,7 @@ export default function Workspace() {
                     <span className="ml-2 shrink-0 text-xs text-ink/30">{c.word_count}</span>
                   </button>
                 ))}
-                <p className="mb-2 mt-6 px-2 text-xs font-medium text-ink/40">创作教练</p>
+                <p className="mb-2 mt-6 px-2 text-xs font-medium text-ink/40">{(prefs?.assistant_name || '缪斯')}</p>
                 {convs.filter(c => !project || c.project_id === project.id).map(c => (
                   <button key={c.id} onClick={() => selectConv(c)}
                     className={"mb-1 w-full rounded-lg px-3 py-2 text-left text-sm transition " + (conv?.id === c.id ? 'bg-accentlight/70 font-medium' : 'text-ink/60 hover:bg-ink/5')}>
@@ -538,7 +538,7 @@ export default function Workspace() {
               {bookView === 'write' && chapter && (
                 <>
                   <button onClick={loadVersions} className="rounded-md px-2.5 py-1 hover:bg-ink/5">🕘 版本历史</button>
-                  <button onClick={() => setShowNewConv(true)} className="rounded-md px-2.5 py-1 hover:bg-ink/5">💬 创作教练</button>
+                  <button onClick={() => setShowNewConv(true)} className="rounded-md px-2.5 py-1 hover:bg-ink/5">💬 {(prefs?.assistant_name || '缪斯')}</button>
                 </>
               )}
               <button onClick={() => setChatOpen(!chatOpen)}
@@ -756,7 +756,7 @@ export default function Workspace() {
                 <button onClick={() => send()} disabled={!input.trim() || streaming || !conv}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-paper transition hover:bg-ink/85 disabled:opacity-40">↑</button>
               </div>
-              {!conv && <p className="mt-1.5 text-center text-xs text-ink/40">先创建一个会话，开始与你的创作教练对话</p>}
+              {!conv && <p className="mt-1.5 text-center text-xs text-ink/40">先创建一个会话，开始与你的{prefs?.assistant_name || '缪斯'}对话</p>}
             </div>
           </aside>
         )}

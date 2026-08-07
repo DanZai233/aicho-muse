@@ -26,6 +26,7 @@ export default function Home() {
   const [cover, setCover] = useState('#8b7d6b');
   const [busy, setBusy] = useState(false);
   const [undoInfo, setUndoInfo] = useState<{ kind: string; id: string; label: string } | null>(null);
+  const [assistantName, setAssistantName] = useState('缪斯');
 
   const load = async () => {
     try {
@@ -33,6 +34,7 @@ export default function Home() {
       setProjects(d.list); setProjTotal(d.total); setProjPage(1);
     } catch { /* 401 handled */ }
     try { setConvs((await api.get<{ list: Conversation[] }>('/conversations')).list); } catch { /* ignore */ }
+    try { const st = await api.get<{ settings: { assistant_name?: string } }>('/auth/me/settings'); if (st.settings?.assistant_name) setAssistantName(st.settings.assistant_name); } catch { /* ignore */ }
   };
   const loadMore = async () => {
     if (loadingMore) return;
@@ -93,9 +95,9 @@ export default function Home() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {[
-                ['① 认识你的创作教练', '去「人设」页选一位，或先沿用默认的黎文。', '/personas', '去选人设'],
+                ['① 认识你的' + assistantName, '去「人设」页选一位，或先沿用默认的黎文。', '/personas', '去选人设'],
                 ['② 新建一本书', '书名、封面、体裁，一本书从封面开始长出来。', null, '新建作品'],
-                ['③ 开口说第一句', '进入作品后点右上「💬 对话」，口述或打字，AI 会提问、反馈、鼓励你。', null, '知道了'],
+                ['③ 开口说第一句', '进入作品后点右上「💬 对话」，口述或打字，' + assistantName + ' 会提问、反馈、鼓励你。', null, '知道了'],
               ].map(([title, desc, href, btn], i) => (
                 <div key={i} className="rounded-xl bg-white/70 p-4">
                   <p className="text-sm font-semibold">{title}</p>
