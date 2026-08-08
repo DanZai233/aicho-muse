@@ -87,7 +87,7 @@ router.post('/tts/synthesize', authRequired, async (req, res) => {
       const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.api_key, model: cfg.model };
       const body = {
         text: String(text).slice(0, 4000),
-        reference_id: cfg.voice || '',
+        reference_id: refId,
         format: 'mp3',
         prosody: { speed: Math.min(2, Math.max(0.5, cfg.rate || 1)), volume: 0, normalize_loudness: true },
         normalize: true,
