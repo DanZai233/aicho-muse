@@ -130,6 +130,7 @@ export default function Workspace() {
   const [showCover, setShowCover] = useState(false);
   const [coverDraft, setCoverDraft] = useState({ title: '', subtitle: '', author_name: '', cover_color: '#8b7d6b' });
   const [showProjSettings, setShowProjSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [invite, setInvite] = useState<{ active?: boolean; code?: string; role?: string; expires?: string; note?: string } | null>(null);
   const [collabs, setCollabs] = useState<{ user_id: string; role: string; display_name: string; email?: string }[]>([]);
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -466,6 +467,11 @@ export default function Workspace() {
     setShowProjSettings(true);
     setInvite(null); setCollabs([]); loadInvite();
   };
+  const openShare = () => {
+    if (!project) return;
+    setInvite(null); setCollabs([]); setCollabMsg(''); loadInvite();
+    setShowShare(true);
+  };
   const loadInvite = async () => {
     if (!project) return;
     try {
@@ -577,6 +583,55 @@ export default function Workspace() {
 
   const coverPreview: Project = { ...(project || { id: '', title: '未命名', genre: 'biography', theme: '', target_audience: '', goal_word_count: 0, status: '', default_persona_id: null, cover_color: '#8b7d6b' }), title: coverDraft.title || '未命名', subtitle: coverDraft.subtitle, author_name: coverDraft.author_name, cover_color: coverDraft.cover_color };
 
+  const collabSection = (
+    <div className="rounded-xl border border-ink/10 bg-paper/50 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-medium">团队协作</span>
+        {project?.my_role === 'owner' && (
+          <div className="flex gap-1.5">
+            <button onClick={() => genInvite('editor')} disabled={inviteBusy} className="rounded-full bg-ink/5 px-2.5 py-1 text-xs text-ink/70 transition hover:bg-ink/10 disabled:opacity-40">可编辑码</button>
+            <button onClick={() => genInvite('viewer')} disabled={inviteBusy} className="rounded-full bg-ink/5 px-2.5 py-1 text-xs text-ink/70 transition hover:bg-ink/10 disabled:opacity-40">只读码</button>
+          </div>
+        )}
+      </div>
+      {invite?.active && invite.code ? (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/25 bg-accentlight/30 px-3 py-2">
+          <span className="font-mono text-lg font-semibold tracking-widest">{invite.code}</span>
+          <span className="text-xs text-ink/45">{invite.role === 'viewer' ? '只读' : '可编辑'} · 7 天</span>
+          <button onClick={copyInvite} className="ml-auto shrink-0 rounded-md bg-ink px-2 py-1 text-xs text-paper">复制</button>
+        </div>
+      ) : project?.my_role === 'owner' ? (
+        <p className="mb-2 text-xs text-ink/40">生成邀请码后发给朋友，他们可加入共同创作。</p>
+      ) : (
+        <p className="mb-2 text-xs text-ink/40">邀请码由创建者生成。</p>
+      )}
+      {collabs.length > 0 && (
+        <div className="space-y-1.5">
+          {collabs.map(cb => (
+            <div key={cb.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-1.5 text-sm">
+              <Avatar name={cb.display_name || '协作者'} size="sm" />
+              <span className="truncate">{cb.display_name}{cb.email ? ' · ' + cb.email : ''}</span>
+              {project?.my_role === 'owner' ? (
+                <span className="ml-auto flex items-center gap-1">
+                  <select value={cb.role} onChange={e => changeCollab(cb.user_id, e.target.value)}
+                    className="rounded border border-ink/10 bg-surface px-1.5 py-0.5 text-xs outline-none">
+                    <option value="editor">可编辑</option>
+                    <option value="viewer">只读</option>
+                  </select>
+                  <button onClick={() => { if (confirm('移除该协作者？')) changeCollab(cb.user_id, undefined, true); }}
+                    className="text-xs text-ink/30 hover:text-red-500">移除</button>
+                </span>
+              ) : (
+                <span className="ml-auto text-xs text-ink/40">{cb.role === 'viewer' ? '只读' : '可编辑'}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {collabMsg && <p className="mt-1.5 text-xs text-ink/50">{collabMsg}</p>}
+    </div>
+  );
+
   return (
     <Layout>
       <div className="mx-auto flex h-[calc(100vh-56px)] max-w-[1700px] overflow-hidden">
@@ -685,6 +740,9 @@ export default function Workspace() {
               </div>
             </div>
             <div className="flex items-center gap-1 text-xs text-ink/45">
+              {project && (
+                <button onClick={openShare} className="rounded-md bg-accentlight/70 px-2.5 py-1 font-medium text-ink transition hover:bg-accentlight" title="邀请协作者共同创作">🔗 分享</button>
+              )}
               {project && (
                 <span className="flex items-center gap-0.5">
                   <button onClick={exportMd} className="rounded-md px-2 py-1 hover:bg-ink/5" title="Markdown">MD</button>
@@ -1021,53 +1079,20 @@ export default function Workspace() {
               className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" placeholder="例如：30000" />
             <span className="mt-1 block text-xs text-ink/40">设置后侧栏会显示完成进度条</span>
           </label>
-          <div className="rounded-xl border border-ink/10 bg-paper/50 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium">团队协作</span>
-              {project?.my_role === 'owner' && (
-                <div className="flex gap-1.5">
-                  <button onClick={() => genInvite('editor')} disabled={inviteBusy} className="rounded-full bg-ink/5 px-2.5 py-1 text-xs text-ink/70 transition hover:bg-ink/10 disabled:opacity-40">可编辑码</button>
-                  <button onClick={() => genInvite('viewer')} disabled={inviteBusy} className="rounded-full bg-ink/5 px-2.5 py-1 text-xs text-ink/70 transition hover:bg-ink/10 disabled:opacity-40">只读码</button>
-                </div>
-              )}
-            </div>
-            {invite?.active && invite.code ? (
-              <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/25 bg-accentlight/30 px-3 py-2">
-                <span className="font-mono text-lg font-semibold tracking-widest">{invite.code}</span>
-                <span className="text-xs text-ink/45">{invite.role === 'viewer' ? '只读' : '可编辑'} · 7 天</span>
-                <button onClick={copyInvite} className="ml-auto shrink-0 rounded-md bg-ink px-2 py-1 text-xs text-paper">复制</button>
-              </div>
-            ) : project?.my_role === 'owner' ? (
-              <p className="mb-2 text-xs text-ink/40">生成邀请码后发给朋友，他们可加入共同创作。</p>
-            ) : (
-              <p className="mb-2 text-xs text-ink/40">邀请码由创建者生成。</p>
-            )}
-            {collabs.length > 0 && (
-              <div className="space-y-1.5">
-                {collabs.map(cb => (
-                  <div key={cb.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-1.5 text-sm">
-                    <Avatar name={cb.display_name || '协作者'} size="sm" />
-                    <span className="truncate">{cb.display_name}{cb.email ? ' · ' + cb.email : ''}</span>
-                    {project?.my_role === 'owner' ? (
-                      <span className="ml-auto flex items-center gap-1">
-                        <select value={cb.role} onChange={e => changeCollab(cb.user_id, e.target.value)}
-                          className="rounded border border-ink/10 bg-surface px-1.5 py-0.5 text-xs outline-none">
-                          <option value="editor">可编辑</option>
-                          <option value="viewer">只读</option>
-                        </select>
-                        <button onClick={() => { if (confirm('移除该协作者？')) changeCollab(cb.user_id, undefined, true); }}
-                          className="text-xs text-ink/30 hover:text-red-500">移除</button>
-                      </span>
-                    ) : (
-                      <span className="ml-auto text-xs text-ink/40">{cb.role === 'viewer' ? '只读' : '可编辑'}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            {collabMsg && <p className="mt-1.5 text-xs text-ink/50">{collabMsg}</p>}
-          </div>
+          {collabSection}
           <Button onClick={saveProjSettings} className="w-full">保存作品设置</Button>
+        </div>
+      </Modal>
+
+      <Modal open={showShare} onClose={() => setShowShare(false)} title="分享作品">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-ink/55">
+            {project?.my_role === 'owner'
+              ? '生成邀请码发给朋友，他们可以以「可编辑」或「只读」身份加入，一起完成这部作品。'
+              : '这个作品的创建者可以生成邀请码，加入后你就能一起创作了。'}
+          </p>
+          {collabSection}
+          <p className="text-xs leading-5 text-ink/40">提示：协作者通过「加入作品 → 输入邀请码」进入；目前为保存后同步，暂不支持多人同时在线编辑与光标定位。</p>
         </div>
       </Modal>
 
