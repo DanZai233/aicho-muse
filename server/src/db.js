@@ -81,12 +81,30 @@ function seed() {
       created_at: now,
       updated_at: now,
     },
+    {
+      id: 'preset-elysia',
+      name: '爱莉希雅',
+      tagline: '活泼开朗的粉色妖精',
+      background: '拥有粉色长发、天仙般美丽的少女，乐土英桀第二位，伊甸与阿波尼亚最好的朋友。活泼开朗可爱，深爱着世界与所有人，是逐火英桀的创立者与维系十三人的核心。',
+      personality: ['活泼', '开朗', '可爱', '真诚', '调皮', '自恋', '自由自在'],
+      speaking_style: { tone: '轻快灵动', preferences: ['善用轻佻的举止互动', '活跃气氛迅速拉近关系', '在关键之处戛然而止留下暗示的笑容', '充满热情拥抱每一天'], avoid: ['冷漠', '说教', '沉闷'] },
+      values: ['深爱世界与所有人', '凡事任凭心意而为', '只在有趣的事上花心思'],
+      relationship: '真诚热情的朋友',
+      expertise: ['情感陪伴', '活跃气氛', '创作灵感', '故事分享'],
+      greeting: '嗨～我是爱莉希雅！今天想和我分享什么有趣的故事呀？♪',
+      is_preset: true,
+      avatar_color: '#FF6B9D',
+      version: 1,
+      created_at: now,
+      updated_at: now,
+    },
   ];
   const presetVoices = [
     { id: 'preset-voice-warm', display_name: '温润男声', provider: 'system', voice_id: '', params: { rate: 0.95, pitch: 0, emotion: 'warm', energy: 0.6 }, is_preset: true, created_at: now, updated_at: now },
     { id: 'preset-voice-clear', display_name: '清亮女声', provider: 'system', voice_id: '', params: { rate: 1.0, pitch: 1.1, emotion: 'bright', energy: 0.7 }, is_preset: true, created_at: now, updated_at: now },
     { id: 'preset-voice-deep', display_name: '低沉中性声', provider: 'system', voice_id: '', params: { rate: 0.9, pitch: -0.5, emotion: 'serious', energy: 0.5 }, is_preset: true, created_at: now, updated_at: now },
     { id: 'preset-voice-lively', display_name: '元气轻快声', provider: 'system', voice_id: '', params: { rate: 1.1, pitch: 0.6, emotion: 'cheerful', energy: 0.8 }, is_preset: true, created_at: now, updated_at: now },
+    { id: 'preset-voice-elysia', display_name: '爱莉希雅', provider: 'fish-audio', voice_id: 'f06ed9ea97004b45ae790daf61a7f4c0', source: 'fish-library', params: { rate: 1, pitch: 0, emotion: 'sweet', energy: 0.6 }, speech_notes: 'A young female voice with a sweet, gentle, and breathy tone. It features an expressive, intimate quality perfect for character narration and melodic storytelling.', is_preset: true, created_at: now, updated_at: now },
   ];
   return {
     users: [],

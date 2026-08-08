@@ -51,6 +51,7 @@ export type VoiceProfile = {
   id: string; display_name: string; provider: string; voice_id: string;
   params: { rate: number; pitch: number; emotion: string; energy: number };
   speech_notes: string; is_preset: boolean; is_public?: boolean;
+  source?: string;
 };
 
 export const LANGUAGES = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'];

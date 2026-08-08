@@ -14,16 +14,16 @@ export function Button({ children, onClick, variant = 'primary', type = 'button'
   return <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>{children}</button>;
 }
 
-export function Input({ label, value, onChange, placeholder, type = 'text', textarea = false, rows = 3 }: {
-  label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; textarea?: boolean; rows?: number;
+export function Input({ label, value, onChange, placeholder, type = 'text', textarea = false, rows = 3, disabled = false }: {
+  label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; textarea?: boolean; rows?: number; disabled?: boolean;
 }) {
-  const cls = 'w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
+  const cls = 'w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60';
   return (
     <label className="block">
       {label && <span className="mb-1.5 block text-xs font-medium text-ink/60">{label}</span>}
       {textarea
-        ? <textarea rows={rows} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} className={`${cls} resize-y`} />
-        : <input type={type} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} className={cls} />}
+        ? <textarea rows={rows} value={value} placeholder={placeholder} disabled={disabled} onChange={e => onChange(e.target.value)} className={`${cls} resize-y`} />
+        : <input type={type} value={value} placeholder={placeholder} disabled={disabled} onChange={e => onChange(e.target.value)} className={cls} />}
     </label>
   );
 }

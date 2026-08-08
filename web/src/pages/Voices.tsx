@@ -177,20 +177,23 @@ export default function Voices() {
         {form && (
           <div className="space-y-4">
             <Input label="音色名称" value={form.display_name} onChange={v => setForm({ ...form, display_name: v })} placeholder="例如：温润男声" />
+            {form.source === 'fish-library' && (
+              <p className="rounded-lg bg-accentlight/40 px-3 py-2 text-xs text-ink/55">🔒 音频广场收藏音色，提供商与音色 ID 由 Fish Audio 固定，不可修改（可调整名称、语速、音调与分享状态）。</p>
+            )}
             <label className="flex items-center gap-2 rounded-lg border border-ink/10 bg-paper/50 px-3 py-2.5">
               <input type="checkbox" checked={!!form.is_public} onChange={e => setForm({ ...form, is_public: e.target.checked })} className="accent-accent" />
               <span className="text-sm text-ink/60">公开分享这个音色（其他用户可收藏）</span>
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-ink/60">提供商</span>
-              <select value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })} className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none">
+              <select value={form.provider} disabled={form.source === 'fish-library'} onChange={e => setForm({ ...form, provider: e.target.value })} className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60">
                 <option value="system">浏览器语音（无需密钥）</option>
                 <option value="volcengine">火山引擎</option>
                 <option value="fish-audio">Fish Audio</option>
                 <option value="openai">OpenAI TTS</option>
               </select>
             </label>
-            {form.provider !== 'system' && <Input label="音色 ID" value={form.voice_id} onChange={v => setForm({ ...form, voice_id: v })} placeholder="厂商音色 ID" />}
+            {form.provider !== 'system' && <Input label="音色 ID" value={form.voice_id} disabled={form.source === 'fish-library'} onChange={v => setForm({ ...form, voice_id: v })} placeholder="厂商音色 ID" />}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-ink/60">语速 {form.params.rate}</span>
