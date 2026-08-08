@@ -240,7 +240,7 @@ export default function Personas() {
             <h1 className="font-serif text-3xl font-semibold">创作人设</h1>
             <p className="mt-1 text-ink/50">给你的缪斯一个灵魂——性格、语气、价值观都可以定义。</p>
           </div>
-          <Button onClick={() => openEdit()}>＋ 新建人设</Button>
+          <Button onClick={() => openEdit()} data-tour="tour-persona-create">＋ 新建人设</Button>
         </div>
         <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm">
           {([['mine', '我的人设'], ['preset', '官方预设'], ['public', '公开分享']] as const).map(([k, v]) => (

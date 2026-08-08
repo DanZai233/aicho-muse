@@ -95,7 +95,7 @@ export default function Settings() {
           </div>
         </section>
 
-        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft" data-tour="tour-names">
           <h2 className="mb-4 font-serif text-lg font-semibold">彼此称呼</h2>
           <p className="mb-3 text-sm text-ink/50">给这段创作关系一个专属称呼：你对缪斯的称呼，以及它该怎样称呼你。</p>
           <Input label="对缪斯的称呼" value={prefs?.assistant_name || '缪斯'} onChange={v => setPrefs(p => p ? { ...p, assistant_name: v } : p)} placeholder="缪斯" />

@@ -106,7 +106,7 @@ export default function Home() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        {!onboarded && (
+        {!onboarded && !document.body.classList.contains('tour-active') && (
           <div className="mb-8 rounded-2xl border border-accent/20 bg-accentlight/30 p-5 animate-fade-up">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-serif text-lg font-semibold">三步开始你的第一本书</h2>
@@ -136,13 +136,13 @@ export default function Home() {
           </div>
           <div className="flex gap-2">
             <Button variant="subtle" onClick={() => setJoinOpen(true)}>加入协作</Button>
-            <Button onClick={() => setOpen(true)}>＋ 新建作品</Button>
+            <Button onClick={() => setOpen(true)} data-tour="tour-create-book">＋ 新建作品</Button>
           </div>
         </div>
 
         {projects.length === 0 ? (
           <EmptyState icon="✍️" title="还没有作品" desc="从一句话、一段回忆开始，让 Aicho Muse 陪你把它写成一本完整的书。"
-            action={<Button onClick={() => setOpen(true)}>创建第一本书</Button>} />
+            action={<Button onClick={() => setOpen(true)} data-tour="tour-create-book">创建第一本书</Button>} />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map(p => (

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import MuseAssistant from './assistant/MuseAssistant';
+import OnboardingTour from './OnboardingTour';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -69,6 +70,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </header>
       <main className="flex-1">{children}</main>
       {user && <MuseAssistant />}
+      {user && <OnboardingTour />}
     </div>
   );
 }

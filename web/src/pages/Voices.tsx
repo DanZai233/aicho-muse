@@ -123,7 +123,7 @@ export default function Voices() {
             <Button onClick={() => openEdit()}>＋ 新建音色</Button>
           </div>
         </div>
-        <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm">
+        <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm" data-tour="tour-voice-tabs">
           {([['mine', '我的音色'], ['preset', '官方预设'], ['public', '公开分享'], ['library', '音频广场']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={'flex-1 rounded-lg px-4 py-2 transition ' + (tab === k ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
           ))}
