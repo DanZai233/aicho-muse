@@ -18,12 +18,13 @@ const isAdoptable = (t?: string) => !!t && ADOPTABLE_TYPES.has(t);
 
 type StructItem = { id: string; [k: string]: any };
 
-function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, emptyHint = '还没有内容', chapters }: {
+function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, onAI, emptyHint = '还没有内容', chapters }: {
   kind: 'outline' | 'characters' | 'timeline' | 'ideas';
   items: StructItem[]; setItems: (fn: (prev: StructItem[]) => StructItem[]) => void;
   title: string; addLabel: string;
   fields: { key: string; label: string; placeholder: string; textarea?: boolean }[];
   projectId: string; onChanged: () => void; emptyHint?: string; chapters?: { id: string; title: string; order_index: number }[];
+  onAI?: (kind: 'outline' | 'characters', id: string, item: StructItem) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -80,7 +81,13 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
                 {i.when && <div className="mt-0.5 text-xs text-ink/40">⏱ {i.when}</div>}
                 {i.tags?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{i.tags.map((t: string) => <Badge key={t}>{t}</Badge>)}</div>}
               </div>
-              <button onClick={() => remove(i.id)} className="shrink-0 text-xs text-ink/25 opacity-0 transition group-hover:opacity-100 hover:text-red-500">✕</button>
+              <div className="flex shrink-0 items-center gap-1">
+                {(kind === 'outline' || kind === 'characters') && onAI && (
+                  <button onClick={() => onAI(kind, i.id, i)} title="AI 生成 / 润色"
+                    className="text-xs text-accent/70 opacity-0 transition group-hover:opacity-100 hover:text-accent">✨</button>
+                )}
+                <button onClick={() => remove(i.id)} className="text-xs text-ink/25 opacity-0 transition group-hover:opacity-100 hover:text-red-500">✕</button>
+              </div>
             </div>
           </div>
         ))}
@@ -129,6 +136,12 @@ export default function Workspace() {
   const [collabMsg, setCollabMsg] = useState('');
   const [projDraft, setProjDraft] = useState({ genre: 'biography', language: 'zh-CN', theme: '', target_audience: '', goal_word_count: 0, team_persona_ids: [] as string[] });
 
+  const [aiItem, setAiItem] = useState<{ kind: 'outline' | 'characters'; id: string; item: StructItem } | null>(null);
+  const [aiMode, setAiMode] = useState<'generate' | 'polish'>('generate');
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState('');
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
   const [characters, setCharacters] = useState<StructItem[]>([]);
@@ -476,6 +489,59 @@ export default function Workspace() {
     } catch (e: any) { setCollabMsg(e.message || '操作失败'); }
   };
 
+  const runAI = async () => {
+    if (!aiItem || !project) return;
+    setAiBusy(true); setAiErr('');
+    try {
+      const d = await api.post<{ result: string }>('/' + aiItem.kind + '/' + aiItem.id + '/ai/' + aiMode, { prompt: aiPrompt });
+      setAiResult(d.result);
+    } catch (e: any) { setAiErr(e.message || 'AI 处理失败'); }
+    finally { setAiBusy(false); }
+  };
+  const applyAI = async () => {
+    if (!aiItem || !project || !aiResult.trim()) return;
+    try {
+      const lines = aiResult.split(/\n+/).map(x => x.trim()).filter(Boolean);
+      if (aiItem.kind === 'outline') {
+        if (aiMode === 'generate') {
+          // 生成：每一行按「标题：摘要」解析为一条新大纲节点
+          const created: StructItem[] = [];
+          for (const line of lines) {
+            const ci = Math.max(line.indexOf('：'), line.indexOf(':'));
+            const title = ci > 0 ? line.slice(0, ci).trim() : (line || '新节点');
+            const summary = ci > 0 ? line.slice(ci + 1).trim() : '';
+            const d = await api.post<{ node: StructItem }>('/projects/' + project.id + '/outline', { title: title || '新节点', summary });
+            created.push(d.node);
+          }
+          if (created.length) setOutline(prev => [...prev, ...created]);
+        } else {
+          // 润色：AI 只返回摘要正文，整体作为新摘要
+          await api.patch('/outline/' + aiItem.id, { summary: lines.join('\n') || aiResult });
+          loadStructure(project.id);
+        }
+      } else {
+        if (aiMode === 'generate') {
+          // 生成：每一行按「姓名（角色）：描述」解析为一张新人物卡
+          const created: StructItem[] = [];
+          for (const line of lines) {
+            const m = line.match(/^(.+?)[（(]([^）)]+)[)）]\s*[:：]?\s*([\s\S]*)$/);
+            const name = (m && m[1].trim()) || line.slice(0, 12) || '新角色';
+            const role = (m && m[2].trim()) || '配角';
+            const description = (m && m[3].trim()) || line;
+            const d = await api.post<{ card: StructItem }>('/projects/' + project.id + '/characters', { name, role, description });
+            created.push(d.card);
+          }
+          if (created.length) setCharacters(prev => [...prev, ...created]);
+        } else {
+          // 润色：AI 只返回人物描述，整体作为新描述
+          await api.patch('/characters/' + aiItem.id, { description: lines.join('\n') || aiResult });
+          loadStructure(project.id);
+        }
+      }
+      setAiItem(null); setAiResult(''); setAiPrompt(''); loadStructure(project.id);
+    } catch (e: any) { setAiErr(e.message || '应用失败'); }
+  };
+
   const saveProjSettings = async () => {
     if (!project) return;
     const d = await api.patch<{ project: Project }>('/projects/' + project.id, { ...projDraft, goal_word_count: Number(projDraft.goal_word_count) || 0 });
@@ -569,12 +635,14 @@ export default function Workspace() {
             {leftTab === 'outline' && project && (
               <StructurePanel kind="outline" items={outline} setItems={setOutline} title="大纲节点" addLabel="＋ 添加大纲节点"
                 fields={[{ key: 'title', label: '标题', placeholder: '例如：离家前夜' }, { key: 'summary', label: '内容概述', placeholder: '这一节发生什么…' }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" chapters={chapters} />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" chapters={chapters}
+                onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }} />
             )}
             {leftTab === 'characters' && project && (
               <StructurePanel kind="characters" items={characters} setItems={setCharacters} title="人物卡" addLabel="＋ 添加人物"
                 fields={[{ key: 'name', label: '姓名', placeholder: '主角名' }, { key: 'role', label: '身份', placeholder: '主角/配角/反派' }, { key: 'description', label: '描述', placeholder: '外貌、性格、背景…', textarea: true }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有人物卡，为关键角色写一张设定卡" />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有人物卡，为关键角色写一张设定卡"
+                onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }} />
             )}
             {leftTab === 'timeline' && project && (
               <StructurePanel kind="timeline" items={timeline} setItems={setTimeline} title="时间线" addLabel="＋ 添加事件"
@@ -991,6 +1059,41 @@ export default function Workspace() {
           </div>
           <Button onClick={saveProjSettings} className="w-full">保存作品设置</Button>
         </div>
+      </Modal>
+
+      <Modal open={!!aiItem} onClose={() => setAiItem(null)} title={aiItem ? (aiItem.kind === 'outline' ? 'AI 大纲辅助' : 'AI 人物辅助') : ''}>
+        {aiItem && (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-ink/55">
+              {aiItem.kind === 'outline' ? (
+                <>对大纲节点「{aiItem.item.title || '未命名'}」：可让 AI 润色现有摘要，或按你的想法生成新节点。</>
+              ) : (
+                <>对人物卡「{aiItem.item.name || '未命名'}」（{aiItem.item.role || '配角'}）：可让 AI 润色设定，或生成新角色。</>
+              )}
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setAiMode('polish')} className={'flex-1 rounded-lg px-3 py-2 text-sm transition ' + (aiMode === 'polish' ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>润色现有内容</button>
+              <button onClick={() => setAiMode('generate')} className={'flex-1 rounded-lg px-3 py-2 text-sm transition ' + (aiMode === 'generate' ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>生成新内容</button>
+            </div>
+            {aiMode === 'generate' && (
+              <Input label="创作要求（可选）" value={aiPrompt} onChange={setAiPrompt} placeholder="例如：一个性格倔强的乡下少年 / 第三幕的高潮转折" />
+            )}
+            <div className="flex gap-2">
+              <Button onClick={runAI} disabled={aiBusy} className="flex-1">{aiBusy ? 'AI 思考中…' : (aiMode === 'polish' ? '✨ 润色' : '✨ 生成')}</Button>
+              <Button variant="ghost" onClick={() => { setAiItem(null); setAiResult(''); }}>关闭</Button>
+            </div>
+            {aiErr && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{aiErr}</p>}
+            {aiResult && (
+              <div className="rounded-xl border border-accent/25 bg-accentlight/30 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-ink/60">AI 结果</span>
+                  <Button variant="subtle" onClick={applyAI} disabled={aiBusy} className="px-2 py-1 text-xs">{aiMode === 'generate' ? '＋ 采纳为新内容' : '✓ 应用到现有内容'}</Button>
+                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-ink/75">{aiResult}</pre>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       <Modal open={showPersonaCard} onClose={() => setShowPersonaCard(false)} title="当前人设">

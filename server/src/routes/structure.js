@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
+import { callLLM } from '../ai.js';
 
 const router = Router();
 router.use(authRequired);
@@ -9,6 +10,7 @@ import { projectRole, canView, canEdit } from '../access.js';
 
 function ensureView(req, p) { return !!p && canView(req, p); }
 function ensureEdit(req, p) { return !!p && canEdit(req, p); }
+function projectOf(id) { return id ? db().projects.find(p => p.id === id) : null; }
 
 // ---------- 大纲节点 ----------
 router.get('/projects/:pid/outline', (req, res) => {
@@ -190,4 +192,69 @@ router.delete('/ideas/:id', (req, res) => {
   res.json({ code: 0, data: { ok: true } });
 });
 
+// ---------- AI 辅助：大纲 / 人物卡 生成与润色 ----------
+function smartContextText(pid) {
+  const d = db();
+  const outline = d.outline_nodes.filter(n => n.project_id === pid).sort((a, b) => a.order_index - b.order_index);
+  const cards = d.character_cards.filter(c => c.project_id === pid);
+  const parts = [];
+  if (outline.length) parts.push('【现有大纲】' + outline.slice(0, 12).map((n, i) => (i + 1) + '. ' + (n.title || '') + (n.summary ? '：' + n.summary : '')).join('；'));
+  if (cards.length) parts.push('【现有角色】' + cards.slice(0, 10).map(c => (c.name || '') + '(' + (c.role || '') + ')' + (c.description ? '：' + c.description.slice(0, 60) : '')).join('；'));
+  return parts.join('\n');
+}
+
+// 生成：给定主题/提示词，生成完整内容
+router.post('/:kind/:id/ai/generate', async (req, res) => {
+  const { kind, id } = req.params;
+  if (!['outline', 'characters'].includes(kind)) return res.status(400).json({ code: 40001, message: '不支持的 AI 辅助类型' });
+  const d = db();
+  let item = null, pid = null;
+  if (kind === 'outline') item = d.outline_nodes.find(x => x.id === id);
+  else item = d.character_cards.find(x => x.id === id);
+  if (!item) return res.status(404).json({ code: 40401, message: '内容不存在' });
+  pid = item.project_id;
+  const proj = d.projects.find(p => p.id === pid);
+  if (!ensureEdit(req, proj)) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
+  const prompt = String(req.body?.prompt || '').trim();
+  const langNote = proj?.language && proj.language !== 'zh-CN' ? '作品语言：' + proj.language + '，请用该语言输出。' : '';
+  const sys = kind === 'outline'
+    ? '你是专业的文学策划。根据作品主题与现有大纲，生成新的大纲节点：标题 + 一句话摘要。只输出内容本身，不要解释。格式：标题：摘要。' + langNote
+    : '你是专业的角色设定师。根据作品主题与现有角色，生成新的人物卡：姓名、角色定位、一句话描述。只输出内容本身，不要解释。格式：姓名（角色）：描述。' + langNote;
+  const ctx = smartContextText(pid);
+  const user = '作品：《' + (proj?.title || '') + '》主题：' + (proj?.theme || '未设置') + '\n' + ctx + '\n我的要求：' + (prompt || '请合理生成');
+  try {
+    const text = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: user }], { max_tokens: 1000, temperature: 0.8 });
+    if (!text) return res.status(500).json({ code: 50001, message: 'AI 未返回结果' });
+    res.json({ code: 0, data: { result: text.trim() } });
+  } catch (e) { res.status(500).json({ code: 50001, message: e.message }); }
+});
+
+// 润色：把现有内容交给 AI 重写，返回润色结果
+router.post('/:kind/:id/ai/polish', async (req, res) => {
+  const { kind, id } = req.params;
+  if (!['outline', 'characters'].includes(kind)) return res.status(400).json({ code: 40001, message: '不支持的 AI 辅助类型' });
+  const d = db();
+  let item = null;
+  if (kind === 'outline') item = d.outline_nodes.find(x => x.id === id);
+  else item = d.character_cards.find(x => x.id === id);
+  if (!item) return res.status(404).json({ code: 40401, message: '内容不存在' });
+  const proj = d.projects.find(p => p.id === item.project_id);
+  if (!ensureEdit(req, proj)) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
+  const langNote = proj?.language && proj.language !== 'zh-CN' ? '作品语言：' + proj.language + '，请用该语言输出。' : '';
+  const target = kind === 'outline'
+    ? '大纲节点「' + (item.title || '') + '」摘要：' + (item.summary || '')
+    : '人物卡「' + (item.name || '') + '」' + (item.role || '') + '：' + (item.description || '') + (item.arc ? '；成长线：' + item.arc : '');
+  const sys = kind === 'outline'
+    ? '你是专业的文学策划。润色这个大纲节点：让摘要更清晰、更有张力、更贴合主题。只输出润色后的摘要，不要标题与解释。' + langNote
+    : '你是专业的角色设定师。润色这段人物设定：让描述更立体、更有记忆点。只输出润色后的描述，不要解释。' + langNote;
+  const user = '作品：《' + (proj?.title || '') + '》主题：' + (proj?.theme || '未设置') + '\n需要润色的内容：' + target;
+  try {
+    const text = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: user }], { max_tokens: 1000, temperature: 0.8 });
+    if (!text) return res.status(500).json({ code: 50001, message: 'AI 未返回结果' });
+    res.json({ code: 0, data: { result: text.trim() } });
+  } catch (e) { res.status(500).json({ code: 50001, message: e.message }); }
+});
+
+
+// ---------- AI 辅助：大纲 / 人物卡 生成与润色 ----------
 export default router;

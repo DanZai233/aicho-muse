@@ -133,7 +133,25 @@ export function cleanWritingOutput(text) {
   return t.trim();
 }
 
-
+function buildSmartContext(projectId, chapterId) {
+  if (!projectId) return '';
+  const d = db();
+  const outline = d.outline_nodes.filter(n => n.project_id === projectId).sort((a, b) => a.order_index - b.order_index);
+  const cards = d.character_cards.filter(c => c.project_id === projectId);
+  const parts = [];
+  if (outline.length) {
+    const lines = outline.slice(0, 12).map((n, i) => {
+      const ch = n.chapter_id ? d.chapters.find(c => c.id === n.chapter_id) : null;
+      return (i + 1) + '. ' + (n.title || '未命名') + (ch ? '（第' + (ch.order_index + 1) + '章）' : '') + (n.summary ? '：' + n.summary.slice(0, 80) : '');
+    });
+    parts.push('【大纲】' + lines.join('\n'));
+  }
+  if (cards.length) {
+    const clines = cards.slice(0, 10).map(c => '- ' + (c.name || '未命名') + '（' + (c.role || '配角') + '）' + (c.description ? '：' + c.description.slice(0, 80) : '') + (c.arc ? '；成长线：' + c.arc.slice(0, 50) : ''));
+    parts.push('【人物卡】' + clines.join('\n'));
+  }
+  return parts.join('\n\n');
+}
 
 function coachReply(input, persona, project, chapter, history, userName) {
   // 写作专用 agent：用户明确要 AI 直接写 / 已选定方向 → 只输出正文
@@ -189,7 +207,7 @@ function coachReply(input, persona, project, chapter, history, userName) {
 
 // ---------- LLM 提供商（UniLLM 统一接入 / OpenAI 兼容兜底） ----------
 
-async function callLLM(messages, opts = {}) {
+export async function callLLM(messages, opts = {}) {
   const s = db().settings.ai;
   const provider = String(process.env.LLM_PROVIDER || s.llm_provider || s.provider || '').toLowerCase();
   let model = String(process.env.LLM_MODEL || s.llm_model || s.model || '').trim();
@@ -206,6 +224,28 @@ async function callLLM(messages, opts = {}) {
   };
   const hasUniKey = envAI.llm_api_key && envAI.llm_provider && envAI.llm_provider !== 'none';
   const hasLegacyKey = s.api_key && s.provider !== 'none';
+
+  // DeepSeek v4-flash 是推理模型：不显式禁用 thinking 时，token 预算会先被 reasoning_content 烧光，
+  // 导致 content 为空（finish_reason=length）。unillm-sdk 0.1.0 无法透传 thinking 参数，
+  // 因此 DeepSeek 走 OpenAI 兼容直连并禁用思考；其余厂商继续走 UniLLM。
+  if (provider === 'deepseek' && envAI.llm_api_key) {
+    const base = (envAI.base_url || 'https://api.deepseek.com').replace(/\/+$/, '');
+    try {
+      const resp = await fetch(base + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + envAI.llm_api_key },
+        body: JSON.stringify({ model: model || 'deepseek-v4-flash', messages, temperature: opts.temperature ?? 0.8, max_tokens: opts.max_tokens ?? 800, stream: false, thinking: { type: 'disabled' } }),
+      });
+      if (!resp.ok) throw new Error('DeepSeek 调用失败 (' + resp.status + '): ' + (await resp.text().catch(() => '')).slice(0, 200));
+      const data = await resp.json();
+      const text = data.choices?.[0]?.message?.content ?? '';
+      if (text) return text.trim();
+      console.warn('[AI] DeepSeek 返回空内容（finish_reason=' + data.choices?.[0]?.finish_reason + '），尝试 UniLLM 兜底');
+    } catch (e) {
+      console.error('[AI] DeepSeek 直连失败:', e.message);
+      if (opts.noFallback) throw e;
+    }
+  }
 
   // 优先 UniLLM（多厂商）
   if (hasUniKey) {
@@ -245,7 +285,6 @@ async function callLLM(messages, opts = {}) {
   }
   return null;
 }
-
 export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId }) {
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
@@ -285,6 +324,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
         project ? `【项目上下文】作品《${project.title}》（${project.genre || ''}），主题：${project.theme || '未设置'}。` : '',
         languageNote(project?.language),
         chapter ? `当前章节：${chapter.title}。` : '',
+        project ? buildSmartContext(project.id, chapter?.id) : '',
         memories.length ? `【记忆上下文】你记得这些关于用户的创作信息：
 ${memoryText}` : '',
       ].filter(Boolean).join('\n');
