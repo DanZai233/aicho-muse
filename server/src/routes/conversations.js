@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
-import { db, saveDb, uuid } from '../db.js';
+import { db, saveDb, uuid, pushChapterSnapshot } from '../db.js';
 import { projectRole, findProject, canView, canEdit } from '../access.js';
 import { generateCoachReply, extractMemory } from '../ai.js';
 import { runWritingAgent } from '../agent/run.js';
@@ -220,8 +220,7 @@ router.post('/:id/adopt', (req, res) => {
     targetChapter = d.chapters.find(ch => ch.id === chapter_id && ch.project_id === c.project_id);
     if (!targetChapter) return res.status(404).json({ code: 40401, message: '目标章节不存在' });
     const now = new Date().toISOString();
-    d.snapshots.push({ id: uuid(), chapter_id: targetChapter.id, content: targetChapter.content, note: '采纳对话内容前', created_at: now });
-    d.snapshots = d.snapshots.slice(-50);
+    pushChapterSnapshot(d, targetChapter.id, targetChapter.content, '采纳对话内容前');
     targetChapter.content = (targetChapter.content ? targetChapter.content + '\n\n' : '') + adoptText.trim();
     targetChapter.word_count = targetChapter.content.length;
     targetChapter.updated_at = now;

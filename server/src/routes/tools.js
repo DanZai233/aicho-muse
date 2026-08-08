@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
-import { db, saveDb, uuid } from '../db.js';
+import { db, saveDb, uuid, pushChapterSnapshot } from '../db.js';
 import { projectRole, canView, canEdit } from '../access.js';
 import { runWritingTool, consistencyCheck } from '../ai.js';
 
@@ -119,8 +119,7 @@ router.post('/apply', (req, res) => {
   const ch = ownChapter(req, chapter_id);
   if (!ch) return res.status(404).json({ code: 40401, message: '章节不存在' });
   const d = db();
-  d.snapshots.push({ id: uuid(), chapter_id: ch.id, content: ch.content, note: '写作工具应用前', created_at: new Date().toISOString() });
-  d.snapshots = d.snapshots.slice(-50);
+  pushChapterSnapshot(d, ch.id, ch.content, '写作工具应用前');
   ch.content = text;
   ch.word_count = text.length;
   ch.updated_at = new Date().toISOString();

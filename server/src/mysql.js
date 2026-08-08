@@ -117,9 +117,10 @@ export async function mysqlSaveFull(cache) {
   try {
     await conn.beginTransaction();
     await conn.query('DELETE FROM app_data');
-    encryptChapters(cache);
+    const snapshot = JSON.parse(JSON.stringify(cache));
+    encryptChapters(snapshot);
     for (const [table, meta] of Object.entries(COLLECTIONS)) {
-      const rows = cache[table];
+      const rows = snapshot[table];
       if (!rows || !Array.isArray(rows)) continue;
       for (const row of rows) {
         // 官方预设不写入 app_data：它们只属于 presets 永久表，避免全量重写误删
@@ -129,14 +130,13 @@ export async function mysqlSaveFull(cache) {
       }
     }
     // settings / stats
-    await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['settings', JSON.stringify(cache.settings || {})]);
-    await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['stats', JSON.stringify(cache.stats || {})]);
+    await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['settings', JSON.stringify(snapshot.settings || {})]);
+    await conn.query('INSERT INTO app_data (`key`, `value`) VALUES (?, ?)', ['stats', JSON.stringify(snapshot.stats || {})]);
     await conn.commit();
   } catch (e) {
     await conn.rollback();
     throw e;
   } finally {
-    decryptChapters(cache);
     conn.release();
   }
 }

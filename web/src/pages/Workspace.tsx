@@ -174,6 +174,8 @@ export default function Workspace() {
   const [checkBusy, setCheckBusy] = useState(false);
   const [versions, setVersions] = useState<any[]>([]);
   const [showVersions, setShowVersions] = useState(false);
+  const [saveVerBusy, setSaveVerBusy] = useState(false);
+  const [saveVerMsg, setSaveVerMsg] = useState('');
   const [showSidebar, setShowSidebar] = useState(false);
   const [adoptDone, setAdoptDone] = useState<string | null>(null);
   const [undoInfo, setUndoInfo] = useState<{ kind: string; id: string; label: string } | null>(null);
@@ -513,6 +515,20 @@ export default function Workspace() {
     setShowVersions(false);
     const fresh = (await api.get<{ chapter: Chapter }>('/chapters/' + chapter!.id)).chapter;
     setChapter(fresh); setChapters(prev => prev.map(c => c.id === fresh.id ? fresh : c));
+  };
+  const saveVersion = async () => {
+    if (!chapter) return;
+    setSaveVerBusy(true); setSaveVerMsg('');
+    try {
+      const d = await api.post<{ pushed: boolean; unchanged: boolean }>('/chapters/' + chapter.id + '/save-version', { note: '手动保存' });
+      setSaveVerMsg(d.pushed ? '✅ 已保存一个新版本' : 'ℹ️ 内容与上一版本相同，未重复保存');
+      setTimeout(() => setSaveVerMsg(''), 3000);
+    } catch (e: any) {
+      setSaveVerMsg('⚠️ ' + (e.message || '保存失败'));
+      setTimeout(() => setSaveVerMsg(''), 3000);
+    } finally {
+      setSaveVerBusy(false);
+    }
   };
 
   const [toolMode, setToolMode] = useState<'polish' | 'expand' | 'condense' | 'continue' | 'restyle'>('polish');
@@ -915,10 +931,14 @@ export default function Workspace() {
               )}
               {bookView === 'write' && chapter && (
                 <>
+                  <button onClick={saveVersion} disabled={saveVerBusy} className="rounded-md px-2.5 py-1 hover:bg-ink/5 disabled:opacity-40" title="手动保存一个新版本（与上一版本相同则不保存）">
+                    {saveVerBusy ? '保存中…' : '💾 保存版本'}
+                  </button>
                   <button onClick={loadVersions} className="rounded-md px-2.5 py-1 hover:bg-ink/5">🕘 版本历史</button>
                   <button onClick={() => setShowNewConv(true)} className="rounded-md px-2.5 py-1 hover:bg-ink/5">💬 {(prefs?.assistant_name || '缪斯')}</button>
                 </>
               )}
+              {saveVerMsg && <span className="ml-1 text-xs text-ink/60">{saveVerMsg}</span>}
               <button onClick={() => setChatOpen(!chatOpen)}
                 className={"ml-1 rounded-full px-3 py-1.5 transition " + (chatOpen ? 'bg-ink text-paper' : 'bg-accentlight/60 text-ink hover:bg-accentlight')}>
                 {chatOpen ? '✕ 收起' : '💬 对话'}

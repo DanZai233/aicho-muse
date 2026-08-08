@@ -10,7 +10,7 @@ import { signToken } from './auth.js';
 
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
-import chapterRoutes from './routes/chapters.js';
+import chapterRoutes, { startAutoSaveSnapshot } from './routes/chapters.js';
 import structureRoutes from './routes/structure.js';
 import memoryRoutes from './routes/memories.js';
 import personaRoutes from './routes/personas.js';
@@ -78,6 +78,7 @@ app.use('/api/v1/assistant', assistantRoutes);
 app.use('/api/v1/agent-logs', agentLogsRoutes);
 
 startTrashReaper();
+startAutoSaveSnapshot();
 
 // 前端静态资源（生产构建后）
 const webDist = fs.existsSync(path.join(__dirname, '..', 'public'))

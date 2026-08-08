@@ -244,6 +244,39 @@ export function unpersistPreset(kind, id) {
   }
 }
 
+// 章节历史版本：只保存文章内容，每个章节最多保留最新 MAX_SNAPSHOTS 条；
+// 返回 { pushed, unchanged } 便于调用方判断是否有差异。
+export const MAX_SNAPSHOTS = 50;
+
+export function latestSnapshotOf(d, chapterId) {
+  return d.snapshots
+    .filter((s) => s.chapter_id === chapterId)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null;
+}
+
+export function pushChapterSnapshot(d, chapterId, content, note) {
+  const now = new Date().toISOString();
+  const latest = latestSnapshotOf(d, chapterId);
+  // 保存前校验：跟上个版本没有差异则不保存
+  if (latest && latest.content === content) {
+    return { pushed: false, unchanged: true };
+  }
+  d.snapshots.push({
+    id: uuid(),
+    chapter_id: chapterId,
+    content,
+    note: note || '保存版本',
+    created_at: now,
+  });
+  // 只保留该章节最新 50 条，超出自动删除最旧的（不影响其他章节）
+  const mine = d.snapshots.filter((s) => s.chapter_id === chapterId).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  if (mine.length > MAX_SNAPSHOTS) {
+    const keep = new Set(mine.slice(0, MAX_SNAPSHOTS).map((s) => s.id));
+    d.snapshots = d.snapshots.filter((s) => s.chapter_id !== chapterId || keep.has(s.id));
+  }
+  return { pushed: true, unchanged: false };
+}
+
 export function resetDb() {
   cache = seed();
   saveDb();

@@ -40,10 +40,16 @@ export function encryptChapters(cache) {
   for (const ch of cache.chapters || []) {
     if (ch.content && !ch.content.startsWith('enc:')) ch.content = encryptText(ch.content);
   }
+  for (const s of cache.snapshots || []) {
+    if (s.content && !s.content.startsWith('enc:')) s.content = encryptText(s.content);
+  }
 }
 
 export function decryptChapters(cache) {
   for (const ch of cache.chapters || []) {
     if (ch.content && ch.content.startsWith('enc:')) ch.content = decryptText(ch.content);
+  }
+  for (const s of cache.snapshots || []) {
+    if (s.content && s.content.startsWith('enc:')) s.content = decryptText(s.content);
   }
 }
