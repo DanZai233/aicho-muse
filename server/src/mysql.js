@@ -90,8 +90,19 @@ export async function mysqlLoad(cache) {
     for (const [table, list] of Object.entries(grouped)) {
       if (table in cache && Array.isArray(cache[table])) cache[table] = list;
     }
+    const loaded = rows.some(r => r.key.startsWith('users:'));
     // 官方预设独立永久表：与用户数据分开，全量落库永不触碰
-    const [presetRows] = await conn.query('SELECT kind, id, value FROM presets');
+    // 已初始化的库若读到 0 条 → 疑似 MySQL 启动竞态，轮询重试，绝不用空缓存顶上
+    let presetRows = [];
+    for (let attempt = 0; attempt <= 10; attempt++) {
+      [presetRows] = await conn.query('SELECT kind, id, value FROM presets');
+      if (presetRows.length > 0 || !loaded) break;
+      console.warn(`[MySQL] presets 表读到 0 条（库已有用户数据），第 ${attempt + 1}/10 次重试...`);
+      if (attempt < 10) await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (loaded && presetRows.length === 0) {
+      console.error('[MySQL] 警告：库已有用户数据但 presets 表仍为空。已跳过种子写入（官方预设由后台配置独占），请检查 presets 表是否被误删/未初始化。');
+    }
     const personas = new Map((cache.personas || []).map((p) => [p.id, p]));
     const voices = new Map((cache.voices || []).map((v) => [v.id, v]));
     for (const pr of presetRows) {
@@ -102,12 +113,13 @@ export async function mysqlLoad(cache) {
     }
     cache.personas = [...personas.values()];
     cache.voices = [...voices.values()];
-    // 保证内置官方预设永久存在（库中缺失时自动补回）
-    await mysqlEnsureSeedPresets(cache, conn);
     decryptChapters(cache);
-    // 首次启动（DB 无 users 行）：写入种子数据
-    const loaded = rows.some(r => r.key.startsWith('users:'));
-    if (!loaded) await mysqlSaveFull(cache);
+    // 首次启动（DB 无 users 行）：一次性写入内置官方预设 + 种子数据。
+    // 之后 presets 表永久存在，任何部署/重启都不会再写它（官方预设由后台配置独占）。
+    if (!loaded) {
+      await mysqlEnsureSeedPresets(cache, conn);
+      await mysqlSaveFull(cache);
+    }
     return true;
   } finally {
     conn.release();
@@ -171,30 +183,66 @@ export async function mysqlDeletePreset(kind, id) {
   }
 }
 
-// 确保内置官方预设（seed 中的 is_preset 条目）在永久表中存在
+// 首次初始化专用：仅在 presets 表完全为空时从内置 seed 写入一次官方预设。
+// 表非空（哪怕只有 1 条）则完全不动，保证后台增删改永久生效、部署/重启不覆盖。
 export async function mysqlEnsureSeedPresets(cache, connArg) {
   if (!mysqlEnabled()) return;
-  const { seedPresets } = await import('./db.js');
-  const { personas, voices } = seedPresets();
   await ensureTables();
   const conn = connArg || await getPool().getConnection();
   try {
+    const [cnt] = await conn.query('SELECT COUNT(*) AS n FROM presets');
+    if (Number(cnt?.[0]?.n || 0) > 0) return;
+    const { seedPresets } = await import('./db.js');
+    const { personas, voices } = seedPresets();
     for (const p of personas) {
-      const [ex] = await conn.query('SELECT 1 FROM presets WHERE kind = ? AND id = ?', ['persona', p.id]);
-      if (!ex.length) {
-        await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', ['persona', p.id, JSON.stringify(p)]);
-        if (!cache.personas.some((x) => x.id === p.id)) cache.personas.push(p);
-      }
+      await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', ['persona', p.id, JSON.stringify(p)]);
+      if (!cache.personas.some((x) => x.id === p.id)) cache.personas.push(p);
     }
     for (const v of voices) {
-      const [ex] = await conn.query('SELECT 1 FROM presets WHERE kind = ? AND id = ?', ['voice', v.id]);
-      if (!ex.length) {
-        await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', ['voice', v.id, JSON.stringify(v)]);
-        if (!cache.voices.some((x) => x.id === v.id)) cache.voices.push(v);
-      }
+      await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', ['voice', v.id, JSON.stringify(v)]);
+      if (!cache.voices.some((x) => x.id === v.id)) cache.voices.push(v);
     }
   } finally {
     if (!connArg) conn.release();
+  }
+}
+
+// 周期从 presets 表回读官方预设（每 30s）：presets 表是官方预设的唯一权威源，
+// 启动竞态或外部修改造成的缓存漂移会在运行期自愈，无需重启。
+let presetRefreshTimer = null;
+export function startPresetRefresh(cache) {
+  if (presetRefreshTimer) return;
+  presetRefreshTimer = setInterval(() => {
+    syncPresetsFromDb(cache).catch(e => console.error('[MySQL] 预设周期同步失败:', e.message));
+  }, 30000);
+  presetRefreshTimer.unref?.();
+}
+
+export async function syncPresetsFromDb(cache) {
+  if (!mysqlEnabled() || !cache) return;
+  await ensureTables();
+  const conn = await getPool().getConnection();
+  try {
+    const [presetRows] = await conn.query('SELECT kind, id, value FROM presets');
+    const byKind = { persona: new Map(), voice: new Map() };
+    for (const pr of presetRows) {
+      const v = pr.value;
+      if (typeof v !== 'object' || v === null) continue;
+      if (pr.kind === 'persona') byKind.persona.set(pr.id, v);
+      else if (pr.kind === 'voice') byKind.voice.set(pr.id, v);
+    }
+    for (const [kind, table] of [['persona', 'personas'], ['voice', 'voices']]) {
+      const dbMap = byKind[kind];
+      const arr = cache[table] || [];
+      cache[table] = arr
+        .filter((x) => !x.is_preset || dbMap.has(x.id))
+        .map((x) => (x.is_preset ? dbMap.get(x.id) : x));
+      for (const [id, v] of dbMap) {
+        if (!cache[table].some((x) => x.is_preset && x.id === id)) cache[table].push(v);
+      }
+    }
+  } finally {
+    conn.release();
   }
 }
 
