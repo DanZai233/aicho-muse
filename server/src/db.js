@@ -151,6 +151,7 @@ function seed() {
     character_cards: [],
     timeline_events: [],
     idea_notes: [],
+    citations: [],
     trash: [],
     agent_logs: [],
     stats: { conversations_created: 0, messages_sent: 0, projects_created: 0 },

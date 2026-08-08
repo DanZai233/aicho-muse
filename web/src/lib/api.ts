@@ -38,6 +38,22 @@ export const api = {
   post: <T>(p: string, body?: unknown, auth = true) => request<T>(p, { method: 'POST', body, auth }),
   patch: <T>(p: string, body?: unknown, auth = true) => request<T>(p, { method: 'PATCH', body, auth }),
   del: <T>(p: string, auth = true) => request<T>(p, { method: 'DELETE', auth }),
+  // multipart 文件上传（导入等）
+  upload: <T>(p: string, form: FormData, auth = true) => {
+    const headers: Record<string, string> = {};
+    if (auth !== false) {
+      const t = getToken();
+      if (t) headers.Authorization = 'Bearer ' + t;
+    }
+    return fetch(BASE + p, { method: 'POST', headers, body: form }).then(async resp => {
+      let json: any = null;
+      try { json = await resp.json(); } catch { /* empty */ }
+      if (!resp.ok || (json && json.code !== 0)) {
+        throw new ApiError(resp.status, json?.code || -1, json?.message || '上传失败 (' + resp.status + ')');
+      }
+      return json.data as T;
+    });
+  },
 };
 
 export type Persona = {
@@ -62,6 +78,7 @@ export type Project = {
   id: string; title: string; genre: string; language?: string; theme: string; target_audience: string;
   goal_word_count: number; status: string; default_persona_id: string | null; team_persona_ids?: string[];
   cover_color: string; subtitle?: string; author_name?: string;
+  abstract?: string; keywords?: string[]; citation_style?: 'gb7714' | 'apa' | 'mla';
   chapter_count?: number; word_count?: number;
   my_role?: 'owner' | 'editor' | 'viewer' | null;
   default_persona?: { id: string; name: string; avatar_color: string } | null;
@@ -84,3 +101,13 @@ export type Message = {
   id: string; conversation_id: string; role: 'user' | 'assistant' | 'tool';
   content: string; reply_type?: string; source?: string; adopted_at?: string; created_at: string;
 };
+
+export type Citation = {
+  id: string; project_id: string; key: string | null; raw: string;
+  title: string; authors: string; year: string; source: string; note: string;
+  order_index: number; created_at: string; updated_at: string;
+};
+
+export const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
+export const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
+export const CITATION_STYLE_LABEL: Record<string, string> = { gb7714: 'GB/T 7714', apa: 'APA', mla: 'MLA' };

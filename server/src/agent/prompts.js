@@ -43,9 +43,27 @@ export function buildAgentSystemPrompt({ persona, project, chapter, assistantNam
     '',
     project ? `【项目上下文】作品《${project.title}》（${project.genre || ''}），主题：${project.theme || '未设置'}。` : '',
     project?.language ? languageNote(project.language) : '',
+    project?.genre === 'paper' ? buildPaperPrompt(project) : '',
     chapter ? `当前章节：${chapter.title}。` : '',
     project ? buildSmartContext(project.id, chapter?.id) : '',
     memories?.length ? `【记忆上下文】你记得这些关于用户的创作信息：\n${memories.map(m => '- [' + (m.scope === 'project' ? '作品' : '用户') + '] ' + m.content).join('\n')}` : '',
   ].filter(Boolean);
   return parts.join('\n');
+}
+
+// 论文（学术写作）专用提示词：结构与学术规范优先于文学性表达
+function buildPaperPrompt(project) {
+  const styleLabel = { gb7714: 'GB/T 7714（中国国家标准）', apa: 'APA', mla: 'MLA' }[project.citation_style] || 'GB/T 7714';
+  const keywords = Array.isArray(project.keywords) && project.keywords.length ? project.keywords.join('、') : '未设置';
+  return [
+    '【论文模式】当前作品是学术论文，不是文学创作。',
+    '1. 语言要求：客观、严谨、逻辑清晰，避免夸张修辞、口语化表达和文学性铺陈；',
+    '2. 结构建议：围绕 摘要→引言→文献综述→研究方法→结果→讨论→结论 展开，先帮用户理清论证主线；',
+    '3. 引用规范：正文引用一律使用方括号编号（如 [1]、[2-3]），编号对应文末参考文献列表；引用格式采用 ' + styleLabel + '；',
+    '4. 当用户要求写作时，输出学术论证段落：先给论点，再给论据与解释，最后给出与上下文的衔接；',
+    '5. 引导提问应聚焦研究问题、证据来源、方法合理性、结论边界，而不是情节与人物。',
+    project?.abstract ? '论文摘要（供参考）：' + String(project.abstract).slice(0, 800) : '',
+    keywords !== '未设置' ? '关键词：' + keywords : '',
+    '【引用清单】请在回复涉及文献时尽量使用项目参考文献中的条目，并在正文以 [编号] 标注；没有对应文献时明确提醒用户补充。',
+  ].filter(Boolean).join('\n');
 }

@@ -6,7 +6,7 @@ import { projectRole, findProject, canView, canEdit, isOwner } from '../access.j
 const router = Router();
 router.use(authRequired);
 
-const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script'];
+const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
 const LANGUAGES = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'];
 
 router.get('/', (req, res) => {
@@ -30,10 +30,11 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const d = db();
-  const { title, genre, language, theme, target_audience, goal_word_count, default_persona_id, team_persona_ids, subtitle, author_name, cover_color } = req.body || {};
+  const { title, genre, language, theme, target_audience, goal_word_count, default_persona_id, team_persona_ids, subtitle, author_name, cover_color, abstract, keywords, citation_style } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ code: 40001, message: '作品标题必填' });
   if (genre && !GENRES.includes(genre)) return res.status(400).json({ code: 40001, message: '不支持的体裁' });
   if (language && !LANGUAGES.includes(language)) return res.status(400).json({ code: 40001, message: '不支持的作品语言' });
+  if (citation_style && !['gb7714', 'apa', 'mla'].includes(citation_style)) return res.status(400).json({ code: 40001, message: '不支持的引用格式' });
   const now = new Date().toISOString();
   const p = {
     id: uuid(),
@@ -50,6 +51,9 @@ router.post('/', (req, res) => {
     subtitle: subtitle || '',
     author_name: author_name || '',
     cover_color: cover_color || '#8b7d6b',
+    abstract: abstract || '',
+    keywords: Array.isArray(keywords) ? keywords : (typeof keywords === 'string' && keywords.trim() ? keywords.split(/[,，;；]/).map(s => s.trim()).filter(Boolean) : []),
+    citation_style: citation_style || 'gb7714',
     created_at: now,
     updated_at: now,
   };
@@ -75,8 +79,11 @@ router.patch('/:id', (req, res) => {
   if (!found) return res.status(404).json({ code: 40401, message: '作品不存在' });
   if (!canEdit(req, found.p)) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   const p = found.p;
-  for (const k of ['title', 'subtitle', 'author_name', 'genre', 'language', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color']) {
+  for (const k of ['title', 'subtitle', 'author_name', 'genre', 'language', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color', 'abstract', 'citation_style']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
+  }
+  if (req.body.keywords !== undefined) {
+    p.keywords = Array.isArray(req.body.keywords) ? req.body.keywords : String(req.body.keywords).split(/[,，;；]/).map(s => s.trim()).filter(Boolean);
   }
   if (req.body.language !== undefined && !LANGUAGES.includes(req.body.language)) {
     return res.status(400).json({ code: 40001, message: '不支持的作品语言' });

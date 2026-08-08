@@ -19,12 +19,40 @@ function projectChapters(req, id) {
 
 function mdEscape(s = '') { return s.replace(/\r\n/g, '\n').trim(); }
 
+// 论文模式：引用格式标签 + 参考文献列表
+function citationStyleLabel(project) {
+  return { gb7714: 'GB/T 7714', apa: 'APA', mla: 'MLA' }[project.citation_style] || 'GB/T 7714';
+}
+function projectCitations(projectId) {
+  return db().citations.filter(c => c.project_id === projectId).sort((a, b) => a.order_index - b.order_index);
+}
+function citationLine(c, idx) {
+  return '[' + idx + '] ' + (c.raw || [c.authors, c.title, c.source, c.year].filter(Boolean).join('. '));
+}
+function paperKeywords(project) {
+  return Array.isArray(project.keywords) && project.keywords.length ? project.keywords.join('、') : '';
+}
+
 router.get('/projects/:id/markdown', (req, res) => {
   const data = projectChapters(req, req.params.id);
   if (!data) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const { project: p, chapters } = data;
   const parts = [`# ${p.title}\n`, `> 体裁：${p.genre} ｜ 主题：${p.theme || '未设置'}\n`, ''];
+  if (p.genre === 'paper') {
+    if (p.abstract) parts.push(`> 摘要：${p.abstract.replace(/\n/g, ' ')}\n`);
+    const kw = paperKeywords(p);
+    if (kw) parts.push(`> 关键词：${kw}\n`);
+    parts.push(`> 引用格式：${citationStyleLabel(p)}\n`, '');
+  }
   for (const ch of chapters) { parts.push(`## ${ch.title}\n`); if (ch.content) parts.push(mdEscape(ch.content)); parts.push(''); }
+  if (p.genre === 'paper') {
+    const cites = projectCitations(p.id);
+    if (cites.length) {
+      parts.push('## 参考文献\n');
+      cites.forEach((c, i) => parts.push(citationLine(c, i + 1) + '\n'));
+      parts.push('');
+    }
+  }
   const md = parts.join('\n');
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(`${p.title}.md`)}"`);
@@ -43,6 +71,13 @@ router.get('/projects/:id/docx', async (req, res) => {
       new Paragraph({ children: [new TextRun({ text: `体裁：${p.genre} ｜ 主题：${p.theme || '未设置'}`, size: 18, color: '666666' })] }),
       new Paragraph({ children: [] }),
     ];
+    if (p.genre === 'paper') {
+      if (p.abstract) children.push(new Paragraph({ children: [new TextRun({ text: '摘要：' + p.abstract, size: 20, color: '444444' })] }));
+      const kw = paperKeywords(p);
+      if (kw) children.push(new Paragraph({ children: [new TextRun({ text: '关键词：' + kw, size: 20, color: '444444' })] }));
+      children.push(new Paragraph({ children: [new TextRun({ text: '引用格式：' + citationStyleLabel(p), size: 20, color: '444444' })] }));
+      children.push(new Paragraph({ children: [] }));
+    }
     for (const ch of chapters) {
       children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: ch.title, bold: true, size: 28 })] }));
       const lines = (ch.content || '').split('\n');
@@ -55,6 +90,14 @@ router.get('/projects/:id/docx', async (req, res) => {
         else children.push(new Paragraph({ children: [new TextRun({ text: line, size: 21 })], spacing: { after: 120 } }));
       }
       children.push(new Paragraph({ children: [] }));
+    }
+    if (p.genre === 'paper') {
+      const cites = projectCitations(p.id);
+      if (cites.length) {
+        children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: '参考文献', bold: true, size: 28 })] }));
+        cites.forEach((c, i) => children.push(new Paragraph({ children: [new TextRun({ text: citationLine(c, i + 1), size: 21 })], spacing: { after: 80 } })));
+        children.push(new Paragraph({ children: [] }));
+      }
     }
     const doc = new Document({ sections: [{ children }] });
     const buf = await Packer.toBuffer(doc);
@@ -98,6 +141,13 @@ router.get('/projects/:id/pdf', async (req, res) => {
   doc.moveDown(0.5);
   doc.fontSize(11).fillColor('#666666').text(`体裁：${p.genre} ｜ 主题：${p.theme || '未设置'}`, { align: 'center' });
   doc.moveDown();
+  if (p.genre === 'paper') {
+    if (p.abstract) { doc.fontSize(11).fillColor('#333333').text('摘要：' + p.abstract, { lineGap: 2 }); doc.moveDown(0.3); }
+    const kw = paperKeywords(p);
+    if (kw) { doc.fontSize(11).fillColor('#333333').text('关键词：' + kw); doc.moveDown(0.3); }
+    doc.fontSize(11).fillColor('#666666').text('引用格式：' + citationStyleLabel(p));
+    doc.moveDown();
+  }
   for (const ch of chapters) {
     doc.fillColor('#000000').fontSize(18).text(ch.title, { align: 'center' });
     doc.moveDown(0.4);
@@ -108,6 +158,15 @@ router.get('/projects/:id/pdf', async (req, res) => {
       doc.text(line, { lineGap: 3 });
     }
     doc.moveDown();
+  }
+  if (p.genre === 'paper') {
+    const cites = projectCitations(p.id);
+    if (cites.length) {
+      doc.fillColor('#000000').fontSize(18).text('参考文献', { align: 'center' });
+      doc.moveDown(0.4);
+      doc.fontSize(11).fillColor('#222222');
+      cites.forEach((c, i) => doc.text(citationLine(c, i + 1), { lineGap: 2 }));
+    }
   }
   doc.end();
 });

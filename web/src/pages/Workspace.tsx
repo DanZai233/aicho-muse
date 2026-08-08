@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
+import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, Citation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input, Spinner } from '../components/ui';
@@ -13,9 +13,11 @@ import { usePresence } from '../lib/usePresence';
 import { measureCaret } from '../lib/caret';
 import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, stopSpeakTTS, speakWithTTS, interruptSpeech } from '../lib/speech';
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
+import CitationsPanel from '../components/CitationsPanel';
+import PaperInfoPanel from '../components/PaperInfoPanel';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
-const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
+const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
 const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写', condense: '缩写', continue: '续写', restyle: '风格迁移' };
 // 只有带正文建议的回复可进入 diff 与采纳（提问/鼓励/其他不写入文章）
 const ADOPTABLE_TYPES = new Set(['suggestion', 'feedback', 'writing']);
@@ -165,7 +167,7 @@ export default function Workspace() {
   const [suggestMsg, setSuggestMsg] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState('');
-  const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
+  const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas' | 'citations'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
   const [characters, setCharacters] = useState<StructItem[]>([]);
   const [timeline, setTimeline] = useState<StructItem[]>([]);
@@ -182,6 +184,9 @@ export default function Workspace() {
   const [draftRestored, setDraftRestored] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showPersonaCard, setShowPersonaCard] = useState(false);
+  const [citations, setCitations] = useState<Citation[]>([]);
+  const [showPaperInfo, setShowPaperInfo] = useState(false);
+  const [paperInfoKey, setPaperInfoKey] = useState(0);
 
   const msgsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -204,8 +209,12 @@ export default function Workspace() {
     setProject(d.project);
     setChapters(d.chapters);
     loadStructure(id);
+    setPaperInfoKey(k => k + 1);
+    if (d.project.genre === 'paper') {
+      try { setCitations((await api.get<{ list: Citation[] }>('/projects/' + id + '/citations')).list); } catch { /* ignore */ }
+    }
     if (!d.chapters.length) {
-      const ch = await api.post<{ chapter: Chapter }>('/projects/' + id + '/chapters', { title: '第一章', content: '' });
+      const ch = await api.post<{ chapter: Chapter }>('/projects/' + id + '/chapters', { title: d.project.genre === 'paper' ? '引言' : '第一章', content: '' });
       setChapters([ch.chapter]); setChapter(ch.chapter);
     } else {
       setChapter(prev => {
@@ -428,6 +437,18 @@ export default function Workspace() {
     if (!chapter) return;
     const ch = { ...chapter, content, word_count: content.length };
     setChapter(ch); setChapters(prev => prev.map(c => c.id === ch.id ? ch : c));
+  };
+
+  // 论文模式：在正文光标处插入引用标记 [n]
+  const insertCitationMark = (idx: number) => {
+    if (!chapter) return;
+    const mark = '[' + idx + ']';
+    const ta = editorRef.current;
+    if (!ta) { updateContent((chapter.content ? chapter.content + ' ' : '') + mark); return; }
+    const start = ta.selectionStart ?? chapter.content.length;
+    const end = ta.selectionEnd ?? start;
+    updateContent(chapter.content.slice(0, start) + mark + chapter.content.slice(end));
+    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(start + mark.length, start + mark.length); });
   };
 
   // 实时光标：本地选择变化 → 节流上报 offset + scrollTop
@@ -835,8 +856,8 @@ export default function Workspace() {
             </div>
           </div>
           <div className="flex gap-0.5 border-b border-ink/5 px-2 py-2 text-xs">
-            {([['book', '书'], ['outline', '大纲'], ['characters', '人物'], ['timeline', '时间线'], ['ideas', '灵感']] as const).map(([k, v]) => (
-              <button key={k} onClick={() => setLeftTab(k)}
+            {([['book', '书'], ['outline', '大纲'], ['characters', '人物'], ['timeline', '时间线'], ['ideas', '灵感'], ...(project?.genre === 'paper' ? [['citations', '文献'] as const] : [])]).map(([k, v]) => (
+              <button key={k} onClick={() => setLeftTab(k as typeof leftTab)}
                 className={"flex-1 rounded-md px-1 py-1.5 transition " + (leftTab === k ? 'bg-accentlight/80 font-medium text-ink' : 'text-ink/45 hover:text-ink')}>{v}</button>
             ))}
           </div>
@@ -897,6 +918,9 @@ export default function Workspace() {
               <StructurePanel kind="ideas" items={ideas} setItems={setIdeas} title="灵感箱" addLabel="＋ 记录灵感"
                 fields={[{ key: 'content', label: '灵感', placeholder: '一句话灵感…', textarea: true }]}
                 projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="随手一句话也可能成为故事的核心。" />
+            )}
+            {leftTab === 'citations' && project && (
+              <CitationsPanel projectId={project.id} citations={citations} setCitations={setCitations} onInsert={insertCitationMark} />
             )}
           </div>
         </aside>
@@ -987,12 +1011,23 @@ export default function Workspace() {
                     <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
                       className="w-1/3 min-w-40 bg-transparent font-serif text-base font-semibold outline-none" />
                     <span className="text-xs text-ink/35">{chapter.word_count} 字</span>
+                    {project?.genre === 'paper' && (
+                      <>
+                        <button onClick={() => setShowPaperInfo(v => !v)} title="摘要 / 关键词 / 引用格式"
+                          className={"rounded-full px-2 py-0.5 text-xs font-medium transition " + (showPaperInfo ? 'bg-ink text-paper' : 'bg-accentlight/60 text-ink/70 hover:bg-accentlight')}>📋 论文信息</button>
+                        <button onClick={() => setLeftTab('citations')} title="管理参考文献并插入 [n] 标注"
+                          className="rounded-full bg-accentlight/60 px-2 py-0.5 text-xs font-medium text-ink/70 transition hover:bg-accentlight">📚 引用</button>
+                      </>
+                    )}
                     <OnlineAvatars peers={peers} currentUserId={me?.id} />
                     <button onClick={cycleChapterStatus} title="点击推进章节状态：初稿 → 修改中 → 已定稿" className={"rounded-full px-2 py-0.5 text-xs font-medium transition " + (chapter.status === 'final' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : chapter.status === 'reviewed' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>
                       {chapter.status === 'final' ? '✓ 已定稿' : chapter.status === 'reviewed' ? '● 修改中' : '○ 初稿'}
                     </button>
                     <button onClick={deleteChapter} className="ml-auto text-xs text-ink/30 hover:text-red-500">删除章节</button>
                   </div>
+                  {showPaperInfo && project?.genre === 'paper' && (
+                    <PaperInfoPanel key={paperInfoKey} project={project} onSaved={p => setProject(p)} />
+                  )}
                   <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-8">
                     <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/10 dark:bg-paper dark:shadow-none dark:ring-0">
                       <MarkdownEditor

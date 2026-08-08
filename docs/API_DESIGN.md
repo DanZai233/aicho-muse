@@ -279,3 +279,26 @@ multipart/form-data: audio 文件 + lang=zh-CN
 - 所有破坏性变更提升前缀版本（`/api/v2`），v1 维护期 ≥ 6 个月。
 - 新增字段向后兼容；删除字段需先废弃公告。
 - 前端 SDK 与 API 版本绑定，避免隐式漂移。
+
+## 13. 文件导入与论文写作
+
+### 导入文稿
+
+`POST /api/v1/import`（multipart/form-data）
+
+- `file`：必填，.docx / .md / .markdown / .txt，单文件 ≤ 20MB
+- `mode`：`new` 新建作品 / `existing` 追加到已有作品（需 `project_id`）
+- `title`、`genre`、`language`：新建作品时的元信息
+- `ai_outline`（1/0）：导入后让 AI 生成大纲（写入 outline_nodes）
+- `ai_knowledge`（1/0）：导入后让 AI 提取设定与背景知识（写入 memories，助手自动参考）
+
+解析规则：Markdown 一级标题作为作品标题，二/三级标题与「第X章/回/节」切分章节；无标题时合并为单章。
+
+返回 `{ project, chapters, created, total_words, outline_generated, knowledge_generated }`。
+
+### 论文模式
+
+- 项目体裁新增 `paper`，项目字段：`abstract`（摘要）、`keywords`（关键词数组）、`citation_style`（gb7714 / apa / mla）
+- 参考文献：`GET/POST /api/v1/projects/:pid/citations`，`PATCH/DELETE /api/v1/citations/:id`
+- 导出（MD/DOCX/PDF）自动附带摘要、关键词、引用格式与文末参考文献列表
+- 写作 Agent 对 `paper` 项目启用学术提示词（客观语气、结构建议、[n] 引用规范）

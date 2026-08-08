@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, Project, Conversation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
+import { api, Project, Chapter, Conversation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, EmptyState, Modal, Input } from '../components/ui';
 import BookCover from '../components/BookCover';
 import { completeTourStep } from '../lib/tour';
 
-const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
+const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
 
 export default function Home() {
   const { user } = useAuth();
@@ -34,6 +34,17 @@ export default function Home() {
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinErr, setJoinErr] = useState('');
   const [joinMsg, setJoinMsg] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<'new' | 'existing'>('new');
+  const [importProjectId, setImportProjectId] = useState('');
+  const [importTitle, setImportTitle] = useState('');
+  const [importGenre, setImportGenre] = useState('fiction');
+  const [importAiOutline, setImportAiOutline] = useState(false);
+  const [importAiKnowledge, setImportAiKnowledge] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importErr, setImportErr] = useState('');
+  const [importMsg, setImportMsg] = useState('');
 
   const load = async () => {
     try {
@@ -77,6 +88,25 @@ export default function Home() {
     } finally { setBusy(false); }
   };
 
+  const doImport = async () => {
+    if (!importFile) { setImportErr('请先选择要导入的文件'); return; }
+    if (importMode === 'existing' && !importProjectId) { setImportErr('请选择要追加到的作品'); return; }
+    setImportBusy(true); setImportErr(''); setImportMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      fd.append('mode', importMode);
+      if (importMode === 'existing') fd.append('project_id', importProjectId);
+      else { fd.append('title', importTitle); fd.append('genre', importGenre); }
+      fd.append('ai_outline', importAiOutline ? '1' : '0');
+      fd.append('ai_knowledge', importAiKnowledge ? '1' : '0');
+      const d = await api.upload<{ project: Project; chapters: Chapter[]; outline_generated: number; knowledge_generated: number }>('/import', fd);
+      setImportMsg('导入成功：' + d.chapters.length + ' 个章节' + (d.outline_generated ? '，AI 大纲 ' + d.outline_generated + ' 条' : '') + (d.knowledge_generated ? '，知识库 ' + d.knowledge_generated + ' 条' : ''));
+      setTimeout(() => { setImportOpen(false); setImportMsg(''); setImportFile(null); nav('/workspace?project=' + d.project.id); load(); }, 1200);
+    } catch (e: any) { setImportErr(e.message || '导入失败'); }
+    finally { setImportBusy(false); }
+  };
+
   const deleteProject = async (p: Project) => {
     if (!confirm('删除《' + p.title + '》？30 秒内可撤销。')) return;
     try {
@@ -114,6 +144,7 @@ export default function Home() {
           </div>
           <div className="flex gap-2">
             <Button variant="subtle" onClick={() => setJoinOpen(true)}>加入协作</Button>
+            <Button variant="subtle" onClick={() => setImportOpen(true)}>📥 导入文件</Button>
             <Button onClick={() => setOpen(true)} data-tour="tour-create-book">＋ 新建作品</Button>
           </div>
         </div>
@@ -249,6 +280,66 @@ export default function Home() {
           <div className="flex gap-2">
             <Button onClick={join} disabled={joinBusy || !joinCode.trim()} className="flex-1">{joinBusy ? '加入中…' : '加入这本书'}</Button>
             <Button variant="ghost" onClick={() => setJoinOpen(false)}>取消</Button>
+          </div>
+        </div>
+      </Modal>
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="导入已有文稿">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-ink/60">支持 Word（.docx）、Markdown（.md）和纯文本（.txt）。系统会自动按标题切分章节，把未完成的作品带进来继续创作。</p>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">选择文件</span>
+            <input type="file" accept=".docx,.md,.markdown,.txt"
+              onChange={e => { setImportFile(e.target.files?.[0] || null); setImportErr(''); }}
+              className="block w-full text-sm text-ink/60 file:mr-3 file:rounded-lg file:border-0 file:bg-accentlight/60 file:px-3 file:py-1.5 file:text-sm file:text-ink hover:file:bg-accentlight" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink/60">导入方式</span>
+            <div className="flex gap-2">
+              {([['new', '新建作品'], ['existing', '追加到已有作品']] as const).map(([k, v]) => (
+                <button key={k} onClick={() => setImportMode(k)}
+                  className={'flex-1 rounded-lg border px-3 py-2 text-sm transition ' + (importMode === k ? 'border-accent/40 bg-accentlight/30 text-ink' : 'border-ink/10 text-ink/55 hover:border-ink/25')}>{v}</button>
+              ))}
+            </div>
+          </label>
+          {importMode === 'existing' ? (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-ink/60">追加到哪本书</span>
+              <select value={importProjectId} onChange={e => setImportProjectId(e.target.value)}
+                className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none">
+                <option value="">请选择作品</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            </label>
+          ) : (
+            <>
+              <Input label="作品标题（留空则取文件名或文档标题）" value={importTitle} onChange={setImportTitle} placeholder="例如：未完成的手稿" />
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-ink/60">体裁</span>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(GENRE_LABEL).map(([k, v]) => (
+                    <button key={k} onClick={() => setImportGenre(k)}
+                      className={'rounded-full px-3.5 py-1.5 text-sm transition ' + (importGenre === k ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>{v}</button>
+                  ))}
+                </div>
+              </label>
+            </>
+          )}
+          <div className="space-y-2 rounded-xl border border-ink/10 bg-paper/50 p-3">
+            <p className="text-xs font-medium text-ink/60">AI 后处理（可选）</p>
+            <label className="flex items-center gap-2 text-sm text-ink/75">
+              <input type="checkbox" checked={importAiOutline} onChange={e => setImportAiOutline(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+              让 AI 解析内容生成大纲
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink/75">
+              <input type="checkbox" checked={importAiKnowledge} onChange={e => setImportAiKnowledge(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+              让 AI 提取设定与背景，创建知识库（助手后续会自动参考）
+            </label>
+          </div>
+          {importErr && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{importErr}</p>}
+          {importMsg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{importMsg}</p>}
+          <div className="flex gap-2">
+            <Button onClick={doImport} disabled={importBusy || !importFile} className="flex-1">{importBusy ? '导入中…' : '开始导入'}</Button>
+            <Button variant="ghost" onClick={() => setImportOpen(false)}>取消</Button>
           </div>
         </div>
       </Modal>

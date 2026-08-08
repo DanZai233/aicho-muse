@@ -37,6 +37,7 @@ const COLLECTIONS = {
   timeline_events: { json: ['linked_chapters'] },
   idea_notes: { json: ['tags'] },
   memories: { json: [] },
+  citations: { json: [] },
   admin_users: { json: [] },
   trash: { json: [] },
   agent_logs: { json: [] },

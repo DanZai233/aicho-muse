@@ -231,3 +231,9 @@ flowchart LR
 
 - 用户体系独立（本项目是独立 Web 应用），后续如需打通 Aicho 账号再做联合登录。
 - 数据模型保持独立演进，避免与 Aicho 情感日记耦合；共享的只有"人设/语音"概念的经验。
+
+## 8. 导入与论文数据
+
+- 新增集合 `citations`：论文参考文献，字段 `project_id / key / raw / title / authors / year / source / note / order_index`，随项目落库（MySQL app_data / JSON 文件双模式）。
+- 项目新增字段：`abstract`（论文摘要）、`keywords`（关键词数组）、`citation_style`（gb7714/apa/mla）。
+- 文件导入不新增集合：章节写入 `chapters`，AI 大纲写入 `outline_nodes`，AI 知识提取写入 `memories`（scope=project，source=import）。
