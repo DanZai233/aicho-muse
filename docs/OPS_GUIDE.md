@@ -75,6 +75,11 @@
     docker compose build app
     docker compose up -d app
 
+> ⚠️ 线上端口与密钥：dz 上 muse 应用通过 nginx 以 **3002** 端口对外（
+> /opt/aicho-muse/.env 中 `APP_PORT=3002`），数据库账号为 `aicho_muse`（不是 compose 默认的 `aicho`）。
+> 同步代码时**不要覆盖 .env**（含 MYSQL_PASSWORD / JWT_SECRET / DATA_ENCRYPTION_KEY）。
+> 若误覆盖，可在本机 `/tmp/aicho_muse_env.txt` 找回线上 .env 原始内容。
+
     # 查看日志
     docker logs -f aicho-muse-app
 
