@@ -34,6 +34,12 @@ export default function Personas() {
   const [previewBusy, setPreviewBusy] = useState(false);
   const [tab, setTab] = useState<'mine' | 'preset' | 'public'>('mine');
   const [publicList, setPublicList] = useState<Persona[]>([]);
+  const [cloneBusy, setCloneBusy] = useState<string | null>(null);
+  const [cloneMsg, setCloneMsg] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [voiceQ, setVoiceQ] = useState('');
+  const [voiceResults, setVoiceResults] = useState<any[]>([]);
+  const [voiceBusy, setVoiceBusy] = useState(false);
 
   const load = async () => { setList((await api.get<{ list: Persona[] }>('/personas?scope=' + tab)).list); if (tab === 'public') setPublicList((await api.get<{ list: Persona[] }>('/personas?scope=public')).list); };
   useEffect(() => { load(); }, [tab]);
@@ -51,11 +57,29 @@ export default function Personas() {
     setPreviewMsgs([]);
     setAiResult(null); setAiPrompt(''); setAiErr('');
     setPreviewInput('');
+    setModalOpen(true);
+  };
+
+  const searchVoice = async () => {
+    if (!voiceQ.trim()) return;
+    setVoiceBusy(true);
+    try {
+      const d = await api.get<{ list: any[] }>('/voice-profiles/library/search?q=' + encodeURIComponent(voiceQ) + '&page_size=8');
+      setVoiceResults(d.list);
+    } catch { setVoiceResults([]); }
+    finally { setVoiceBusy(false); }
   };
 
   const save = async () => {
     setBusy(true);
-    const body = { ...form, personality: tagify(pers), values: tagify(values), expertise: tagify(expertise), speaking_style: { ...form.speaking_style, tone: form.speaking_style.tone, preferences: tagify(prefs), avoid: tagify(avoids), catchphrase: catchphr } };
+    let body = { ...form, personality: tagify(pers), values: tagify(values), expertise: tagify(expertise), speaking_style: { ...form.speaking_style, tone: form.speaking_style.tone, preferences: tagify(prefs), avoid: tagify(avoids), catchphrase: catchphr } };
+    try {
+      if ((form as any)._voiceId && !body.voice_profile_id) {
+        const fav = await api.post<{ voice: { id: string } }>('/voice-profiles/library/' + (form as any)._voiceId + '/add', { title: (form as any)._voiceTitle || 'Fish 音色' });
+        body = { ...body, voice_profile_id: fav.voice.id };
+      }
+    } catch { /* 收藏失败则仍保存（不绑定音色） */ }
+    delete (body as any)._voiceId; delete (body as any)._voiceTitle;
     try {
       if (edit) await api.patch(`/personas/${edit.id}`, body);
       else await api.post('/personas', body);
@@ -65,8 +89,15 @@ export default function Personas() {
   };
 
   const clonePreset = async (p: Persona) => {
-    await api.post(`/personas/${p.id}/clone`);
-    await load();
+    setCloneBusy(p.id); setCloneMsg('');
+    try {
+      await api.post('/personas/' + p.id + '/clone');
+      setCloneMsg('✅ 已基于「' + p.name + '」创建你的版本，可在「我的」中编辑');
+      setTab('mine');
+      await load();
+    } catch (e: any) {
+      setCloneMsg('⚠️ ' + (e?.message || '创建失败'));
+    } finally { setCloneBusy(null); }
   };
   const clonePublic = async (p: Persona) => {
     await api.post(`/personas/${p.id}/clone`);
@@ -210,7 +241,7 @@ export default function Personas() {
                 {tab === 'public'
                   ? <Button variant="subtle" onClick={() => clonePublic(p)} className="text-xs">＋ 收藏到我的</Button>
                   : p.is_preset
-                    ? <Button variant="subtle" onClick={() => clonePreset(p)} className="text-xs">基于预设创建</Button>
+                    ? <Button variant="subtle" onClick={() => clonePreset(p)} disabled={cloneBusy !== null} className="text-xs">{cloneBusy === p.id ? '创建中…' : '基于预设创建'}</Button>
                     : <div className="flex items-center gap-2">
                         <label className="flex cursor-pointer items-center gap-1 text-xs text-ink/45" title="开启后其他用户可看到并收藏这个人设">
                           <input type="checkbox" checked={!!p.is_public} onChange={async e => { await api.patch('/personas/' + p.id, { is_public: e.target.checked }); await load(); }} className="accent-accent" />
@@ -226,7 +257,7 @@ export default function Personas() {
         </div>
       </div>
 
-      <Modal open={!!edit || !!form.name || edit !== null} onClose={() => setEdit(null)} title={edit ? `编辑人设 · ${edit.name}` : '新建人设'} wide>
+      <Modal open={modalOpen} onClose={() => { setEdit(null); setForm(EMPTY); setModalOpen(false); }} title={edit ? `编辑人设 · ${edit.name}` : '新建人设'} wide>
         <div className="mb-3 flex items-center gap-4">
           <div className="relative">
             {form.avatar
@@ -258,6 +289,28 @@ export default function Personas() {
           <Input label="避免（、分隔）" value={avoids} onChange={setAvoids} placeholder="说教、替用户做决定" />
           <Input label="擅长领域（、分隔）" value={expertise} onChange={setExpertise} placeholder="叙事结构、人物塑造" />
           <Input label="开场白" value={form.greeting} onChange={v => setForm({ ...form, greeting: v })} placeholder="今天想讲点什么？" />
+          <div className="sm:col-span-2 rounded-xl border border-ink/10 bg-paper/50 p-3">
+            <p className="mb-2 text-xs font-semibold text-ink/60">🔊 绑定音色（可选）</p>
+            <div className="flex gap-2">
+              <input value={voiceQ} onChange={e => setVoiceQ(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchVoice(); } }}
+                placeholder="搜索 Fish 音频广场：温柔、旁白、爱莉希雅…"
+                className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+              <Button variant="subtle" onClick={searchVoice} disabled={voiceBusy} className="px-3 text-xs">{voiceBusy ? '搜索中…' : '搜索'}</Button>
+            </div>
+            {voiceResults.length > 0 && (
+              <div className="mt-2 max-h-36 space-y-1 overflow-y-auto">
+                {voiceResults.map(v => (
+                  <button key={v.id} onClick={() => setForm({ ...form, _voiceId: v.id, _voiceTitle: v.title, voice_profile_id: form.voice_profile_id })}
+                    className={"flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition " + (form.voice_profile_id === v.id ? 'bg-accentlight text-ink font-medium' : 'bg-surface text-ink/60 hover:bg-accentlight/50')}>
+                    <span className="truncate">{v.title}</span>
+                    <span className="ml-2 shrink-0 text-[10px] text-ink/35">{v.languages?.join('/') || ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] text-ink/40">{(form._voiceId || form.voice_profile_id) ? '已选：' + (form._voiceTitle || 'Fish 音色') + '（保存后会话朗读将使用此音色）' : '未绑定音色，会话时默认使用全局音色'}</p>
+          </div>
           <label className="flex items-center gap-2 rounded-lg border border-ink/10 bg-paper/50 px-3 py-2.5">
             <input type="checkbox" checked={!!form.is_public} onChange={e => setForm({ ...form, is_public: e.target.checked })} className="accent-accent" />
             <span className="text-sm text-ink/60">公开分享这个人设（其他用户可收藏）</span>

@@ -45,6 +45,7 @@ export type Persona = {
   personality: string[]; speaking_style: { tone: string; preferences: string[]; avoid: string[]; catchphrase?: string };
   values: string[]; relationship: string; expertise: string[];
   greeting: string; avatar?: string; avatar_color: string; is_preset: boolean; is_public?: boolean; version: number;
+  voice_profile_id?: string | null;
 };
 
 export type VoiceProfile = {

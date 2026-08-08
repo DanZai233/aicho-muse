@@ -50,7 +50,7 @@ router.post('/', (req, res) => {
   const { project_id, persona_id, voice_profile_id } = req.body || {};
   if (project_id && !ownProject(req, project_id)) return res.status(404).json({ code: 40401, message: '作品不存在' });
   const persona = persona_id ? d.personas.find(p => p.id === persona_id && (p.is_preset || p.user_id === req.user.id)) : null;
-  const voice = voice_profile_id ? d.voices.find(v => v.id === voice_profile_id && (v.is_preset || v.user_id === req.user.id)) : null;
+  const voice = voice_profile_id ? d.voices.find(v => v.id === voice_profile_id && (v.is_preset || v.user_id === req.user.id)) : (persona?.voice_profile_id ? d.voices.find(v => v.id === persona.voice_profile_id && (v.is_preset || v.user_id === req.user.id)) : null);
   const now = new Date().toISOString();
   const c = {
     id: uuid(),

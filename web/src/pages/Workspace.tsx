@@ -121,8 +121,8 @@ export default function Workspace() {
   const [pendingTrans, setPendingTrans] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<{ assistant_name?: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } | null>(null);
   const [showNewConv, setShowNewConv] = useState(false);
-  const [newPersona, setNewPersona] = useState('preset-liwen');
-  const [newVoice, setNewVoice] = useState('preset-voice-warm');
+  const [newPersona, setNewPersona] = useState('');
+  const [newVoice, setNewVoice] = useState('');
 
   const [chatOpen, setChatOpen] = useState(params.get('chat') === '1');
   const [bookView, setBookView] = useState<'write' | 'preview'>('write');
@@ -200,10 +200,20 @@ export default function Workspace() {
     try { setConvs((await api.get<{ list: Conversation[] }>('/conversations')).list); } catch { /* ignore */ }
   }, []);
   const loadPersonas = useCallback(async () => {
-    try { setPersonas((await api.get<{ list: Persona[] }>('/personas')).list); } catch { /* ignore */ }
+    try {
+      const list = (await api.get<{ list: Persona[] }>('/personas')).list;
+      setPersonas(list);
+      const elysia = list.find(p => p.name.includes('爱莉希雅'));
+      setNewPersona(prev => prev || elysia?.id || list.find(p => p.is_preset)?.id || list[0]?.id || '');
+    } catch { /* ignore */ }
   }, []);
   const loadVoices = useCallback(async () => {
-    try { setVoices((await api.get<{ list: VoiceProfile[] }>('/voice-profiles')).list); } catch { /* ignore */ }
+    try {
+      const list = (await api.get<{ list: VoiceProfile[] }>('/voice-profiles')).list;
+      setVoices(list);
+      const elysia = list.find(v => v.display_name.includes('爱莉希雅'));
+      setNewVoice(prev => prev || elysia?.id || list.find(v => v.is_preset)?.id || list[0]?.id || '');
+    } catch { /* ignore */ }
   }, []);
   const loadPrefs = useCallback(async () => {
     try { setPrefs((await api.get<{ settings: { assistant_name?: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } }>('/auth/me/settings')).settings); } catch { setPrefs({ assistant_name: '缪斯', tts_rate: 1, tts_pitch: 1, auto_send: false, read_aloud: true }); }

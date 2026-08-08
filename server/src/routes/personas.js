@@ -49,6 +49,7 @@ router.post('/', (req, res) => {
     avatar_color: b.avatar_color || '#8b7d6b',
     is_preset: false,
     is_public: !!b.is_public,
+    voice_profile_id: b.voice_profile_id || null,
     version: 1,
     created_at: now,
     updated_at: now,
@@ -93,7 +94,7 @@ router.patch('/:id', (req, res) => {
   const d = db();
   const p = d.personas.find(x => x.id === req.params.id && !x.is_preset && x.user_id === req.user.id);
   if (!p) return res.status(404).json({ code: 40401, message: '人设不存在或为预设' });
-  for (const k of ['name', 'tagline', 'background', 'personality', 'speaking_style', 'values', 'relationship', 'expertise', 'greeting', 'avatar', 'avatar_color', 'is_public']) {
+  for (const k of ['name', 'tagline', 'background', 'personality', 'speaking_style', 'values', 'relationship', 'expertise', 'greeting', 'avatar', 'avatar_color', 'is_public', 'voice_profile_id']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
   }
   p.version++;
