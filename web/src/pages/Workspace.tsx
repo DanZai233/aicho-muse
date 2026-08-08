@@ -114,6 +114,7 @@ export default function Workspace() {
   const [params] = useSearchParams();
   const projectId = params.get('project') || '';
   const convParam = params.get('conv') || '';
+  const [redirecting, setRedirecting] = useState(false);
 
 
   const [project, setProject] = useState<Project | null>(null);
@@ -243,7 +244,27 @@ export default function Workspace() {
   }, []);
 
   useEffect(() => { loadPersonas(); loadVoices(); loadConvs(); loadPrefs(); }, []);
-  useEffect(() => { if (projectId) loadProject(projectId); }, [projectId, loadProject]);
+  useEffect(() => {
+    if (projectId) {
+      loadProject(projectId);
+      return;
+    }
+    if (redirecting) return;
+    setRedirecting(true);
+    (async () => {
+      try {
+        const d = await api.get<{ list: Project[] }>('/projects?page=1&page_size=20');
+        const list = d.list || [];
+        if (list.length > 0) {
+          nav('/workspace?project=' + list[0].id, { replace: true });
+        } else {
+          nav('/', { replace: true });
+        }
+      } catch {
+        nav('/', { replace: true });
+      }
+    })();
+  }, [projectId, loadProject, nav, redirecting]);
   useEffect(() => { if (conv) loadMessages(conv.id); }, [conv?.id]);
   useEffect(() => {
     const flush = async () => {
@@ -940,8 +961,8 @@ export default function Workspace() {
           ) : (
             <div className="flex min-h-0 flex-1">
               {chapter ? (
-                <div className="flex min-h-0 flex-1 flex-col bg-[#f6f2e9]">
-                  <div className="flex items-center gap-2 border-b border-ink/5 bg-surface/70 px-5 py-2">
+                <div className="flex min-h-0 flex-1 flex-col bg-paper">
+                  <div className="flex items-center gap-2 border-b border-ink/10 bg-surface/80 px-5 py-2">
                     <span className="text-xs text-ink/35">第 {chapters.findIndex(c => c.id === chapter.id) + 1} 章</span>
                     <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
                       className="w-1/3 min-w-40 bg-transparent font-serif text-base font-semibold outline-none" />
@@ -953,7 +974,7 @@ export default function Workspace() {
                     <button onClick={deleteChapter} className="ml-auto text-xs text-ink/30 hover:text-red-500">删除章节</button>
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-8">
-                    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/5">
+                    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/10">
                       <MarkdownEditor
                         value={chapter.content}
                         onChange={updateContent}
@@ -966,7 +987,7 @@ export default function Workspace() {
                     </div>
                   </div>
 
-                  <div className="border-t border-ink/5 bg-surface/80 px-4 py-2">
+                  <div className="border-t border-ink/10 bg-surface/80 px-4 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="mr-1 text-xs text-ink/40">AI 工具：</span>
                       {Object.entries(TOOL_LABEL).map(([k, v]) => (

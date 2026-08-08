@@ -3,6 +3,7 @@ import { api, VoiceProfile } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button, Badge, Modal, Input } from '../components/ui';
 import { speak, speakWithTTS, stopSpeak } from '../lib/speech';
+import { completeTourStep } from '../lib/tour';
 
 const PREVIEW_TEXT = '你好，我是你的缪斯。今天想写点什么？';
 
@@ -19,6 +20,10 @@ export default function Voices() {
   const [cloneMsg, setCloneMsg] = useState('');
   const [tab, setTab] = useState<'mine' | 'preset' | 'public' | 'library'>('mine');
   const [publicList, setPublicList] = useState<VoiceProfile[]>([]);
+  const [searchQ, setSearchQ] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(12);
+  const [total, setTotal] = useState(0);
   const [libOpen, setLibOpen] = useState(false);
   const [libQ, setLibQ] = useState('');
   const [libItems, setLibItems] = useState<any[]>([]);
@@ -26,8 +31,13 @@ export default function Voices() {
   const [libMsg, setLibMsg] = useState('');
   const [libTab, setLibTab] = useState<'mine' | 'preset' | 'public' | 'library'>('mine');
 
-  const load = async () => { setList((await api.get<{ list: VoiceProfile[] }>('/voice-profiles?scope=' + tab)).list); if (tab === 'public') setPublicList((await api.get<{ list: VoiceProfile[] }>('/voice-profiles?scope=public')).list); };
-  useEffect(() => { load(); }, [tab]);
+  const load = async () => {
+    if (tab === 'library') return;
+    const d = await api.get<{ list: VoiceProfile[]; total: number }>('/voice-profiles?scope=' + tab + '&page=' + page + '&page_size=' + pageSize + (searchQ ? '&q=' + encodeURIComponent(searchQ) : ''));
+    setList(d.list); setTotal(d.total);
+    if (tab === 'public') setPublicList((await api.get<{ list: VoiceProfile[] }>('/voice-profiles?scope=public')).list);
+  };
+  useEffect(() => { load(); }, [tab, page, searchQ]);
 
   const openEdit = (v?: VoiceProfile) => {
     if (v) { setEdit(v); setForm({ ...v, params: { ...v.params } }); }
@@ -71,6 +81,7 @@ export default function Voices() {
     setLibBusy(true); setLibMsg('');
     try {
       await api.post('/voice-profiles/library/' + item.id + '/add', { title: item.title, description: item.description, sample_audio: item.sample_audio });
+      completeTourStep('voice');
       setLibMsg('✅ 已收藏「' + item.title + '」到我的音色');
       await load();
     } catch (e: any) { setLibMsg('⚠️ ' + e.message); }
@@ -129,6 +140,18 @@ export default function Voices() {
           ))}
         </div>
 
+        {tab !== 'library' && (
+          <div className="mb-6 flex items-center gap-2">
+            <input
+              value={searchQ}
+              onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
+              placeholder="搜索音色：名称、提供商、说明…"
+              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+            <span className="shrink-0 text-xs text-ink/40">共 {total} 个</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tab === 'library' ? (
             <div className="col-span-full rounded-2xl border border-dashed border-ink/15 bg-paper/40 p-10 text-center">
@@ -171,6 +194,21 @@ export default function Voices() {
             </div>
           ))}
         </div>
+        {tab !== 'library' && total > pageSize && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+              className="rounded-lg bg-ink/5 px-3 py-1.5 text-sm text-ink/60 transition hover:bg-ink/10 disabled:opacity-30"
+            >上一页</button>
+            <span className="text-sm text-ink/50">{page} / {Math.ceil(total / pageSize)}</span>
+            <button
+              disabled={page >= Math.ceil(total / pageSize)}
+              onClick={() => setPage(page + 1)}
+              className="rounded-lg bg-ink/5 px-3 py-1.5 text-sm text-ink/60 transition hover:bg-ink/10 disabled:opacity-30"
+            >下一页</button>
+          </div>
+        )}
       </div>
 
       <Modal open={!!form} onClose={() => setForm(null)} title={edit ? `编辑音色 · ${edit.display_name}` : '新建音色'}>

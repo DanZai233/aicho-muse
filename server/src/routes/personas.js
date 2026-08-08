@@ -19,7 +19,18 @@ router.get('/', (req, res) => {
   if (scope === 'preset') list = list.filter(p => p.is_preset);
   if (scope === 'mine') list = list.filter(p => !p.is_preset);
   if (scope === 'public') list = list.filter(p => p.is_public);
-  res.json({ code: 0, data: { list, total: list.length } });
+  const q = String(req.query.q || '').trim().toLowerCase();
+  if (q) {
+    list = list.filter(p => {
+      const hay = [p.name, p.tagline, p.background, (p.personality || []).join(' '), (p.expertise || []).join(' ')].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  const total = list.length;
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+  const pageSize = Math.min(60, Math.max(1, parseInt(String(req.query.page_size || '12'), 10) || 12));
+  const start = (page - 1) * pageSize;
+  res.json({ code: 0, data: { list: list.slice(start, start + pageSize), total, page, page_size: pageSize } });
 });
 
 router.get('/:id', (req, res) => {
@@ -212,4 +223,3 @@ router.post('/:id/ai/polish', async (req, res) => {
 });
 
 export default router;
-

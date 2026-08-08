@@ -3,6 +3,7 @@ import { api, Persona, VoiceProfile } from '../lib/api';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 import { speakWithTTS, stopSpeakTTS } from '../lib/speech';
+import { completeTourStep } from '../lib/tour';
 
 const EMPTY: Omit<Persona, 'id' | 'is_preset' | 'version'> = {
   name: '', tagline: '', background: '', personality: [],
@@ -37,6 +38,10 @@ export default function Personas() {
   const [previewBusy, setPreviewBusy] = useState(false);
   const [tab, setTab] = useState<'mine' | 'preset' | 'public'>('mine');
   const [publicList, setPublicList] = useState<Persona[]>([]);
+  const [searchQ, setSearchQ] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(12);
+  const [total, setTotal] = useState(0);
   const [cloneBusy, setCloneBusy] = useState<string | null>(null);
   const [cloneMsg, setCloneMsg] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -49,8 +54,12 @@ export default function Personas() {
   // 加载音色列表（用于已绑定音色试听）
   useEffect(() => { api.get<{ list: VoiceProfile[] }>('/voice-profiles').then(d => setVoices(d.list)).catch(() => {}); }, []);
 
-  const load = async () => { setList((await api.get<{ list: Persona[] }>('/personas?scope=' + tab)).list); if (tab === 'public') setPublicList((await api.get<{ list: Persona[] }>('/personas?scope=public')).list); };
-  useEffect(() => { load(); }, [tab]);
+  const load = async () => {
+    const d = await api.get<{ list: Persona[]; total: number }>('/personas?scope=' + tab + '&page=' + page + '&page_size=' + pageSize + (searchQ ? '&q=' + encodeURIComponent(searchQ) : ''));
+    setList(d.list); setTotal(d.total);
+    if (tab === 'public') setPublicList((await api.get<{ list: Persona[] }>('/personas?scope=public')).list);
+  };
+  useEffect(() => { load(); }, [tab, page, searchQ]);
 
   const openEdit = (p?: Persona) => {
     const base = p ? { ...p, speaking_style: { ...p.speaking_style } } : { ...EMPTY };
@@ -115,6 +124,7 @@ export default function Personas() {
     try {
       if (edit) await api.patch(`/personas/${edit.id}`, body);
       else await api.post('/personas', body);
+      completeTourStep('persona');
       setEdit(null);
       await load();
     } finally { setBusy(false); }
@@ -124,6 +134,7 @@ export default function Personas() {
     setCloneBusy(p.id); setCloneMsg('');
     try {
       await api.post('/personas/' + p.id + '/clone');
+      completeTourStep('persona');
       setCloneMsg('✅ 已基于「' + p.name + '」创建你的版本，可在「我的」中编辑');
       setTab('mine');
       await load();
@@ -248,6 +259,16 @@ export default function Personas() {
           ))}
         </div>
 
+        <div className="mb-6 flex items-center gap-2">
+          <input
+            value={searchQ}
+            onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
+            placeholder="搜索人设：名称、性格、擅长领域…"
+            className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+          />
+          <span className="shrink-0 text-xs text-ink/40">共 {total} 个</span>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(tab === 'public' ? publicList : list).map(p => (
             <div key={p.id} className="rounded-2xl border border-ink/5 bg-surface p-5 shadow-soft transition hover:shadow-lift">
@@ -287,6 +308,21 @@ export default function Personas() {
             </div>
           ))}
         </div>
+        {total > pageSize && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+              className="rounded-lg bg-ink/5 px-3 py-1.5 text-sm text-ink/60 transition hover:bg-ink/10 disabled:opacity-30"
+            >上一页</button>
+            <span className="text-sm text-ink/50">{page} / {Math.ceil(total / pageSize)}</span>
+            <button
+              disabled={page >= Math.ceil(total / pageSize)}
+              onClick={() => setPage(page + 1)}
+              className="rounded-lg bg-ink/5 px-3 py-1.5 text-sm text-ink/60 transition hover:bg-ink/10 disabled:opacity-30"
+            >下一页</button>
+          </div>
+        )}
       </div>
 
       <Modal open={modalOpen} onClose={() => { setEdit(null); setForm(EMPTY); setModalOpen(false); }} title={edit ? `编辑人设 · ${edit.name}` : '新建人设'} wide>

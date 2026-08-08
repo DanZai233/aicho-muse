@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, EmptyState, Modal, Input } from '../components/ui';
 import BookCover from '../components/BookCover';
+import { completeTourStep } from '../lib/tour';
 
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
 
@@ -17,7 +18,6 @@ export default function Home() {
   const [projTotal, setProjTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [convVisible, setConvVisible] = useState(6);
-  const [onboarded, setOnboarded] = useState(() => localStorage.getItem('am_onboarded') === '1');
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -71,6 +71,7 @@ export default function Home() {
     setBusy(true);
     try {
       const d = await api.post<{ project: Project }>('/projects', { title, subtitle, author_name: author, genre, language, theme, cover_color: cover, default_persona_id: 'preset-liwen' });
+      completeTourStep('book');
       setOpen(false); setTitle(''); setSubtitle(''); setAuthor(''); setTheme(''); setLanguage('zh-CN');
       nav('/workspace?project=' + d.project.id);
     } finally { setBusy(false); }
@@ -106,29 +107,6 @@ export default function Home() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        {!onboarded && !document.body.classList.contains('tour-active') && (
-          <div className="mb-8 rounded-2xl border border-accent/20 bg-accentlight/30 p-5 animate-fade-up">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-serif text-lg font-semibold">三步开始你的第一本书</h2>
-              <button onClick={() => { localStorage.setItem('am_onboarded', '1'); setOnboarded(true); }} className="text-xs text-ink/40 hover:text-ink">知道了，跳过</button>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {[
-                ['① 认识你的' + assistantName, '去「人设」页选一位，或先沿用默认的黎文。', '/personas', '去选人设'],
-                ['② 新建一本书', '书名、封面、体裁，一本书从封面开始长出来。', null, '新建作品'],
-                ['③ 开口说第一句', '进入作品后点右上「💬 对话」，口述或打字，' + assistantName + ' 会提问、反馈、鼓励你。', null, '知道了'],
-              ].map(([title, desc, href, btn], i) => (
-                <div key={i} className="rounded-xl bg-surface/70 p-4">
-                  <p className="text-sm font-semibold">{title}</p>
-                  <p className="mt-1 text-xs leading-5 text-ink/55">{desc}</p>
-                  {href
-                    ? <Link to={href as string} className="mt-2 inline-block text-xs text-accent hover:underline">{btn}</Link>
-                    : <button onClick={() => { if (i === 1) setOpen(true); else { localStorage.setItem('am_onboarded', '1'); setOnboarded(true); } }} className="mt-2 inline-block text-xs text-accent hover:underline">{btn}</button>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold">你好，{user?.display_name}</h1>

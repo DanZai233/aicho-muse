@@ -13,6 +13,11 @@ if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 const router = Router();
 
+// TTS 音频缓存：同文本 + 同音色 + 同参数复用已合成文件，避免每次播放都调 API
+function ttsCacheKey(text, voiceId, rate, provider, model) {
+  return crypto.createHash('sha256').update([String(text || ''), String(voiceId || ''), String(rate || 1), String(provider || ''), String(model || '')].join('|')).digest('hex').slice(0, 32);
+}
+
 // ---------- 音频访问（短期签名 URL） ----------
 router.get('/audio/:file', (req, res) => {
   const { file } = req.params;
@@ -62,6 +67,12 @@ router.post('/tts/synthesize', authRequired, async (req, res) => {
   const cfg = ttsConfig();
   if (!cfg.api_key) return res.json({ code: 0, data: { audio_url: null, fallback: 'browser', message: '未配置 TTS 提供商，请使用浏览器朗读' } });
   try {
+    // 命中缓存：直接返回已合成的音频文件（不调 API、不扣配额）
+    const cacheKey = ttsCacheKey(text, String(voice_id || ''), cfg.rate || 1, cfg.provider, cfg.model);
+    const cacheFile = cacheKey + '.mp3';
+    if (fs.existsSync(path.join(AUDIO_DIR, cacheFile))) {
+      return res.json({ code: 0, data: { audio_url: signUrl(cacheFile), duration: Math.max(1, Math.round(String(text).length / 4)), stream: !!stream, cached: true } });
+    }
     let buf;
     if (cfg.provider === 'fish-audio') {
       // 未配置音色时，自动从音频广场取第一个公开音色作为默认（并缓存）
@@ -116,7 +127,7 @@ router.post('/tts/synthesize', authRequired, async (req, res) => {
       consumeQuota('tts', req.user.id, 1);
       return res.json({ code: 0, data: { audio_base64: buf.toString('base64'), duration: Math.max(1, Math.round(String(text).length / 4)), stream: !!stream, no_save: true } });
     }
-    const file = uuid() + '.mp3';
+    const file = cacheKey + '.mp3';
     fs.writeFileSync(path.join(AUDIO_DIR, file), buf);
     consumeQuota('tts', req.user.id, 1);
     res.json({ code: 0, data: { audio_url: signUrl(file), duration: Math.max(1, Math.round(String(text).length / 4)), stream: !!stream } });

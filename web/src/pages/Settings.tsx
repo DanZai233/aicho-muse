@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, Input, Modal } from '../components/ui';
+import { completeTourStep, resetTour } from '../lib/tour';
 
 type UserPrefs = { assistant_name: string; my_name: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean };
 type ReportData = {
@@ -77,6 +78,7 @@ export default function Settings() {
   const savePrefs = async () => {
     if (!prefs) return;
     await api.patch('/auth/me/settings', prefs);
+    completeTourStep('settings');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -85,6 +87,12 @@ export default function Settings() {
     <Layout>
       <div className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="mb-8 font-serif text-3xl font-semibold">设置</h1>
+
+        <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
+          <h2 className="mb-4 font-serif text-lg font-semibold">新手引导</h2>
+          <p className="mb-3 text-sm text-ink/50">重新走一遍「称呼 → 人设 → 音色 → 新建作品」的完整引导，帮你快速上手创作。</p>
+          <Button variant="subtle" onClick={() => resetTour()}>重新开始引导</Button>
+        </section>
 
         <section className="mb-6 rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <h2 className="mb-4 font-serif text-lg font-semibold">个人资料</h2>

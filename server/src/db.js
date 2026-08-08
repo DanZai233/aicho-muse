@@ -213,6 +213,37 @@ export function saveDb() {
 
 export function db() { return loadDb(); }
 
+// 内置官方预设（seed 中 is_preset 的条目），供 MySQL 永久表初始化/补全
+export function seedPresets() {
+  const s = seed();
+  return {
+    personas: s.personas.filter((p) => p.is_preset),
+    voices: s.voices.filter((v) => v.is_preset),
+  };
+}
+
+// 官方预设的永久持久化：MySQL 模式下实时写入 presets 表；
+// JSON 文件模式退化为全量保存。与用户数据落库完全分离，互不影响。
+export function persistPreset(kind, row) {
+  if (mysqlMode()) {
+    import('./mysql.js')
+      .then((m) => m.mysqlUpsertPreset(kind, row))
+      .catch((e) => console.error('[DB] 预设永久落库失败:', e.message));
+  } else {
+    saveDb();
+  }
+}
+
+export function unpersistPreset(kind, id) {
+  if (mysqlMode()) {
+    import('./mysql.js')
+      .then((m) => m.mysqlDeletePreset(kind, id))
+      .catch((e) => console.error('[DB] 预设永久删除失败:', e.message));
+  } else {
+    saveDb();
+  }
+}
+
 export function resetDb() {
   cache = seed();
   saveDb();

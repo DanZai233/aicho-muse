@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { adminRequired } from '../auth.js';
-import { db, saveDb, uuid, resetDb } from '../db.js';
+import { db, saveDb, uuid, resetDb, persistPreset, unpersistPreset } from '../db.js';
 
 const router = Router();
 router.use(adminRequired);
@@ -174,7 +174,9 @@ router.post('/presets/personas', (req, res) => {
   const b = req.body || {};
   if (!b.name) return res.status(400).json({ code: 40001, message: '名称必填' });
   const now = new Date().toISOString();
-  d.personas.push({ id: uuid(), user_id: null, name: b.name, tagline: b.tagline || '', background: b.background || '', personality: b.personality || [], speaking_style: b.speaking_style || {}, values: b.values || [], relationship: b.relationship || '', expertise: b.expertise || [], greeting: b.greeting || '', avatar_color: b.avatar_color || '#8b7d6b', voice_profile_id: b.voice_profile_id || null, is_preset: true, version: 1, created_at: now, updated_at: now });
+  const p = { id: uuid(), user_id: null, name: b.name, tagline: b.tagline || '', background: b.background || '', personality: b.personality || [], speaking_style: b.speaking_style || {}, values: b.values || [], relationship: b.relationship || '', expertise: b.expertise || [], greeting: b.greeting || '', avatar_color: b.avatar_color || '#8b7d6b', voice_profile_id: b.voice_profile_id || null, is_preset: true, version: 1, created_at: now, updated_at: now };
+  d.personas.push(p);
+  persistPreset('persona', p);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });
@@ -184,7 +186,9 @@ router.post('/presets/voices', (req, res) => {
   const b = req.body || {};
   if (!b.display_name) return res.status(400).json({ code: 40001, message: '名称必填' });
   const now = new Date().toISOString();
-  d.voices.push({ id: uuid(), user_id: null, display_name: b.display_name, provider: b.provider || 'system', voice_id: b.voice_id || '', params: b.params || {}, speech_notes: b.speech_notes || '', is_preset: true, created_at: now, updated_at: now });
+  const v = { id: uuid(), user_id: null, display_name: b.display_name, provider: b.provider || 'system', voice_id: b.voice_id || '', params: b.params || {}, speech_notes: b.speech_notes || '', is_preset: true, created_at: now, updated_at: now };
+  d.voices.push(v);
+  persistPreset('voice', v);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });
@@ -194,6 +198,7 @@ router.delete('/presets/personas/:id', (req, res) => {
   const p = d.personas.find(x => x.id === req.params.id && x.is_preset);
   if (!p) return res.status(404).json({ code: 40401, message: '预设人设不存在' });
   d.personas = d.personas.filter(x => x.id !== req.params.id);
+  unpersistPreset('persona', p.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });
@@ -203,6 +208,7 @@ router.delete('/presets/voices/:id', (req, res) => {
   const v = d.voices.find(x => x.id === req.params.id && x.is_preset);
   if (!v) return res.status(404).json({ code: 40401, message: '预设音色不存在' });
   d.voices = d.voices.filter(x => x.id !== req.params.id);
+  unpersistPreset('voice', v.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });

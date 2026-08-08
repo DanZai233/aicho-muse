@@ -23,7 +23,18 @@ router.get('/', (req, res) => {
   if (req.query.scope === 'preset') list = list.filter(v => v.is_preset);
   if (req.query.scope === 'mine') list = list.filter(v => !v.is_preset);
   if (req.query.scope === 'public') list = list.filter(v => v.is_public);
-  res.json({ code: 0, data: { list, total: list.length } });
+  const q = String(req.query.q || '').trim().toLowerCase();
+  if (q) {
+    list = list.filter(v => {
+      const hay = [v.display_name, v.speech_notes, v.provider].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  const total = list.length;
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+  const pageSize = Math.min(60, Math.max(1, parseInt(String(req.query.page_size || '12'), 10) || 12));
+  const start = (page - 1) * pageSize;
+  res.json({ code: 0, data: { list: list.slice(start, start + pageSize), total, page, page_size: pageSize } });
 });
 
 router.post('/', (req, res) => {
