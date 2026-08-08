@@ -13,6 +13,7 @@ const REL_TYPES = ['恋人', '挚友', '师徒', '家人', '敌对', '同事', '
 
 function buildGraph(cards: any[]): { nodes: GNode[]; edges: GEdge[] } {
   const nameToId = new Map(cards.map(c => [c.name || '', c.id]));
+  const idToName = new Map(cards.map(c => [c.id, c.name || '未命名人物']));
   const nodes: GNode[] = cards.map(c => ({ id: c.id, name: c.name || '未命名人物', role: c.role || '配角', description: c.description || '', arc: c.arc || '', x: 0, y: 0 }));
   const edges: GEdge[] = [];
   const seen = new Set<string>();
@@ -21,7 +22,9 @@ function buildGraph(cards: any[]): { nodes: GNode[]; edges: GEdge[] } {
       const rel = r && typeof r === 'object' ? r : { target: r };
       const targetName = String(rel.target || rel.name || '').trim();
       if (!targetName) continue;
-      const targetId = nameToId.get(targetName);
+      // target 可能是角色名或角色 ID，两种都解析
+      let targetId = nameToId.get(targetName);
+      if (!targetId && idToName.has(targetName)) targetId = targetName;
       if (!targetId || targetId === c.id) continue;
       const type = String(rel.type || rel.label || rel.relation || '').trim() || '认识';
       const key = c.id + '|' + targetId + '|' + type;
@@ -131,7 +134,8 @@ export default function RelationshipGraph({ projectId, characters, onChanged }: 
         const next = (Array.isArray(src.relationships) ? src.relationships : []).filter((r: any) => {
           const t = String((r && (r.target || r.name)) || '').trim();
           const ty = String((r && (r.type || r.label || r.relation)) || '').trim() || '认识';
-          return !(t === e.targetName && ty === e.type);
+          const matchT = t === e.target || t === e.targetName || t === (nodeMap.get(e.target)?.name || '');
+          return !(matchT && ty === e.type);
         });
         await api.patch('/characters/' + e.source, { relationships: next });
       }

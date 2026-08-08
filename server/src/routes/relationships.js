@@ -24,6 +24,7 @@ export function buildGraph(pid) {
     arc: c.arc || '',
   }));
   const nameToId = new Map(nodes.map(n => [n.name, n.id]));
+  const idToName = new Map(nodes.map(n => [n.id, n.name]));
   const edges = [];
   const seen = new Set();
   for (const c of cards) {
@@ -31,7 +32,9 @@ export function buildGraph(pid) {
       const rel = r && typeof r === 'object' ? r : { target: r };
       const targetName = String(rel.target || rel.name || '').trim();
       if (!targetName) continue;
-      const targetId = nameToId.get(targetName);
+      // target 可能是角色名（旧数据/手工）或角色 ID（apply 写入），两种都解析
+      let targetId = nameToId.get(targetName);
+      if (!targetId && idToName.has(targetName)) targetId = targetName;
       if (!targetId || targetId === c.id) continue;
       const type = String(rel.type || rel.label || rel.relation || '').trim() || '认识';
       const key = c.id + '|' + targetId + '|' + type;
