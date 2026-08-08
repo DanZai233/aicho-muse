@@ -11,7 +11,7 @@ function toolFormat() {
   return lines.join('\n');
 }
 
-export function buildAgentSystemPrompt({ persona, project, chapter, assistantName, userName, memories, writingMode }) {
+export function buildAgentSystemPrompt({ persona, project, chapter, assistantName, userName, memories, writingMode, referenceDocs }) {
   const personaName = persona?.name || '黎文';
   const parts = [
     persona?.name ? personaPrompt(persona) : '',
@@ -47,8 +47,23 @@ export function buildAgentSystemPrompt({ persona, project, chapter, assistantNam
     chapter ? `当前章节：${chapter.title}。` : '',
     project ? buildSmartContext(project.id, chapter?.id) : '',
     memories?.length ? `【记忆上下文】你记得这些关于用户的创作信息：\n${memories.map(m => '- [' + (m.scope === 'project' ? '作品' : '用户') + '] ' + m.content).join('\n')}` : '',
+    referenceDocs && referenceDocs.length ? buildReferenceSection(project, referenceDocs) : '',
   ].filter(Boolean);
   return parts.join('\n');
+}
+
+// 用户 @ 的参考文章：文学创作时作为素材，论文时作为可引用的文献来源
+function buildReferenceSection(project, docs) {
+  const isPaper = project && project.genre === 'paper';
+  const head = isPaper
+    ? '【参考资料（用户已 @ 引用）】以下内容来自用户指定的文献，是论文引用的重要来源。写作与回答时必须以这些资料为依据，正文中按学术规范标注引用编号（如 [R1]、[R2]），并在引用时优先使用这些资料中的具体观点、数据或表述。'
+    : '【参考素材（用户已 @ 引用）】以下内容来自用户指定的参考文章（如同人作品设定、原著片段、历史资料等）。写作时请忠实于这些素材的设定与事实，自然地融入作品，不要歪曲或随意编造素材中的关键信息。';
+  const body = docs.map((doc, i) => {
+    const tag = isPaper ? '[R' + (i + 1) + '] ' : '';
+    const excerpt = (doc.excerpts || []).join('\n…\n');
+    return tag + '《' + doc.title + '》：\n' + excerpt;
+  }).join('\n\n');
+  return head + '\n' + body;
 }
 
 // 论文（学术写作）专用提示词：结构与学术规范优先于文学性表达

@@ -24,6 +24,7 @@ export default function Brand() {
           </div>
           <div className="flex items-center gap-2">
             <Link to="/login" className="rounded-lg px-3 py-1.5 text-sm text-ink/60 transition hover:bg-ink/5 hover:text-ink">登录</Link>
+            <Link to="/shares" className="rounded-lg px-3 py-1.5 text-sm text-ink/60 transition hover:bg-ink/5 hover:text-ink">拾卷</Link>
             <Link to="/login" className="rounded-lg bg-accent px-3.5 py-1.5 text-sm font-medium text-paper transition hover:bg-accent/90">免费开始</Link>
           </div>
         </div>

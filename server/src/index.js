@@ -26,6 +26,8 @@ import assistantRoutes from './routes/assistant.js';
 import agentLogsRoutes from './routes/agent-logs.js';
 import importRoutes from './routes/import.js';
 import citationRoutes from './routes/citations.js';
+import shareRoutes from './routes/shares.js';
+import referenceDocRoutes from './routes/reference-docs.js';
 import { attachPresenceServer } from './realtime/server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -63,6 +65,7 @@ app.get('/api/v1/uploads/:name', (req, res) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1', shareRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/personas', personaRoutes);
 app.use('/api/v1/voice-profiles', voiceRoutes);
@@ -80,7 +83,7 @@ app.use('/api/v1/assistant', assistantRoutes);
 app.use('/api/v1/agent-logs', agentLogsRoutes);
 app.use('/api/v1', importRoutes);
 app.use('/api/v1', citationRoutes);
-
+app.use('/api/v1', referenceDocRoutes);
 startTrashReaper();
 startAutoSaveSnapshot();
 

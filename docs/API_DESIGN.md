@@ -302,3 +302,23 @@ multipart/form-data: audio 文件 + lang=zh-CN
 - 参考文献：`GET/POST /api/v1/projects/:pid/citations`，`PATCH/DELETE /api/v1/citations/:id`
 - 导出（MD/DOCX/PDF）自动附带摘要、关键词、引用格式与文末参考文献列表
 - 写作 Agent 对 `paper` 项目启用学术提示词（客观语气、结构建议、[n] 引用规范）
+
+## 14. 拾卷（分享广场）与参考文章
+
+### 拾卷分享
+
+- `POST /api/v1/shares`（登录，owner）：发布作品为公开分享。自动为当前状态创建快照副本（章节正文深拷贝），与原作品完全解耦；同一作品重复发布返回已有分享。
+- `GET /api/v1/shares?page=&q=&genre=&sort=`：公开广场列表（无需登录），支持搜索/体裁筛选/按最新或点赞排序。
+- `GET /api/v1/shares/:id`：公开详情（无需登录），返回完整章节快照；阅读时浏览量 +1。
+- `POST /api/v1/shares/:id/republish`（登录，owner）：再发版，用最新内容刷新快照，版本号 +1，点赞/浏览保留。
+- `POST /api/v1/shares/:id/like`（登录）：点赞/取消点赞。
+- `DELETE /api/v1/shares/:id`（登录，owner）：下架。
+- `GET /api/v1/shares/by-project/:pid`（登录）：查询作品当前的分享状态。
+
+### 参考文章（知识库）
+
+- `POST /api/v1/projects/:pid/reference-docs`（multipart，可编辑）：导入 docx/md/txt 参考文章，单文件 ≤50MB，自动按 3000 字分块（重叠 200 字）写入 `reference_chunks`。
+- `GET /api/v1/projects/:pid/reference-docs`：作品参考文章列表（含分块数与字数）。
+- `GET /api/v1/reference-docs/:id`、`GET /api/v1/reference-docs/:id/chunks?from=&limit=`：元信息与分块分页读取。
+- `PATCH /api/v1/reference-docs/:id`（改标题）、`DELETE /api/v1/reference-docs/:id`（级联删分块）。
+- 聊天 `POST /api/v1/conversations/:id/messages` 支持 `reference_doc_ids` 字段（≤8 篇）；SSE 生成时注入对应文章前若干分块（总 ≤8000 字）到 Agent 提示词。论文模式以 [R1]/[R2] 标注引用，文学模式作为同人/史料素材。

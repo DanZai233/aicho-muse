@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, Citation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
+import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, Citation, ReferenceDoc, ShareInfo, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input, Spinner } from '../components/ui';
@@ -15,6 +15,7 @@ import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, stopSpeakT
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 import CitationsPanel from '../components/CitationsPanel';
 import PaperInfoPanel from '../components/PaperInfoPanel';
+import ReferenceDocsPanel from '../components/ReferenceDocsPanel';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
@@ -167,7 +168,7 @@ export default function Workspace() {
   const [suggestMsg, setSuggestMsg] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState('');
-  const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas' | 'citations'>('book');
+  const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas' | 'citations' | 'refs'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
   const [characters, setCharacters] = useState<StructItem[]>([]);
   const [timeline, setTimeline] = useState<StructItem[]>([]);
@@ -187,6 +188,15 @@ export default function Workspace() {
   const [citations, setCitations] = useState<Citation[]>([]);
   const [showPaperInfo, setShowPaperInfo] = useState(false);
   const [paperInfoKey, setPaperInfoKey] = useState(0);
+  const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareMsg, setShareMsg] = useState('');
+  const [showSharePanel, setShowSharePanel] = useState(false);
+  const [refDocs, setRefDocs] = useState<ReferenceDoc[]>([]);
+  const [refUploadBusy, setRefUploadBusy] = useState(false);
+  const [refMsg, setRefMsg] = useState('');
+  const [pickedRefs, setPickedRefs] = useState<string[]>([]);
+  const [showRefPicker, setShowRefPicker] = useState(false);
 
   const msgsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -210,6 +220,12 @@ export default function Workspace() {
     setChapters(d.chapters);
     loadStructure(id);
     setPaperInfoKey(k => k + 1);
+    try {
+      const sd = await api.get<{ share: ShareInfo | null }>('/shares/by-project/' + id);
+      setShareInfo(sd.share);
+      const rd = await api.get<{ list: ReferenceDoc[] }>('/projects/' + id + '/reference-docs');
+      setRefDocs(rd.list);
+    } catch { /* ignore */ }
     if (d.project.genre === 'paper') {
       try { setCitations((await api.get<{ list: Citation[] }>('/projects/' + id + '/citations')).list); } catch { /* ignore */ }
     }
@@ -324,7 +340,7 @@ export default function Workspace() {
     setStreaming(true); setStreamText('');
     abortRef.current = new AbortController();
     try {
-      await api.post('/conversations/' + conv.id + '/messages', { content });
+      await api.post('/conversations/' + conv.id + '/messages', { content, reference_doc_ids: pickedRefs });
       const resp = await fetch('/api/v1/conversations/' + conv.id + '/stream', { headers: { Authorization: 'Bearer ' + localStorage.getItem('am_token') }, signal: abortRef.current.signal });
       if (!resp.ok || !resp.body) throw new Error('流式连接失败');
       const reader = resp.body.getReader();
@@ -488,6 +504,62 @@ export default function Workspace() {
     if (!project) return;
     const d = await api.post<{ chapter: Chapter }>('/projects/' + project.id + '/chapters', {});
     setChapters(prev => [...prev, d.chapter]); setChapter(d.chapter);
+  };
+
+  // 分享到拾卷：创建当前状态快照（发布后原作品修改不影响已分享内容）
+  const publishShare = async () => {
+    if (!project) return;
+    setShareBusy(true); setShareMsg('');
+    try {
+      const d = await api.post<{ share: ShareInfo; already?: boolean }>('/shares', { project_id: project.id });
+      setShareInfo(d.share);
+      setShareMsg(d.already ? '这本书已经在拾卷里了 ✓' : '已分享到拾卷 v1 ✓');
+      setTimeout(() => setShareMsg(''), 4000);
+    } catch (e: any) { setShareMsg(e.message || '发布失败'); setTimeout(() => setShareMsg(''), 5000); }
+    finally { setShareBusy(false); }
+  };
+  const republishShare = async () => {
+    if (!shareInfo) return;
+    setShareBusy(true); setShareMsg('');
+    try {
+      const d = await api.post<{ share: ShareInfo }>('/shares/' + shareInfo.id + '/republish', {});
+      setShareInfo(d.share);
+      setShareMsg('已再发版 v' + d.share.version + ' ✓');
+      setTimeout(() => setShareMsg(''), 4000);
+    } catch (e: any) { setShareMsg(e.message || '再发版失败'); setTimeout(() => setShareMsg(''), 5000); }
+    finally { setShareBusy(false); }
+  };
+  const unshare = async () => {
+    if (!shareInfo || !confirm('确定把这本书从拾卷下架？')) return;
+    try {
+      await api.del('/shares/' + shareInfo.id);
+      setShareInfo(null); setShareMsg('已从拾卷下架');
+      setTimeout(() => setShareMsg(''), 4000);
+    } catch { /* ignore */ }
+  };
+
+  // 参考文章：上传大文本自动分块入知识库
+  const uploadRef = async (file: File, title: string) => {
+    if (!project) return;
+    setRefUploadBusy(true); setRefMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('title', title);
+      const d = await api.upload<{ doc: ReferenceDoc; chunk_count: number }>('/projects/' + project.id + '/reference-docs', fd);
+      setRefDocs(prev => [d.doc, ...prev]);
+      setRefMsg('已导入《' + d.doc.title + '》（' + d.chunk_count + ' 段）✓');
+      setTimeout(() => setRefMsg(''), 5000);
+    } catch (e: any) { setRefMsg(e.message || '导入失败'); setTimeout(() => setRefMsg(''), 6000); }
+    finally { setRefUploadBusy(false); }
+  };
+  const deleteRef = async (id: string, title: string) => {
+    if (!confirm('删除参考文章《' + title + '》？')) return;
+    try {
+      await api.del('/reference-docs/' + id);
+      setRefDocs(prev => prev.filter(x => x.id !== id));
+      setPickedRefs(prev => prev.filter(x => x !== id));
+    } catch { /* ignore */ }
   };
   const cycleChapterStatus = async () => {
     if (!chapter) return;
@@ -856,7 +928,7 @@ export default function Workspace() {
             </div>
           </div>
           <div className="flex gap-0.5 border-b border-ink/5 px-2 py-2 text-xs">
-            {([['book', '书'], ['outline', '大纲'], ['characters', '人物'], ['timeline', '时间线'], ['ideas', '灵感'], ...(project?.genre === 'paper' ? [['citations', '文献'] as const] : [])]).map(([k, v]) => (
+            {([['book', '书'], ['outline', '大纲'], ['characters', '人物'], ['timeline', '时间线'], ['ideas', '灵感'], ...(project?.genre === 'paper' ? [['citations', '文献'] as const] : []), ['refs', '参考']] as const).map(([k, v]) => (
               <button key={k} onClick={() => setLeftTab(k as typeof leftTab)}
                 className={"flex-1 rounded-md px-1 py-1.5 transition " + (leftTab === k ? 'bg-accentlight/80 font-medium text-ink' : 'text-ink/45 hover:text-ink')}>{v}</button>
             ))}
@@ -922,6 +994,11 @@ export default function Workspace() {
             {leftTab === 'citations' && project && (
               <CitationsPanel projectId={project.id} citations={citations} setCitations={setCitations} onInsert={insertCitationMark} />
             )}
+            {leftTab === 'refs' && (
+              <ReferenceDocsPanel docs={refDocs} onUpload={uploadRef} onDelete={deleteRef}
+                onPick={id => setPickedRefs(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])} picked={pickedRefs} />
+            )}
+            {refMsg && <p className="mt-2 px-2 text-xs text-ink/55">{refMsg}</p>}
           </div>
         </aside>
 
@@ -944,7 +1021,17 @@ export default function Workspace() {
             </div>
             <div className="flex items-center gap-1 text-xs text-ink/45">
               {project && (
-                <button onClick={openShare} className="rounded-md bg-accentlight/70 px-2.5 py-1 font-medium text-ink transition hover:bg-accentlight" title="邀请协作者共同创作">🔗 分享</button>
+                <button onClick={openShare} className="rounded-md bg-accentlight/70 px-2.5 py-1 font-medium text-ink transition hover:bg-accentlight" title="邀请协作者共同创作">🔗 协作者</button>
+              )}
+              {project && (
+                <button onClick={() => setShowSharePanel(true)} disabled={shareBusy} title={shareInfo ? '已分享到拾卷' : '把当前状态快照发布到拾卷'}
+                  className={"rounded-md px-2.5 py-1 font-medium transition disabled:opacity-40 " + (shareInfo ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-accentlight/70 text-ink hover:bg-accentlight')}>
+                  {shareBusy ? '…' : (shareInfo ? '📤 v' + shareInfo.version : '📤 拾卷')}
+                </button>
+              )}
+              {shareInfo && (
+                <a href={'/shares/' + shareInfo.id} target="_blank" rel="noreferrer"
+                  className="rounded-md px-2 py-1 text-accent hover:underline" title="查看已分享的版本">公开页 ↗</a>
               )}
               {project && (
                 <span className="flex items-center gap-0.5">
@@ -1198,6 +1285,31 @@ export default function Workspace() {
               {conv && (
                 <div className="mb-1.5 flex flex-wrap items-center gap-1">
                   <span className="mr-0.5 text-[10px] text-ink/35">快捷：</span>
+                  {refDocs.length > 0 && (
+                    <div className="relative">
+                      <button onClick={() => setShowRefPicker(v => !v)}
+                        className={"rounded-full px-2.5 py-0.5 text-xs transition " + (pickedRefs.length ? 'bg-ink text-paper' : 'bg-accentlight/50 text-ink/65 hover:bg-accentlight')}>
+                        @ 参考文章{pickedRefs.length ? ' ×' + pickedRefs.length : ''}
+                      </button>
+                      {showRefPicker && (
+                        <div className="absolute bottom-8 left-0 z-50 w-64 rounded-xl border border-ink/10 bg-surface p-2 shadow-lift animate-fade-up">
+                          <p className="mb-1.5 px-1 text-[10px] text-ink/40">选择要在本次对话中 @ 的参考文章（最多 8 篇）</p>
+                          <div className="max-h-52 space-y-1 overflow-y-auto">
+                            {refDocs.map(d => {
+                              const on = pickedRefs.includes(d.id);
+                              return (
+                                <button key={d.id} onClick={() => setPickedRefs(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : (prev.length >= 8 ? prev : [...prev, d.id]))}
+                                  className={"flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition " + (on ? 'bg-accentlight/70 font-medium' : 'hover:bg-ink/5')}>
+                                  <span className="truncate">@ {d.title}</span>
+                                  {on && <span className="ml-2 text-accent">✓</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <button onClick={() => { setInput(p => (p ? p + ' ' : '') + '@' + (chapter?.title || '当前章节') + ' '); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="在输入中引用当前章节">@当前章节</button>
                   <button onClick={() => { setInput(p => (p ? p + ' ' : '') + '把这句话记进灵感箱：'); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="把要说的话记成一条灵感">💡 灵感</button>
                   {chapter?.content && (
@@ -1334,6 +1446,34 @@ export default function Workspace() {
           </p>
           {collabSection}
           <p className="text-xs leading-5 text-ink/40">提示：协作者通过「加入作品 → 输入邀请码」进入；目前为保存后同步，暂不支持多人同时在线编辑与光标定位。</p>
+        </div>
+      </Modal>
+
+      <Modal open={showSharePanel} onClose={() => setShowSharePanel(false)} title="分享到拾卷">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-ink/60">
+            发布时会为这本书的<b>当前状态创建一份快照</b>，之后你继续修改原作品不会影响已分享的内容。
+            {shareInfo && <>已发布 <b>v{shareInfo.version}</b>（{new Date(shareInfo.republished_at).toLocaleDateString('zh-CN')}），{shareInfo.like_count} 人点赞，{shareInfo.view_count} 次阅读。</>}
+          </p>
+          {shareInfo && (
+            <a href={'/shares/' + shareInfo.id} target="_blank" rel="noreferrer"
+              className="block rounded-xl border border-ink/10 bg-paper/50 p-3 text-sm text-accent hover:underline">
+              🔖 拾卷公开页：/shares/{shareInfo.id}
+            </a>
+          )}
+          {shareMsg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{shareMsg}</p>}
+          <div className="flex gap-2">
+            {!shareInfo ? (
+              <Button onClick={publishShare} disabled={shareBusy} className="flex-1">{shareBusy ? '发布中…' : '📤 发布当前版本（v1）'}</Button>
+            ) : (
+              <>
+                <Button onClick={republishShare} disabled={shareBusy} className="flex-1">{shareBusy ? '发布中…' : '🔄 再发版（v' + ((shareInfo.version || 1) + 1) + '）'}</Button>
+                <Button variant="danger" onClick={unshare} className="shrink-0">下架</Button>
+              </>
+            )}
+            <Button variant="ghost" onClick={() => setShowSharePanel(false)}>关闭</Button>
+          </div>
+          <p className="text-xs leading-5 text-ink/40">再发版会把这本书的最新内容更新到分享快照，版本号 +1；点赞与阅读数据会保留。只有作品创建者可以发布。</p>
         </div>
       </Modal>
 

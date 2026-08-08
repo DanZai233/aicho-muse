@@ -68,7 +68,7 @@ function executeTool(toolCall, input, project, chapter) {
 }
 
 // Agent 主入口
-export async function runWritingAgent({ persona, project, chapter, input, history, userId, conversationId }) {
+export async function runWritingAgent({ persona, project, chapter, input, history, userId, conversationId, referenceDocs }) {
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
   const userName = (userPrefs?.my_name || '').trim();
@@ -86,7 +86,7 @@ export async function runWritingAgent({ persona, project, chapter, input, histor
 
   if (hasUni || hasLegacy) {
     try {
-      const system = buildAgentSystemPrompt({ persona, project, chapter, assistantName, userName, memories, writingMode });
+      const system = buildAgentSystemPrompt({ persona, project, chapter, assistantName, userName, memories, writingMode, referenceDocs });
       const messages = [
         { role: 'system', content: system },
         ...(history || []).slice(-8).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),

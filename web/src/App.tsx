@@ -9,6 +9,8 @@ import Voices from './pages/Voices';
 import Settings from './pages/Settings';
 import AdminLogin from './pages/AdminLogin';
 import Admin from './pages/Admin';
+import SharingSquare from './pages/SharingSquare';
+import SharedBook from './pages/SharedBook';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { token } = useAuth();
@@ -29,6 +31,8 @@ export default function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/" element={<HomeOrBrand />} />
+        <Route path="/shares" element={<SharingSquare />} />
+        <Route path="/shares/:id" element={<SharedBook />} />
         <Route path="/workspace" element={<Protected><Workspace /></Protected>} />
         <Route path="/personas" element={<Protected><Personas /></Protected>} />
         <Route path="/voices" element={<Protected><Voices /></Protected>} />

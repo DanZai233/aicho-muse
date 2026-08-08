@@ -114,6 +114,9 @@ router.delete('/:id', (req, res) => {
     character_cards: d.character_cards.filter(c => c.project_id === p.id),
     timeline_events: d.timeline_events.filter(t => t.project_id === p.id),
     idea_notes: d.idea_notes.filter(i => i.project_id === p.id),
+    citations: d.citations.filter(c => c.project_id === p.id),
+    shares: d.shares.filter(s => s.project_id === p.id),
+    reference_docs: d.reference_docs.filter(r => r.project_id === p.id),
   };
   d.projects = d.projects.filter(x => x.id !== p.id);
   d.chapters = d.chapters.filter(c => c.project_id !== p.id);
@@ -124,6 +127,11 @@ router.delete('/:id', (req, res) => {
   d.character_cards = d.character_cards.filter(c => c.project_id !== p.id);
   d.timeline_events = d.timeline_events.filter(t => t.project_id !== p.id);
   d.idea_notes = d.idea_notes.filter(i => i.project_id !== p.id);
+  d.citations = d.citations.filter(c => c.project_id !== p.id);
+  d.shares = d.shares.filter(s => s.project_id !== p.id);
+  const delRefIds = new Set(d.reference_docs.filter(r => r.project_id === p.id).map(r => r.id));
+  d.reference_docs = d.reference_docs.filter(r => r.project_id !== p.id);
+  d.reference_chunks = d.reference_chunks.filter(c => !delRefIds.has(c.doc_id));
   d.trash.push({ id: p.id, kind: 'project', deleted_at: new Date().toISOString(), data: snapshot });
   saveDb();
   res.json({ code: 0, data: { ok: true, undo_until: Date.now() + 30000 } });

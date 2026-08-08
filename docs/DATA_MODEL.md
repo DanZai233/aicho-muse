@@ -237,3 +237,10 @@ flowchart LR
 - 新增集合 `citations`：论文参考文献，字段 `project_id / key / raw / title / authors / year / source / note / order_index`，随项目落库（MySQL app_data / JSON 文件双模式）。
 - 项目新增字段：`abstract`（论文摘要）、`keywords`（关键词数组）、`citation_style`（gb7714/apa/mla）。
 - 文件导入不新增集合：章节写入 `chapters`，AI 大纲写入 `outline_nodes`，AI 知识提取写入 `memories`（scope=project，source=import）。
+
+## 9. 拾卷分享与参考文章
+
+- `shares`：分享快照（作品元信息 + 章节正文副本 + version/likes/view_count）。发布时深拷贝，后续原作品修改不影响；再发版刷新快照并 version+1。
+- `reference_docs`：参考文章元信息（project_id/title/source/word_count）。
+- `reference_chunks`：参考文章分块（doc_id/idx/text，约 3000 字/块），大文本不整篇进内存。
+- 用户注销级联清理 shares/reference_docs/reference_chunks；作品删除同样级联。

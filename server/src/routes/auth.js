@@ -58,6 +58,10 @@ router.delete('/me', authRequired, (req, res) => {
   d.timeline_events = d.timeline_events.filter(t => !projectIds.includes(t.project_id));
   d.idea_notes = d.idea_notes.filter(i => !projectIds.includes(i.project_id));
   d.memories = d.memories.filter(m => m.user_id !== u.id);
+  d.shares = d.shares.filter(s => s.user_id !== u.id);
+  const refDocIds = d.reference_docs.filter(r => r.user_id === u.id || projectIds.includes(r.project_id)).map(r => r.id);
+  d.reference_docs = d.reference_docs.filter(r => r.user_id !== u.id && !projectIds.includes(r.project_id));
+  d.reference_chunks = d.reference_chunks.filter(c => !refDocIds.includes(c.doc_id));
   // 从他人作品的协作者中移除自己
   for (const p of d.projects) {
     if (p.collaborators) p.collaborators = p.collaborators.filter(c => c.user_id !== u.id);

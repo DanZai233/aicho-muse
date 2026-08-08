@@ -108,8 +108,19 @@ router.post('/:id/messages', (req, res) => {
   const found = ownConv(req, req.params.id);
   if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
   const c = found.c;
-  const { content, reply_as_voice } = req.body || {};
+  const { content, reply_as_voice, reference_doc_ids } = req.body || {};
   if (!content || !content.trim()) return res.status(400).json({ code: 40001, message: '消息不能为空' });
+  // 校验 @ 参考文章属于当前作品且用户可访问
+  const refIds = Array.isArray(reference_doc_ids) ? reference_doc_ids.slice(0, 8) : [];
+  if (refIds.length) {
+    if (!c.project_id) return res.status(400).json({ code: 40001, message: '该会话未关联作品，无法引用参考文章' });
+    const proj = d.projects.find(p => p.id === c.project_id);
+    if (!proj) return res.status(400).json({ code: 40001, message: '作品不存在' });
+    for (const rid of refIds) {
+      const doc = d.reference_docs.find(x => x.id === rid && x.project_id === c.project_id);
+      if (!doc || !canView(req, proj)) return res.status(400).json({ code: 40001, message: '参考文章不存在或不可用' });
+    }
+  }
   const q = checkQuota('message', req.user.id);
   if (!q.allowed) return res.status(429).json({ code: 42901, message: '今日消息配额已用完（' + q.limit + ' 条），请明天再试', quota: q });
   const qm = checkQuota('message_minute', req.user.id);
@@ -117,7 +128,7 @@ router.post('/:id/messages', (req, res) => {
   consumeQuota('message', req.user.id);
   consumeQuota('message_minute', req.user.id);
   const now = new Date().toISOString();
-  const msg = { id: uuid(), conversation_id: c.id, role: 'user', content: content.trim(), reply_as_voice: !!reply_as_voice, created_at: now };
+  const msg = { id: uuid(), conversation_id: c.id, role: 'user', content: content.trim(), reply_as_voice: !!reply_as_voice, reference_doc_ids: refIds, created_at: now };
   d.messages.push(msg);
   d.stats.messages_sent++;
   c.updated_at = now;
@@ -158,11 +169,31 @@ router.get('/:id/stream', (req, res) => {
   const lastUser = [...d.messages].reverse().find(m => m.conversation_id === c.id && m.role === 'user');
   const input = lastUser ? lastUser.content : '';
 
+  // 加载用户 @ 的参考文章分块（大文本按需取，限制总注入量防超长）
+  let referenceDocs = [];
+  try {
+    const refIds = lastUser?.reference_doc_ids || [];
+    if (refIds.length) {
+      const docs = d.reference_docs.filter(x => refIds.includes(x.id) && x.project_id === c.project_id);
+      for (const doc of docs) {
+        const chunks = d.reference_chunks.filter(c => c.doc_id === doc.id).sort((a, b) => a.idx - b.idx);
+        let excerpts = [];
+        let total = 0;
+        for (const ch of chunks) {
+          if (total >= 8000) break;
+          excerpts.push(ch.text.slice(0, 2000));
+          total += ch.text.length;
+        }
+        referenceDocs.push({ id: doc.id, title: doc.title, excerpts });
+      }
+    }
+  } catch (e) { console.error('[SSE] 参考文章加载失败:', e.message); }
+
   (async () => {
     try {
       send('start', { ok: true });
       const { reply, replyType, source, tool, params } = await runWritingAgent({
-        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id, conversationId: c.id,
+        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id, conversationId: c.id, referenceDocs,
       });
       // 流式输出：按句分片
       const chunks = reply.split(/(?<=[。！？!?；;])/).filter(s => s.trim());

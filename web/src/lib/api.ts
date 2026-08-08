@@ -108,6 +108,22 @@ export type Citation = {
   order_index: number; created_at: string; updated_at: string;
 };
 
+export type ReferenceDoc = {
+  id: string; project_id: string; title: string; source: string;
+  word_count: number; chunk_count: number; created_at: string; updated_at: string;
+};
+
+export type ShareInfo = {
+  id: string; project_id: string; user_id: string; version: number;
+  title: string; subtitle: string; author_name: string; cover_color: string;
+  genre: string; language: string; theme: string; abstract: string;
+  keywords: string[]; citation_style: string;
+  chapter_count: number; word_count: number; like_count: number; view_count: number;
+  liked_by_me?: boolean; hidden: boolean; created_at: string; updated_at: string; republished_at: string;
+  author?: { display_name: string; avatar_color?: string } | null;
+  chapters?: { title: string; content: string; order_index: number }[];
+};
+
 export const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
 export const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
 export const CITATION_STYLE_LABEL: Record<string, string> = { gb7714: 'GB/T 7714', apa: 'APA', mla: 'MLA' };

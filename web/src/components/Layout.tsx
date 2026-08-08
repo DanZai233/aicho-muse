@@ -55,6 +55,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/personas" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">人设</Link>
             <Link to="/voices" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">声色</Link>
             <Link to="/settings" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">设置</Link>
+            <Link to="/shares" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">拾卷</Link>
             <button onClick={() => setDark(d => !d)} title={dark ? '切换浅色模式' : '切换深色模式'}
               className="ml-1 rounded-lg px-2.5 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">
               {dark ? '☀️' : '🌙'}
