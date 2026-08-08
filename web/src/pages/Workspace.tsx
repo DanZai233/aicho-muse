@@ -994,7 +994,7 @@ export default function Workspace() {
                     <button onClick={deleteChapter} className="ml-auto text-xs text-ink/30 hover:text-red-500">删除章节</button>
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-8">
-                    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/10">
+                    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/10 dark:bg-paper dark:shadow-none dark:ring-0">
                       <MarkdownEditor
                         value={chapter.content}
                         onChange={updateContent}
