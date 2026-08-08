@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { Button, Input } from '../components/ui';
 
 export default function Login() {
   const { login, register } = useAuth();
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const next = params.get('next') || '';
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,7 +22,7 @@ export default function Login() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name || email.split('@')[0]);
-      nav('/');
+      nav(next.startsWith('/') ? next : '/');
     } catch (ex: any) {
       setErr(ex.message || '操作失败');
     } finally {
