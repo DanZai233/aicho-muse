@@ -46,6 +46,11 @@ services:
       TTS_API_KEY: ${TTS_API_KEY:-}
       TTS_MODEL: ${TTS_MODEL:-s2.1-pro-free}
       TTS_BASE_URL: ${TTS_BASE_URL:-https://api.fish.audio}
+      # 代理：muse 容器内 Fish Audio 走宿主 mihomo（只影响本服务的出站请求）
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      NODE_USE_ENV_PROXY: ${NODE_USE_ENV_PROXY:-1}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,mysql}
     ports:
       - "${APP_PORT:-3001}:3001"
     volumes:
