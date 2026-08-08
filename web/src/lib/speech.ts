@@ -77,3 +77,38 @@ export function startQuietRecording(onText: (t: string) => void, onEnd: (final: 
 
 export function interruptSpeech() { stopSpeak(); }
 
+
+// ---------- Fish Audio TTS 朗读（优先），失败回退浏览器 ----------
+// 调后端 /tts/synthesize（Fish Audio s2.1-pro-free + 音频广场音色），
+// 未配置 Key / 失败时自动回退浏览器原生 speechSynthesis。
+let ttsAudio: HTMLAudioElement | null = null;
+
+export async function speakWithTTS(
+  text: string,
+  opts: { rate?: number; pitch?: number; onEnd?: () => void; onStart?: () => void; voiceId?: string } = {},
+): Promise<boolean> {
+  try {
+    const token = localStorage.getItem('token');
+    const resp = await fetch('/api/v1/tts/synthesize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      body: JSON.stringify({ text, stream: false, voice_id: opts.voiceId || null }),
+    });
+    const json = await resp.json().catch(() => null);
+    if (json?.code === 0 && json.data?.audio_url) {
+      stopSpeak();
+      ttsAudio = new Audio(json.data.audio_url);
+      ttsAudio.onplay = () => opts.onStart?.();
+      ttsAudio.onended = () => { ttsAudio = null; opts.onEnd?.(); };
+      ttsAudio.onerror = () => { ttsAudio = null; opts.onEnd?.(); };
+      ttsAudio.play().catch(() => { opts.onEnd?.(); });
+      return true;
+    }
+  } catch { /* 回退浏览器 */ }
+  return speak(text, { rate: opts.rate, pitch: opts.pitch, onEnd: opts.onEnd, onStart: opts.onStart });
+}
+
+export function stopSpeakTTS() {
+  if (ttsAudio) { try { ttsAudio.pause(); ttsAudio = null; } catch { /* ignore */ } }
+  stopSpeak();
+}

@@ -5,6 +5,15 @@ import { db, saveDb, uuid } from '../db.js';
 const router = Router();
 router.use(authRequired);
 
+function fishConfig() {
+  const s = db().settings.tts || {};
+  return {
+    api_key: process.env.TTS_API_KEY || s.api_key || '',
+    base_url: String(process.env.TTS_BASE_URL || s.base_url || 'https://api.fish.audio').replace(/\/+$/, ''),
+    model: process.env.TTS_MODEL || s.model || 's2.1-pro-free',
+  };
+}
+
 function visibleVoices(req) {
   return db().voices.filter(v => v.is_preset || v.user_id === req.user.id || v.is_public);
 }
@@ -106,4 +115,74 @@ router.post('/clone/from-audio', async (req, res) => {
   }
 });
 
+
+// ---------- Fish Audio 音频广场 ----------
+// 搜索公开音色库（self_only=false），返回可试听/收藏的音色列表
+router.get('/library/search', async (req, res) => {
+  const cfg = fishConfig();
+  if (!cfg.api_key) return res.status(501).json({ code: 50101, message: '尚未配置 Fish Audio API Key（管理后台 → 语音服务）' });
+  const q = String(req.query.q || '').trim();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(30, Math.max(1, Number(req.query.page_size) || 10));
+  try {
+    const url = cfg.base_url + '/model?self_only=false&page_size=' + pageSize + '&page=' + page + (q ? '&title=' + encodeURIComponent(q) : '');
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + cfg.api_key }, signal: AbortSignal.timeout(30000) });
+    if (!r.ok) throw new Error('Fish 搜索 ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
+    const data = await r.json();
+    const items = (data.items || []).filter(i => i.state === 'trained').map(i => ({
+      id: i._id,
+      title: i.title,
+      description: i.description,
+      cover_image: i.cover_image,
+      tags: i.tags || [],
+      languages: i.languages || [],
+      sample_audio: i.samples?.[0]?.audio || null,
+      default_text: i.default_text || null,
+      visibility: i.visibility,
+    }));
+    res.json({ code: 0, data: { total: data.total || 0, list: items, page, page_size: pageSize } });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: '音频广场搜索失败：' + e.message });
+  }
+});
+
+// 收藏广场音色 → 生成 fish-audio voice profile（voice_id = reference_id）
+router.post('/library/:id/add', async (req, res) => {
+  const cfg = fishConfig();
+  if (!cfg.api_key) return res.status(501).json({ code: 50101, message: '尚未配置 Fish Audio API Key（管理后台 → 语音服务）' });
+  const { title, description, sample_audio } = req.body || {};
+  if (!req.params.id) return res.status(400).json({ code: 40001, message: '音色 ID 必填' });
+  try {
+    // 从广场拉一次详情/确认存在（也可直接用传入字段）
+    let meta = { title: title || 'Fish 音色', description: description || '', sample_audio: sample_audio || null };
+    try {
+      const r = await fetch(cfg.base_url + '/model/' + req.params.id, { headers: { Authorization: 'Bearer ' + cfg.api_key }, signal: AbortSignal.timeout(15000) });
+      if (r.ok) {
+        const d = await r.json();
+        meta = { title: d.title || meta.title, description: d.description || meta.description, sample_audio: d.samples?.[0]?.audio || meta.sample_audio };
+      }
+    } catch { /* 用传入字段 */ }
+    const now = new Date().toISOString();
+    const v = {
+      id: uuid(),
+      user_id: req.user.id,
+      display_name: meta.title + '（Fish）',
+      provider: 'fish-audio',
+      voice_id: req.params.id,
+      params: { rate: 1, pitch: 0, emotion: 'calm', energy: 0.6 },
+      speech_notes: meta.description || '',
+      is_preset: false,
+      is_public: false,
+      created_at: now,
+      updated_at: now,
+    };
+    db().voices.push(v);
+    saveDb();
+    res.json({ code: 0, data: { voice: v } });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: '收藏失败：' + e.message });
+  }
+});
+
 export default router;
+

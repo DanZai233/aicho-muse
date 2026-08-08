@@ -13,13 +13,28 @@ if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 const router = Router();
 
+// ---------- 音频访问（短期签名 URL） ----------
+router.get('/audio/:file', (req, res) => {
+  const { file } = req.params;
+  const exp = Number(req.query.exp) || 0;
+  const sig = String(req.query.sig || '');
+  if (!/^[0-9a-f-]+\.mp3$/.test(file)) return res.status(400).json({ code: 40001, message: '非法文件名' });
+  const expect = crypto.createHmac('sha256', process.env.JWT_SECRET || 'aicho-muse-dev-secret-change-me').update(file + ':' + exp).digest('hex');
+  if (!sig || sig !== expect || exp < Date.now()) return res.status(403).json({ code: 40301, message: '链接无效或已过期' });
+  const p = path.join(AUDIO_DIR, file);
+  if (!fs.existsSync(p)) return res.status(404).json({ code: 40401, message: '音频不存在' });
+  res.set('Content-Type', 'audio/mpeg').set('Cache-Control', 'private, max-age=900').sendFile(p);
+});
+
 function ttsConfig() {
   const s = db().settings.tts || {};
+  const provider = String(process.env.TTS_PROVIDER || s.provider || '').toLowerCase();
   return {
+    provider,
     api_key: process.env.TTS_API_KEY || s.api_key || '',
-    base_url: String(process.env.TTS_BASE_URL || s.base_url || 'https://api.openai.com/v1').replace(/\/+$/, ''),
-    voice: process.env.TTS_VOICE || s.voice_uri || 'alloy',
-    model: process.env.TTS_MODEL || s.model || 'tts-1',
+    base_url: String(process.env.TTS_BASE_URL || s.base_url || (provider === 'fish-audio' ? 'https://api.fish.audio' : 'https://api.openai.com/v1')).replace(/\/+$/, ''),
+    voice: process.env.TTS_VOICE || s.voice_uri || '',
+    model: process.env.TTS_MODEL || s.model || (provider === 'fish-audio' ? 's2.1-pro-free' : 'tts-1'),
     rate: s.rate || 1,
   };
 }
@@ -40,20 +55,61 @@ function signUrl(file) {
 
 // ---------- TTS 合成 ----------
 router.post('/tts/synthesize', authRequired, async (req, res) => {
-  const { text, stream } = req.body || {};
+  const { text, stream, voice_id } = req.body || {};
   if (!text || !String(text).trim()) return res.status(400).json({ code: 40001, message: 'text 必填' });
   const q = checkQuota('tts', req.user.id);
   if (!q.allowed) return res.status(429).set('Retry-After', String(3600 - new Date().getMinutes() * 60 - new Date().getSeconds())).json({ code: 42901, message: 'TTS 配额已用尽（' + q.limit + ' 次/小时）' });
   const cfg = ttsConfig();
   if (!cfg.api_key) return res.json({ code: 0, data: { audio_url: null, fallback: 'browser', message: '未配置 TTS 提供商，请使用浏览器朗读' } });
   try {
-    const body = { model: cfg.model, input: String(text).slice(0, 4000), voice: cfg.voice, response_format: 'mp3', speed: Math.min(2, Math.max(0.5, cfg.rate || 1)) };
-    const r = await fetch(cfg.base_url + '/audio/speech', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.api_key },
-      body: JSON.stringify(body), signal: AbortSignal.timeout(30000),
-    });
-    if (!r.ok) throw new Error('TTS ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
-    const buf = Buffer.from(await r.arrayBuffer());
+    let buf;
+    if (cfg.provider === 'fish-audio') {
+      // 未配置音色时，自动从音频广场取第一个公开音色作为默认（并缓存）
+      let refId = String(voice_id || '') || cfg.voice || '';
+      if (!refId) {
+        try {
+          const lib = await fetch(cfg.base_url + '/model?self_only=false&page_size=1&page=1', { headers: { Authorization: 'Bearer ' + cfg.api_key }, signal: AbortSignal.timeout(15000) });
+          if (lib.ok) {
+            const ld = await lib.json();
+            const first = (ld.items || []).find(i => i.state === 'trained');
+            if (first) {
+              refId = first._id;
+              const s2 = db().settings;
+              s2.tts = { ...(s2.tts || {}), voice_uri: refId };
+              // 不阻塞：异步持久化
+              import('../db.js').then(m => m.saveDb()).catch(() => {});
+            }
+          }
+        } catch { /* 广场获取失败则仍用空 */ }
+      }
+      if (!refId) return res.status(502).json({ code: 50201, message: 'Fish TTS 需要音色：请先在「助手声色 → 音频广场」收藏一个音色，或在后台配置 TTS 音色 ID' });
+      // Fish Audio：model 放 header，reference_id 为音色（音频广场收藏的 voice_id 或预设音色）
+      const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.api_key, model: cfg.model };
+      const body = {
+        text: String(text).slice(0, 4000),
+        reference_id: cfg.voice || '',
+        format: 'mp3',
+        prosody: { speed: Math.min(2, Math.max(0.5, cfg.rate || 1)), volume: 0, normalize_loudness: true },
+        normalize: true,
+        chunk_length: 300,
+        sample_rate: 44100,
+        mp3_bitrate: 128,
+        latency: 'normal',
+      };
+      const r = await fetch(cfg.base_url + '/v1/tts', {
+        method: 'POST', headers: h, body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
+      });
+      if (!r.ok) throw new Error('Fish TTS ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
+      buf = Buffer.from(await r.arrayBuffer());
+    } else {
+      const body = { model: cfg.model, input: String(text).slice(0, 4000), voice: cfg.voice, response_format: 'mp3', speed: Math.min(2, Math.max(0.5, cfg.rate || 1)) };
+      const r = await fetch(cfg.base_url + '/audio/speech', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.api_key },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(30000),
+      });
+      if (!r.ok) throw new Error('TTS ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
+      buf = Buffer.from(await r.arrayBuffer());
+    }
     const cfg2 = ttsConfig();
     if (cfg2.no_save_audio) {
       // 不落盘：直接回传 base64 流式播放（隐私：不保存音频）
@@ -96,17 +152,5 @@ router.post('/stt/transcribe', authRequired, async (req, res) => {
   }
 });
 
-// ---------- 音频访问（短期签名 URL） ----------
-router.get('/audio/:file', (req, res) => {
-  const { file } = req.params;
-  const exp = Number(req.query.exp) || 0;
-  const sig = String(req.query.sig || '');
-  if (!/^[0-9a-f-]+\.mp3$/.test(file)) return res.status(400).json({ code: 40001, message: '非法文件名' });
-  const expect = crypto.createHmac('sha256', process.env.JWT_SECRET || 'aicho-muse-dev-secret-change-me').update(file + ':' + exp).digest('hex');
-  if (!sig || sig !== expect || exp < Date.now()) return res.status(403).json({ code: 40301, message: '链接无效或已过期' });
-  const p = path.join(AUDIO_DIR, file);
-  if (!fs.existsSync(p)) return res.status(404).json({ code: 40401, message: '音频不存在' });
-  res.set('Content-Type', 'audio/mpeg').set('Cache-Control', 'private, max-age=900').sendFile(p);
-});
 
 export default router;

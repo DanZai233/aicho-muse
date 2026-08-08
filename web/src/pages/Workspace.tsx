@@ -6,7 +6,7 @@ import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 import MarkdownEditor from '../components/MarkdownEditor';
 import BookCover from '../components/BookCover';
 import DiffReview from '../components/DiffReview';
-import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, interruptSpeech } from '../lib/speech';
+import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, stopSpeakTTS, speakWithTTS, interruptSpeech } from '../lib/speech';
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', writing: '写作稿', other: '回复' };
@@ -280,14 +280,14 @@ export default function Workspace() {
             if (event === 'text_delta') { setStreamText(p => p + data.delta); finalText += data.delta; }
             else if (event === 'text_done') { replyType = data.reply_type || 'other'; finalMsgId = data.message_id || ''; }
             else if (event === 'audio_ready' && data.text) {
-              speak(data.text, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1), onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
+              speakWithTTS(data.text, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1), voiceId: conv?.voice?.voice_id || undefined, onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
             }
           } catch { /* ignore */ }
         }
       }
       if (finalText) {
         setMessages(prev => [...prev, { id: finalMsgId || 'sse-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: finalText, reply_type: replyType, created_at: new Date().toISOString() }]);
-        if (prefs?.read_aloud) speak(finalText, { rate: prefs.tts_rate ?? 1, pitch: prefs.tts_pitch ?? 1, onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
+        if (prefs?.read_aloud) speakWithTTS(finalText, { rate: prefs.tts_rate ?? 1, pitch: prefs.tts_pitch ?? 1, voiceId: conv?.voice?.voice_id || undefined, onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') setMessages(prev => [...prev, { id: 'err-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: '（出错了：' + e.message + '）', reply_type: 'other', created_at: new Date().toISOString() }]);
@@ -819,7 +819,7 @@ export default function Workspace() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                {speaking && <Button variant="subtle" onClick={() => { stopSpeak(); setSpeaking(false); }} className="px-2 py-1 text-xs">■</Button>}
+                {speaking && <Button variant="subtle" onClick={() => { stopSpeakTTS(); setSpeaking(false); }} className="px-2 py-1 text-xs">■</Button>}
                 {streaming && <Button variant="subtle" onClick={stopStream} className="px-2 py-1 text-xs">停止</Button>}
                 <Button variant="ghost" onClick={() => setShowNewConv(true)} className="px-2 py-1 text-xs">新会话</Button>
                 <button onClick={() => setChatOpen(false)} className="rounded-full p-1 text-ink/40 hover:bg-ink/5 hover:text-ink">✕</button>
@@ -848,7 +848,7 @@ export default function Workspace() {
                       <div className="mt-2 flex flex-wrap items-center gap-3">
                         {speakingId === m.id && <span className="text-accent" title="正在朗读"><span className="wave-bars"><span /><span /><span /><span /><span /></span></span>}
 
-                        <button onClick={() => speak(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, onStart: () => { setSpeaking(true); setSpeakingId(m.id); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } })} className="text-xs text-accent hover:underline">🔊 朗读</button>
+                        <button onClick={() => speakWithTTS(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, voiceId: conv?.voice?.voice_id || undefined, onStart: () => { setSpeaking(true); setSpeakingId(m.id); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } })} className="text-xs text-accent hover:underline">🔊 朗读</button>
                         {m.adopted_at ? (
                           <span className="text-xs text-emerald-600">✓ 已采纳到文章</span>
                         ) : isAdoptable(m.reply_type) ? (

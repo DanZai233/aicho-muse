@@ -278,7 +278,7 @@ export default function Admin() {
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-xs text-paper/50">克隆服务端点</span>
-                      <input value={settings.voice_clone?.base_url || ''} onChange={e => setSettings({ ...settings, voice_clone: { ...settings.voice_clone, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.fish.audio" />
+                      <input value={settings.voice_clone?.base_url || ''} onChange={e => setSettings({ ...settings, voice_clone: { ...settings.voice_clone, base_url: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="https://api.fish.audio（Fish 克隆 /v1/voices）" />
                     </label>
                     <label className="block col-span-2">
                       <span className="mb-1 block text-xs text-paper/50">克隆模型</span>
@@ -288,6 +288,12 @@ export default function Admin() {
                   <p className="mt-2 text-[10px] text-paper/40">配置后，用户在「助手声色」页可上传 10–60 秒授权音频样本一键生成专属音色。未配置时界面会提示先到后台配置。</p>
                 </div>
                 <p className="text-xs text-paper/40">配额：TTS 每小时上限与 STT 每日分钟上限在上方「配额与站点」中配置，超限返回 429。</p>
+                <div className="rounded-xl bg-accentlight/15 p-3 text-[11px] leading-5 text-paper/60">
+                  <b>📌 Fish Audio 使用说明</b><br />
+                  · 访问 <span className="text-paper">/admin</span>（或站点域名加 /admin）进入后台，默认账号 admin / admin123，可在「AI 与系统设置」里修改。<br />
+                  · 填入 TTS API Key（sk-fish-...）后，用户端「助手声色」页即可用「音频广场」搜索并收藏公开音色，收藏后成为 TTS 音色（reference_id）。<br />
+                  · 最新模型：s2.1-pro-free（免费开发）/ s2.1-pro（生产），83 种语言，支持 [方括号] 自然语言情绪控制。
+                </div>
               </div>
             </div>
 

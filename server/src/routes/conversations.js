@@ -30,7 +30,7 @@ function withJoins(c) {
   return {
     ...c,
     persona: persona ? { id: persona.id, name: persona.name, tagline: persona.tagline, avatar: persona.avatar || null, avatar_color: persona.avatar_color } : null,
-    voice: voice ? { id: voice.id, display_name: voice.display_name, params: voice.params } : null,
+    voice: voice ? { id: voice.id, display_name: voice.display_name, provider: voice.provider, voice_id: voice.voice_id || null, params: voice.params } : null,
     project: project ? { id: project.id, title: project.title, genre: project.genre } : null,
     last_message: last ? last.content.slice(0, 60) : null,
     updated_at: last ? last.created_at : c.created_at,

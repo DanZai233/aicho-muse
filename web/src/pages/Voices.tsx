@@ -17,8 +17,14 @@ export default function Voices() {
   const [cloneConsent, setCloneConsent] = useState(false);
   const [cloneBusy, setCloneBusy] = useState(false);
   const [cloneMsg, setCloneMsg] = useState('');
-  const [tab, setTab] = useState<'mine' | 'preset' | 'public'>('mine');
+  const [tab, setTab] = useState<'mine' | 'preset' | 'public' | 'library'>('mine');
   const [publicList, setPublicList] = useState<VoiceProfile[]>([]);
+  const [libOpen, setLibOpen] = useState(false);
+  const [libQ, setLibQ] = useState('');
+  const [libItems, setLibItems] = useState<any[]>([]);
+  const [libBusy, setLibBusy] = useState(false);
+  const [libMsg, setLibMsg] = useState('');
+  const [libTab, setLibTab] = useState<'mine' | 'preset' | 'public' | 'library'>('mine');
 
   const load = async () => { setList((await api.get<{ list: VoiceProfile[] }>('/voice-profiles?scope=' + tab)).list); if (tab === 'public') setPublicList((await api.get<{ list: VoiceProfile[] }>('/voice-profiles?scope=public')).list); };
   useEffect(() => { load(); }, [tab]);
@@ -43,6 +49,32 @@ export default function Voices() {
     await api.post(`/voice-profiles/${v.id}/clone`);
     setTab('mine');
     await load();
+  };
+
+  const searchLibrary = async (page = 1) => {
+    setLibBusy(true); setLibMsg('');
+    try {
+      const d = await api.get<{ list: any[]; total: number }>('/voice-profiles/library/search?q=' + encodeURIComponent(libQ) + '&page=' + page + '&page_size=12');
+      setLibItems(d.list);
+      if (!d.list.length) setLibMsg('没有找到匹配的音色，换个关键词试试（如：温柔、旁白、磁性）');
+    } catch (e: any) { setLibMsg('⚠️ ' + e.message); }
+    finally { setLibBusy(false); }
+  };
+
+  const previewLib = (item: any) => {
+    if (!item.sample_audio) return;
+    const a = new Audio(item.sample_audio);
+    a.play().catch(() => setLibMsg('试听失败：音频链接可能已过期，请重新搜索'));
+  };
+
+  const addLibVoice = async (item: any) => {
+    setLibBusy(true); setLibMsg('');
+    try {
+      await api.post('/voice-profiles/library/' + item.id + '/add', { title: item.title, description: item.description, sample_audio: item.sample_audio });
+      setLibMsg('✅ 已收藏「' + item.title + '」到我的音色');
+      await load();
+    } catch (e: any) { setLibMsg('⚠️ ' + e.message); }
+    finally { setLibBusy(false); }
   };
 
   const submitClone = async () => {
@@ -82,18 +114,26 @@ export default function Voices() {
             <p className="mt-1 text-ink/50">语速、音调、情绪——让缪斯的声音配得上它的性格。</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="subtle" onClick={() => { setLibOpen(true); setLibMsg(''); if (!libItems.length) searchLibrary(); }} className="text-xs">🎧 音频广场</Button>
             <Button variant="subtle" onClick={() => { setCloneOpen(true); setCloneMsg(''); }} className="text-xs">🎙 克隆我的声音</Button>
             <Button onClick={() => openEdit()}>＋ 新建音色</Button>
           </div>
         </div>
         <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm">
-          {([['mine', '我的音色'], ['preset', '官方预设'], ['public', '公开分享']] as const).map(([k, v]) => (
+          {([['mine', '我的音色'], ['preset', '官方预设'], ['public', '公开分享'], ['library', '音频广场']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={'flex-1 rounded-lg px-4 py-2 transition ' + (tab === k ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
           ))}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {(tab === 'public' ? publicList : list).map(v => (
+          {tab === 'library' ? (
+            <div className="col-span-full rounded-2xl border border-dashed border-ink/15 bg-paper/40 p-10 text-center">
+              <div className="text-4xl">🎧</div>
+              <h3 className="mt-3 font-serif text-lg font-semibold">Fish Audio 音频广场</h3>
+              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-ink/50">搜索并试听官方公开音色库（上百种语言与风格），一键收藏到「我的音色」，即可在对话朗读中使用。</p>
+              <Button onClick={() => { setLibOpen(true); setLibMsg(''); if (!libItems.length) searchLibrary(); }} className="mt-4">打开音频广场</Button>
+            </div>
+          ) : (tab === 'public' ? publicList : list).map(v => (
             <div key={v.id} className="rounded-2xl border border-ink/5 bg-surface p-5 shadow-soft transition hover:shadow-lift">
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -164,6 +204,39 @@ export default function Voices() {
             <Button onClick={save} disabled={busy || !form.display_name} className="w-full">{busy ? '保存中…' : '保存音色'}</Button>
           </div>
         )}
+      </Modal>
+      <Modal open={libOpen} onClose={() => setLibOpen(false)} title="🎧 Fish Audio 音频广场" wide>
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input value={libQ} onChange={e => setLibQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchLibrary(); } }}
+              placeholder="搜索公开音色库，例如：温柔、旁白、磁性、日语"
+              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+            <Button onClick={() => searchLibrary()} disabled={libBusy} className="px-4 text-xs">{libBusy ? '搜索中…' : '搜索'}</Button>
+          </div>
+          {libMsg && <p className="rounded-lg bg-paper/70 px-3 py-2 text-xs text-ink/60">{libMsg}</p>}
+          <div className="grid max-h-[50vh] grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+            {libItems.map(item => (
+              <div key={item.id} className="rounded-2xl border border-ink/5 bg-paper/60 p-4">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <h4 className="truncate text-sm font-semibold">{item.title}</h4>
+                  <div className="flex shrink-0 gap-1.5">
+                    {item.sample_audio && <Button variant="subtle" onClick={() => previewLib(item)} className="px-2 py-1 text-[11px]">▶ 试听</Button>}
+                    <Button variant="subtle" onClick={() => addLibVoice(item)} disabled={libBusy} className="px-2 py-1 text-[11px]">＋ 收藏</Button>
+                  </div>
+                </div>
+                <p className="line-clamp-2 text-xs leading-5 text-ink/50">{item.description || '（无描述）'}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {(item.languages || []).slice(0, 3).map((l: string) => <Badge key={l}>{l}</Badge>)}
+                  {(item.tags || []).slice(0, 4).map((t: string) => <span key={t} className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink/40">{t}</span>)}
+                </div>
+              </div>
+            ))}
+            {!libBusy && libOpen && libItems.length === 0 && !libMsg && (
+              <p className="col-span-full py-8 text-center text-sm text-ink/35">输入关键词搜索 Fish Audio 官方音频广场的音色，收藏后即可在对话中朗读使用。</p>
+            )}
+          </div>
+        </div>
       </Modal>
       <Modal open={cloneOpen} onClose={() => setCloneOpen(false)} title="克隆我的声音">
         <div className="space-y-4">

@@ -64,12 +64,12 @@ app.use('/api/v1/voice-profiles', voiceRoutes);
 app.use('/api/v1/conversations', conversationRoutes);
 app.use('/api/v1/tools', toolRoutes);
 app.use('/api/v1/export', exportRoutes);
+app.use('/api/v1', speechRoutes);
 app.use('/api/v1', structureRoutes);
 app.use('/api/v1/memories', memoryRoutes);
 app.use('/api/v1', chapterRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/trash', trashRoutes);
-app.use('/api/v1', speechRoutes);
 app.use('/api/v1/insights', insightsRoutes);
 
 startTrashReaper();

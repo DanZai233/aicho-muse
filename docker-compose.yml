@@ -41,6 +41,11 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
+      # 语音：Fish Audio TTS（默认）
+      TTS_PROVIDER: ${TTS_PROVIDER:-fish-audio}
+      TTS_API_KEY: ${TTS_API_KEY:-}
+      TTS_MODEL: ${TTS_MODEL:-s2.1-pro-free}
+      TTS_BASE_URL: ${TTS_BASE_URL:-https://api.fish.audio}
     ports:
       - "${APP_PORT:-3001}:3001"
     volumes:
