@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
-import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
+import { Avatar, Button, Badge, Modal, Input, Spinner } from '../components/ui';
 import MarkdownEditor from '../components/MarkdownEditor';
 import BookCover from '../components/BookCover';
 import DiffReview from '../components/DiffReview';
@@ -125,6 +125,7 @@ export default function Workspace() {
   const [streamText, setStreamText] = useState('');
   const [speaking, setSpeaking] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [ttsLoadingId, setTtsLoadingId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [pendingTrans, setPendingTrans] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<{ assistant_name?: string; tts_rate: number; tts_pitch: number; auto_send: boolean; read_aloud: boolean } | null>(null);
@@ -171,6 +172,7 @@ export default function Workspace() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recRef = useRef<any>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const autoPlayedRef = useRef(false);
 
   const scrollBottom = () => msgsRef.current?.scrollTo({ top: msgsRef.current.scrollHeight, behavior: 'smooth' });
 
@@ -299,15 +301,17 @@ export default function Workspace() {
             if (event === 'text_delta') { setStreamText(p => p + data.delta); finalText += data.delta; }
             else if (event === 'text_done') { replyType = data.reply_type || 'other'; finalMsgId = data.message_id || ''; }
             else if (event === 'audio_ready' && data.text) {
-              speakWithTTS(data.text, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1), voiceId: conv?.voice?.voice_id || undefined, onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
+              autoPlayedRef.current = true;
+              autoSpeak(data.text, finalMsgId, { rate: data.voice?.params?.rate ?? prefs?.tts_rate ?? 1, pitch: (data.voice?.params?.pitch ?? 0) / 2 + (prefs?.tts_pitch ?? 1) });
             }
           } catch { /* ignore */ }
         }
       }
       if (finalText) {
         setMessages(prev => [...prev, { id: finalMsgId || 'sse-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: finalText, reply_type: replyType, created_at: new Date().toISOString() }]);
-        if (prefs?.read_aloud) speakWithTTS(finalText, { rate: prefs.tts_rate ?? 1, pitch: prefs.tts_pitch ?? 1, voiceId: conv?.voice?.voice_id || undefined, onStart: () => { setSpeaking(true); setSpeakingId(finalMsgId); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } });
+        if (prefs?.read_aloud && !autoPlayedRef.current) autoSpeak(finalText, finalMsgId || 'sse-' + Date.now());
       }
+      autoPlayedRef.current = false;
     } catch (e: any) {
       if (e.name !== 'AbortError') setMessages(prev => [...prev, { id: 'err-' + Date.now(), conversation_id: conv.id, role: 'assistant', content: '（出错了：' + e.message + '）', reply_type: 'other', created_at: new Date().toISOString() }]);
     } finally {
@@ -317,6 +321,33 @@ export default function Workspace() {
     }
   };
   const stopStream = () => abortRef.current?.abort();
+
+  // 播放一条助手回复：TTS 生成期间置 loading（禁用播放按钮），生成完成自动播放
+  const speakMessage = (m: { id: string; content: string }) => {
+    if (ttsLoadingId) return;
+    const voiceId = conv?.voice?.voice_id || undefined;
+    setTtsLoadingId(m.id);
+    speakWithTTS(m.content, {
+      rate: prefs?.tts_rate ?? 1,
+      pitch: prefs?.tts_pitch ?? 1,
+      voiceId,
+      onStart: () => { setTtsLoadingId(null); setSpeaking(true); setSpeakingId(m.id); },
+      onEnd: () => { setSpeaking(false); setSpeakingId(null); },
+    }).finally(() => setTtsLoadingId(cur => cur === m.id ? null : cur));
+  };
+
+  // 自动播放（audio_ready / read_aloud），避免重复生成
+  const autoSpeak = (text: string, msgId: string, opts?: { rate?: number; pitch?: number }) => {
+    const voiceId = conv?.voice?.voice_id || undefined;
+    setTtsLoadingId(msgId);
+    speakWithTTS(text, {
+      rate: opts?.rate ?? prefs?.tts_rate ?? 1,
+      pitch: opts?.pitch ?? prefs?.tts_pitch ?? 1,
+      voiceId,
+      onStart: () => { setTtsLoadingId(null); setSpeaking(true); setSpeakingId(msgId); },
+      onEnd: () => { setSpeaking(false); setSpeakingId(null); },
+    }).finally(() => setTtsLoadingId(cur => cur === msgId ? null : cur));
+  };
 
   const toggleRecord = () => {
     if (recording) { recRef.current?.stop(); return; }
@@ -965,9 +996,18 @@ export default function Workspace() {
                     <div className="whitespace-pre-wrap">{m.content}</div>
                     {m.role === 'assistant' && (
                       <div className="mt-2 flex flex-wrap items-center gap-3">
-                        {speakingId === m.id && <span className="text-accent" title="正在朗读"><span className="wave-bars"><span /><span /><span /><span /><span /></span></span>}
-
-                        <button onClick={() => speakWithTTS(m.content, { rate: prefs?.tts_rate ?? 1, pitch: prefs?.tts_pitch ?? 1, voiceId: conv?.voice?.voice_id || undefined, onStart: () => { setSpeaking(true); setSpeakingId(m.id); }, onEnd: () => { setSpeaking(false); setSpeakingId(null); } })} className="text-xs text-accent hover:underline">🔊 朗读</button>
+                        {speakingId === m.id && <span className="text-accent" title="正在播放"><span className="wave-bars"><span /><span /><span /><span /><span /></span></span>}
+                        {ttsLoadingId === m.id && (
+                          <span className="flex items-center gap-1 text-[10px] text-amber-600" title="正在生成语音">
+                            <Spinner size="sm" /><span className="hidden sm:inline">语音生成中…</span>
+                          </span>
+                        )}
+                        <button
+                          onClick={() => speakingId === m.id ? stopSpeakTTS() : speakMessage(m)}
+                          disabled={ttsLoadingId === m.id}
+                          className="text-xs text-accent transition hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                          title={ttsLoadingId === m.id ? '正在生成语音' : speakingId === m.id ? '停止播放' : '播放'}
+                        >{speakingId === m.id ? '⏹' : '▶'}</button>
                         {m.adopted_at ? (
                           <span className="text-xs text-emerald-600">✓ 已采纳到文章</span>
                         ) : isAdoptable(m.reply_type) ? (
@@ -983,6 +1023,11 @@ export default function Workspace() {
                   <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-ink/5 bg-surface px-3.5 py-2.5 shadow-soft">
                     {streamText ? <div className="whitespace-pre-wrap text-sm leading-relaxed">{streamText}</div>
                       : <div className="flex gap-1 py-1"><span className="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40" /><span className="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40" /><span className="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40" /></div>}
+                    {ttsLoadingId && !messages.some(x => x.id === ttsLoadingId) && (
+                      <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-600">
+                        <Spinner size="sm" /><span>正在生成语音…</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
