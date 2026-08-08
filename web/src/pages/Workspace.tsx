@@ -23,13 +23,14 @@ const isAdoptable = (t?: string) => !!t && ADOPTABLE_TYPES.has(t);
 
 type StructItem = { id: string; [k: string]: any };
 
-function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, onAI, emptyHint = '还没有内容', chapters }: {
+function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, onAI, onSuggest, emptyHint = '还没有内容', chapters }: {
   kind: 'outline' | 'characters' | 'timeline' | 'ideas';
   items: StructItem[]; setItems: (fn: (prev: StructItem[]) => StructItem[]) => void;
   title: string; addLabel: string;
   fields: { key: string; label: string; placeholder: string; textarea?: boolean }[];
   projectId: string; onChanged: () => void; emptyHint?: string; chapters?: { id: string; title: string; order_index: number }[];
   onAI?: (kind: 'outline' | 'characters', id: string, item: StructItem) => void;
+  onSuggest?: (kind: 'outline' | 'characters' | 'timeline') => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -52,7 +53,13 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
     <div>
       <div className="mb-2 flex items-center justify-between px-2">
         <p className="text-xs font-medium text-ink/40">{title}</p>
-        <button onClick={() => setOpen(!open)} className="text-xs text-accent hover:underline">{addLabel}</button>
+        <div className="flex items-center gap-2">
+          {onSuggest && kind !== 'ideas' && (
+            <button onClick={() => onSuggest(kind)} title="让 AI 给出创作建议"
+              className="text-xs text-accent/80 hover:text-accent hover:underline">✨ AI 建议</button>
+          )}
+          <button onClick={() => setOpen(!open)} className="text-xs text-accent hover:underline">{addLabel}</button>
+        </div>
       </div>
       {open && (
         <div className="mb-2 space-y-2 rounded-xl border border-ink/10 bg-paper/70 p-2.5 animate-fade-up">
@@ -150,6 +157,11 @@ export default function Workspace() {
   const [aiMode, setAiMode] = useState<'generate' | 'polish'>('generate');
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResult, setAiResult] = useState('');
+  const [suggestKind, setSuggestKind] = useState<'outline' | 'characters' | 'timeline' | null>(null);
+  const [suggestList, setSuggestList] = useState<any[]>([]);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+  const [suggestErr, setSuggestErr] = useState('');
+  const [suggestMsg, setSuggestMsg] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState('');
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas'>('book');
@@ -631,6 +643,60 @@ export default function Workspace() {
     } catch (e: any) { setAiErr(e.message || '应用失败'); }
   };
 
+  // AI 建议：打开面板并拉取建议
+  const openSuggest = async (kind: 'outline' | 'characters' | 'timeline') => {
+    if (!project) return;
+    setSuggestKind(kind); setSuggestList([]); setSuggestErr(''); setSuggestMsg(''); setSuggestBusy(true);
+    try {
+      const d = await api.post<{ list: any[] }>('/projects/' + project.id + '/ai-suggest', { kind });
+      setSuggestList(d.list || []);
+    } catch (e: any) { setSuggestErr(e.message || 'AI 建议生成失败'); }
+    finally { setSuggestBusy(false); }
+  };
+
+  // 保留一条建议：type=add 创建新项；update 更新对应项；note 作为灵感箱记录
+  const applySuggestion = async (sg: any) => {
+    if (!project) return;
+    try {
+      if (suggestKind === 'outline') {
+        if (sg.type === 'add') {
+          const d = await api.post<{ node: StructItem }>('/projects/' + project.id + '/outline', { title: sg.title || '新节点', summary: sg.summary || '' });
+          setOutline(prev => [...prev, d.node]);
+        } else if (sg.type === 'update') {
+          await api.patch('/outline/' + (sg.id || ''), { summary: sg.summary || '' });
+          loadStructure(project.id);
+        } else {
+          await api.post<{ note: StructItem }>('/projects/' + project.id + '/ideas', { content: (sg.title || '') + (sg.summary ? '：' + sg.summary : '') });
+          loadStructure(project.id);
+        }
+      } else if (suggestKind === 'characters') {
+        if (sg.type === 'add') {
+          const d = await api.post<{ card: StructItem }>('/projects/' + project.id + '/characters', { name: sg.name || '新角色', role: sg.role || '配角', description: sg.description || '' });
+          setCharacters(prev => [...prev, d.card]);
+        } else if (sg.type === 'update') {
+          await api.patch('/characters/' + (sg.id || ''), { description: sg.description || '' });
+          loadStructure(project.id);
+        } else {
+          await api.post<{ note: StructItem }>('/projects/' + project.id + '/ideas', { content: (sg.name || '') + (sg.description ? '：' + sg.description : '') });
+          loadStructure(project.id);
+        }
+      } else if (suggestKind === 'timeline') {
+        if (sg.type === 'add') {
+          const d = await api.post<{ event: StructItem }>('/projects/' + project.id + '/timeline', { when: sg.when || '', event: sg.event || '' });
+          setTimeline(prev => [...prev, d.event]);
+        } else if (sg.type === 'update') {
+          await api.patch('/timeline/' + (sg.id || ''), { event: sg.event || '' });
+          loadStructure(project.id);
+        } else {
+          await api.post<{ note: StructItem }>('/projects/' + project.id + '/ideas', { content: (sg.when ? sg.when + '：' : '') + (sg.event || '') });
+          loadStructure(project.id);
+        }
+      }
+      setSuggestMsg('已保留 ✓');
+      setSuggestList(prev => prev.filter(x => x !== sg));
+    } catch (e: any) { setSuggestMsg(e.message || '保留失败'); }
+  };
+
   const saveProjSettings = async () => {
     if (!project) return;
     const d = await api.patch<{ project: Project }>('/projects/' + project.id, { ...projDraft, goal_word_count: Number(projDraft.goal_word_count) || 0 });
@@ -774,18 +840,21 @@ export default function Workspace() {
               <StructurePanel kind="outline" items={outline} setItems={setOutline} title="大纲节点" addLabel="＋ 添加大纲节点"
                 fields={[{ key: 'title', label: '标题', placeholder: '例如：离家前夜' }, { key: 'summary', label: '内容概述', placeholder: '这一节发生什么…' }]}
                 projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" chapters={chapters}
-                onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }} />
+                onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }}
+                onSuggest={openSuggest} />
             )}
             {leftTab === 'characters' && project && (
               <StructurePanel kind="characters" items={characters} setItems={setCharacters} title="人物卡" addLabel="＋ 添加人物"
                 fields={[{ key: 'name', label: '姓名', placeholder: '主角名' }, { key: 'role', label: '身份', placeholder: '主角/配角/反派' }, { key: 'description', label: '描述', placeholder: '外貌、性格、背景…', textarea: true }]}
                 projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有人物卡，为关键角色写一张设定卡"
-                onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }} />
+                onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }}
+                onSuggest={openSuggest} />
             )}
             {leftTab === 'timeline' && project && (
               <StructurePanel kind="timeline" items={timeline} setItems={setTimeline} title="时间线" addLabel="＋ 添加事件"
                 fields={[{ key: 'when', label: '时间', placeholder: '1987 年夏 / 第三章前' }, { key: 'event', label: '事件', placeholder: '发生了什么…' }]}
-                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有时间线事件，把重要时刻记下来" />
+                projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有时间线事件，把重要时刻记下来"
+                onSuggest={openSuggest} />
             )}
             {leftTab === 'ideas' && project && (
               <StructurePanel kind="ideas" items={ideas} setItems={setIdeas} title="灵感箱" addLabel="＋ 记录灵感"
@@ -1189,6 +1258,42 @@ export default function Workspace() {
           </p>
           {collabSection}
           <p className="text-xs leading-5 text-ink/40">提示：协作者通过「加入作品 → 输入邀请码」进入；目前为保存后同步，暂不支持多人同时在线编辑与光标定位。</p>
+        </div>
+      </Modal>
+
+      <Modal open={!!suggestKind} onClose={() => setSuggestKind(null)} title={'✨ AI 建议 · ' + (suggestKind === 'outline' ? '大纲' : suggestKind === 'characters' ? '人物' : '时间线')}>
+        <div className="space-y-3">
+          <p className="text-xs leading-5 text-ink/50">AI 根据作品主题与现有内容给出建议，你可以选择性地保留：新增会创建新条目，调整会更新对应内容，其他会记入灵感箱。</p>
+          {suggestBusy && <p className="py-6 text-center text-sm text-ink/40">AI 正在思考建议…</p>}
+          {suggestErr && <p className="text-xs text-red-500">{suggestErr}</p>}
+          {!suggestBusy && suggestList.length === 0 && !suggestErr && (
+            <p className="py-6 text-center text-sm text-ink/40">暂无建议，试试重新生成。</p>
+          )}
+          {suggestList.map((sg, i) => (
+            <div key={i} className="rounded-xl border border-ink/8 bg-paper/50 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  {suggestKind === 'outline' && sg.title && <p className="text-sm font-medium">{sg.title}</p>}
+                  {suggestKind === 'characters' && sg.name && <p className="text-sm font-medium">{sg.name}<span className="ml-1.5 text-xs font-normal text-ink/40">{sg.role || ''}</span></p>}
+                  {suggestKind === 'timeline' && sg.when && <p className="text-xs text-ink/40">⏱ {sg.when}</p>}
+                  <p className="mt-0.5 text-xs leading-5 text-ink/65">{sg.summary || sg.description || sg.event}</p>
+                  {sg.reason && <p className="mt-1 text-[11px] text-ink/40">💡 {sg.reason}</p>}
+                </div>
+                <span className="shrink-0 rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/45">
+                  {sg.type === 'add' ? '新增' : sg.type === 'update' ? '调整' : '记录'}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                <Button variant="subtle" onClick={() => applySuggestion(sg)} className="px-2.5 py-1 text-[11px]">✓ 保留</Button>
+                <Button variant="ghost" onClick={() => setSuggestList(prev => prev.filter(x => x !== sg))} className="px-2.5 py-1 text-[11px]">忽略</Button>
+              </div>
+            </div>
+          ))}
+          {suggestMsg && <p className="text-xs text-emerald-600">{suggestMsg}</p>}
+          <div className="flex gap-2">
+            <Button onClick={() => openSuggest(suggestKind!)} disabled={suggestBusy} className="flex-1 text-xs">↻ 重新生成</Button>
+            <Button variant="ghost" onClick={() => setSuggestKind(null)} className="text-xs">完成</Button>
+          </div>
         </div>
       </Modal>
 
