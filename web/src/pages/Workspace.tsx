@@ -498,7 +498,8 @@ export default function Workspace() {
         measure={measureRemoteCursor}
       />
     ),
-    [cursors, measureRemoteCursor],
+    // 本地文档内容变化时远端光标的 offset 需要按新文档重新计算坐标
+    [cursors, measureRemoteCursor, chapter?.content],
   );
   const addChapter = async () => {
     if (!project) return;

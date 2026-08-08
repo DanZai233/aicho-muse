@@ -91,7 +91,11 @@ export function attachPresenceServer(httpServer) {
         const cursor = { offset: Math.max(0, Math.floor(Number(offset) || 0)), selection, scrollTop: Math.max(0, Math.floor(Number(scrollTop) || 0)), ts: Date.now() };
         // 与上次相同则跳过广播（服务端二次去重，减轻负担）
         const prev = state.room.members.get(state.memberId)?.cursor;
-        if (prev && prev.offset === cursor.offset && prev.scrollTop === cursor.scrollTop) return;
+        if (prev && prev.offset === cursor.offset && prev.scrollTop === cursor.scrollTop) {
+          // 位置没变仍刷新 lastSeen：静止的协作者不该被判离线
+          state.room.touch(state.memberId);
+          return;
+        }
         state.room.updateCursor(state.memberId, cursor);
         state.room.broadcast({
           type: 'cursor',
@@ -112,7 +116,9 @@ export function attachPresenceServer(httpServer) {
     });
 
     ws.on('close', () => {
-      if (state.room) {
+      // 多标签页场景：同用户新连接加入时会关闭旧连接，旧连接的 close 不能把
+      // 刚加入的新成员一起清掉，只有仍持有该 memberId 连接时才执行清理。
+      if (state.room && state.room.members.get(state.memberId)?.ws === ws) {
         state.room.remove(state.memberId);
         state.room.broadcast({ type: 'peer-left', memberId: state.memberId }, state.memberId);
         removeRoomIfEmpty(state.room.projectId, state.room.chapterId);
