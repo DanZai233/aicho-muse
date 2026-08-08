@@ -23,6 +23,7 @@ import trashRoutes, { startTrashReaper } from './routes/trash.js';
 import speechRoutes from './routes/speech.js';
 import insightsRoutes from './routes/insights.js';
 import assistantRoutes from './routes/assistant.js';
+import agentLogsRoutes from './routes/agent-logs.js';
 import { attachPresenceServer } from './realtime/server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/trash', trashRoutes);
 app.use('/api/v1/insights', insightsRoutes);
 app.use('/api/v1/assistant', assistantRoutes);
+app.use('/api/v1/agent-logs', agentLogsRoutes);
 
 startTrashReaper();
 

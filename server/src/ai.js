@@ -77,7 +77,7 @@ function categorize(input) {
   return 'story';
 }
 
-function personaPrompt(persona) {
+export function personaPrompt(persona) {
   if (!persona) return '';
   const parts = [
     `你是${persona.name}${persona.tagline ? '：' + persona.tagline : ''}。`,
@@ -92,7 +92,7 @@ function personaPrompt(persona) {
   return parts;
 }
 const LANGUAGE_NAME = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español', ru: 'Русский' };
-function languageNote(lang) {
+export function languageNote(lang) {
   if (!lang || lang === 'zh-CN') return '';
   const name = LANGUAGE_NAME[lang] || lang;
   return '【作品语言】本作品使用' + name + '创作。请用' + name + '与用户交流，并给出' + name + '的写作建议；专有名词可保留原文。';
@@ -143,7 +143,7 @@ export function cleanWritingOutput(text) {
   return t.trim();
 }
 
-function buildSmartContext(projectId, chapterId) {
+export function buildSmartContext(projectId, chapterId) {
   if (!projectId) return '';
   const d = db();
   const outline = d.outline_nodes.filter(n => n.project_id === projectId).sort((a, b) => a.order_index - b.order_index);

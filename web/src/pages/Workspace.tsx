@@ -14,7 +14,7 @@ import { measureCaret } from '../lib/caret';
 import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, stopSpeakTTS, speakWithTTS, interruptSpeech } from '../lib/speech';
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 
-const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', writing: '写作稿', other: '回复' };
+const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
 const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写', condense: '缩写', continue: '续写', restyle: '风格迁移' };
 // 只有带正文建议的回复可进入 diff 与采纳（提问/鼓励/其他不写入文章）
@@ -958,7 +958,7 @@ export default function Workspace() {
                   <div className={"max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed " + (m.role === 'user' ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md border border-ink/5 bg-surface shadow-soft')}>
                     {m.role === 'assistant' && m.reply_type && (
                       <div className="mb-1.5 flex items-center gap-2">
-                        <Badge color={m.reply_type === 'encouragement' ? 'green' : m.reply_type === 'question' ? 'accent' : m.reply_type === 'feedback' ? 'amber' : 'default'}>{REPLY_LABEL[m.reply_type] || '回复'}</Badge>
+                        <Badge color={m.reply_type === 'encouragement' ? 'green' : m.reply_type === 'question' ? 'accent' : m.reply_type === 'feedback' ? 'amber' : m.reply_type === 'guide' ? 'accent' : 'default'}>{REPLY_LABEL[m.reply_type] || '回复'}</Badge>
                         {m.source === 'rules' && <span className="text-[10px] text-ink/30">内置教练</span>}
                       </div>
                     )}

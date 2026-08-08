@@ -3,6 +3,7 @@ import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
 import { projectRole, findProject, canView, canEdit } from '../access.js';
 import { generateCoachReply, extractMemory } from '../ai.js';
+import { runWritingAgent } from '../agent/run.js';
 import { checkQuota, consumeQuota } from '../quota.js';
 
 const router = Router();
@@ -160,8 +161,8 @@ router.get('/:id/stream', (req, res) => {
   (async () => {
     try {
       send('start', { ok: true });
-      const { reply, replyType, source } = await generateCoachReply({
-        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id,
+      const { reply, replyType, source, tool, params } = await runWritingAgent({
+        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id, conversationId: c.id,
       });
       // 流式输出：按句分片
       const chunks = reply.split(/(?<=[。！？!?；;])/).filter(s => s.trim());
@@ -174,12 +175,12 @@ router.get('/:id/stream', (req, res) => {
         if ((i + 1) % step === 0) await new Promise(r => setTimeout(r, 60));
       }
       const now = new Date().toISOString();
-      const assistantMsg = { id: uuid(), conversation_id: c.id, role: 'assistant', content: reply.trim(), reply_type: replyType, source, created_at: now };
+      const assistantMsg = { id: uuid(), conversation_id: c.id, role: 'assistant', content: reply.trim(), reply_type: replyType, source, tool: tool || null, params: params || null, created_at: now };
       d.messages.push(assistantMsg);
       d.stats.messages_sent++;
       c.updated_at = now;
       saveDb();
-      send('text_done', { message_id: assistantMsg.id, reply_type: replyType, source });
+      send('text_done', { message_id: assistantMsg.id, reply_type: replyType, source, tool: tool || null, params: params || null });
       if (lastUser?.reply_as_voice) {
         send('audio_ready', { audio_url: null, note: '使用浏览器 TTS 播放', voice: voice ? { display_name: voice.display_name, params: voice.params } : null, text: reply.trim() });
       }

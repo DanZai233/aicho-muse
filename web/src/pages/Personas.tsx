@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, Persona } from '../lib/api';
+import { api, Persona, VoiceProfile } from '../lib/api';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
+import { speakWithTTS, stopSpeakTTS } from '../lib/speech';
 
 const EMPTY: Omit<Persona, 'id' | 'is_preset' | 'version'> = {
   name: '', tagline: '', background: '', personality: [],
@@ -10,6 +11,8 @@ const EMPTY: Omit<Persona, 'id' | 'is_preset' | 'version'> = {
 };
 
 function tagify(v: string) { return v.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean); }
+
+const PREVIEW_TEXT = '你好，我是你的创作伙伴。今天想写点什么？我陪你一起，把心里的故事慢慢说出来。';
 
 export default function Personas() {
   const [list, setList] = useState<Persona[]>([]);
@@ -40,6 +43,11 @@ export default function Personas() {
   const [voiceQ, setVoiceQ] = useState('');
   const [voiceResults, setVoiceResults] = useState<any[]>([]);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voices, setVoices] = useState<VoiceProfile[]>([]);
+  const libAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // 加载音色列表（用于已绑定音色试听）
+  useEffect(() => { api.get<{ list: VoiceProfile[] }>('/voice-profiles').then(d => setVoices(d.list)).catch(() => {}); }, []);
 
   const load = async () => { setList((await api.get<{ list: Persona[] }>('/personas?scope=' + tab)).list); if (tab === 'public') setPublicList((await api.get<{ list: Persona[] }>('/personas?scope=public')).list); };
   useEffect(() => { load(); }, [tab]);
@@ -58,6 +66,30 @@ export default function Personas() {
     setAiResult(null); setAiPrompt(''); setAiErr('');
     setPreviewInput('');
     setModalOpen(true);
+  };
+
+  // 试听 Fish 广场音色（优先官方样例音频，无样例则 TTS 合成）
+  const previewLibraryVoice = (item: any) => {
+    stopSpeakTTS();
+    if (libAudioRef.current) { try { libAudioRef.current.pause(); } catch {} libAudioRef.current = null; }
+    if (item.sample_audio) {
+      const a = new Audio(item.sample_audio);
+      libAudioRef.current = a;
+      a.play().catch(() => speakWithTTS(PREVIEW_TEXT, { voiceId: item.id }));
+      return;
+    }
+    speakWithTTS(PREVIEW_TEXT, { voiceId: item.id });
+  };
+
+  // 试听已绑定音色（voice_profile_id → voice_id）
+  const previewBoundVoice = () => {
+    stopSpeakTTS();
+    if (libAudioRef.current) { try { libAudioRef.current.pause(); } catch {} libAudioRef.current = null; }
+    const newFishId = (form as any)._voiceId;
+    const bound = form.voice_profile_id ? voices.find((v: VoiceProfile) => v.id === form.voice_profile_id) : null;
+    const voiceId = newFishId || bound?.voice_id;
+    if (!voiceId) return;
+    speakWithTTS(PREVIEW_TEXT, { voiceId, rate: bound?.params?.rate, pitch: bound ? (bound.params.pitch || 0) / 2 + 1 : undefined });
   };
 
   const searchVoice = async () => {
@@ -301,15 +333,22 @@ export default function Personas() {
             {voiceResults.length > 0 && (
               <div className="mt-2 max-h-36 space-y-1 overflow-y-auto">
                 {voiceResults.map(v => (
-                  <button key={v.id} onClick={() => setForm({ ...form, _voiceId: v.id, _voiceTitle: v.title, voice_profile_id: form.voice_profile_id })}
-                    className={"flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition " + (form.voice_profile_id === v.id ? 'bg-accentlight text-ink font-medium' : 'bg-surface text-ink/60 hover:bg-accentlight/50')}>
-                    <span className="truncate">{v.title}</span>
-                    <span className="ml-2 shrink-0 text-[10px] text-ink/35">{v.languages?.join('/') || ''}</span>
-                  </button>
+                  <div key={v.id} className={"flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition " + ((form as any)._voiceId === v.id ? 'bg-accentlight text-ink font-medium' : 'bg-surface text-ink/60 hover:bg-accentlight/50')}>
+                    <button onClick={() => setForm({ ...form, _voiceId: v.id, _voiceTitle: v.title, voice_profile_id: null })}
+                      className="min-w-0 flex-1 truncate text-left">{v.title}</button>
+                    <span className="shrink-0 text-[10px] text-ink/35">{v.languages?.join('/') || ''}</span>
+                    <button onClick={(e) => { e.stopPropagation(); previewLibraryVoice(v); }}
+                      className="shrink-0 rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/55 transition hover:bg-accentlight hover:text-ink" title="试听">▶ 试听</button>
+                  </div>
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] text-ink/40">{(form._voiceId || form.voice_profile_id) ? '已选：' + (form._voiceTitle || 'Fish 音色') + '（保存后会话朗读将使用此音色）' : '未绑定音色，会话时默认使用全局音色'}</p>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] text-ink/40">{(form._voiceId || form.voice_profile_id) ? '已选：' + (form._voiceTitle || 'Fish 音色') + '（保存后会话朗读将使用此音色）' : '未绑定音色，会话时默认使用全局音色'}</p>
+              {(form._voiceId || form.voice_profile_id) && (
+                <button onClick={previewBoundVoice} className="shrink-0 rounded-full bg-accentlight/60 px-2.5 py-1 text-[10px] text-ink/70 transition hover:bg-accentlight">🔊 试听</button>
+              )}
+            </div>
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-ink/10 bg-paper/50 px-3 py-2.5">
             <input type="checkbox" checked={!!form.is_public} onChange={e => setForm({ ...form, is_public: e.target.checked })} className="accent-accent" />

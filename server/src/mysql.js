@@ -39,6 +39,7 @@ const COLLECTIONS = {
   memories: { json: [] },
   admin_users: { json: [] },
   trash: { json: [] },
+  agent_logs: { json: [] },
 };
 
 // 每张表一个 JSON 列存整行，字段名即 key
