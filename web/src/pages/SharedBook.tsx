@@ -3,10 +3,13 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, ShareInfo, GENRE_LABEL } from '../lib/api';
 import BookCover from '../components/BookCover';
+import { useAuth } from '../lib/auth';
+import { Avatar } from '../components/ui';
 
 export default function SharedBook() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { user, logout } = useAuth();
   const [share, setShare] = useState<ShareInfo | null>(null);
   const [err, setErr] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
@@ -56,7 +59,15 @@ export default function SharedBook() {
           </Link>
           <nav className="flex items-center gap-2 text-sm">
             <Link to="/shares" className="rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">拾卷广场</Link>
-            <Link to="/login" className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-paper transition hover:bg-accent/90">开始创作</Link>
+            {user ? (
+              <>
+                <Link to="/workspace" className="rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">工作台</Link>
+                <Avatar name={user.display_name} size="sm" />
+                <button onClick={logout} className="rounded-lg px-2.5 py-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink">退出</button>
+              </>
+            ) : (
+              <Link to="/login" className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-paper transition hover:bg-accent/90">开始创作</Link>
+            )}
           </nav>
         </div>
       </header>
