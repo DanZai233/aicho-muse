@@ -197,6 +197,7 @@ router.delete('/presets/personas/:id', (req, res) => {
   const d = db();
   const p = d.personas.find(x => x.id === req.params.id && x.is_preset);
   if (!p) return res.status(404).json({ code: 40401, message: '预设人设不存在' });
+  if (String(p.id).startsWith('preset-')) return res.status(400).json({ code: 40001, message: '内置官方预设不可删除（永久落库）' });
   d.personas = d.personas.filter(x => x.id !== req.params.id);
   unpersistPreset('persona', p.id);
   saveDb();
@@ -207,8 +208,42 @@ router.delete('/presets/voices/:id', (req, res) => {
   const d = db();
   const v = d.voices.find(x => x.id === req.params.id && x.is_preset);
   if (!v) return res.status(404).json({ code: 40401, message: '预设音色不存在' });
+  if (String(v.id).startsWith('preset-')) return res.status(400).json({ code: 40001, message: '内置官方音色不可删除（永久落库）' });
   d.voices = d.voices.filter(x => x.id !== req.params.id);
   unpersistPreset('voice', v.id);
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
+});
+
+// 编辑预设人设（后台创建的自定义预设可编辑，内置官方预设仅提示）
+router.patch('/presets/personas/:id', (req, res) => {
+  const d = db();
+  const p = d.personas.find(x => x.id === req.params.id && x.is_preset);
+  if (!p) return res.status(404).json({ code: 40401, message: '预设人设不存在' });
+  if (String(p.id).startsWith('preset-')) return res.status(400).json({ code: 40001, message: '内置官方预设不可编辑（如需调整请克隆为自定义预设）' });
+  const b = req.body || {};
+  for (const k of ['name', 'tagline', 'background', 'personality', 'speaking_style', 'values', 'relationship', 'expertise', 'greeting', 'avatar_color', 'voice_profile_id']) {
+    if (b[k] !== undefined) p[k] = b[k];
+  }
+  p.version = (p.version || 1) + 1;
+  p.updated_at = new Date().toISOString();
+  persistPreset('persona', p);
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
+});
+
+// 编辑预设音色
+router.patch('/presets/voices/:id', (req, res) => {
+  const d = db();
+  const v = d.voices.find(x => x.id === req.params.id && x.is_preset);
+  if (!v) return res.status(404).json({ code: 40401, message: '预设音色不存在' });
+  if (String(v.id).startsWith('preset-')) return res.status(400).json({ code: 40001, message: '内置官方音色不可编辑' });
+  const b = req.body || {};
+  for (const k of ['display_name', 'provider', 'voice_id', 'params', 'speech_notes']) {
+    if (b[k] !== undefined) v[k] = b[k];
+  }
+  v.updated_at = new Date().toISOString();
+  persistPreset('voice', v);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });

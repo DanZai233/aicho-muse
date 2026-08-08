@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Badge } from '../components/ui';
 
@@ -25,7 +25,7 @@ async function adminSend<T>(p: string, method: string, body?: unknown): Promise<
 
 export default function Admin() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'admins'>('stats');
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -33,6 +33,9 @@ export default function Admin() {
   const [providers, setProviders] = useState<any[]>([]);
   const [models, setModels] = useState<{ id: string; recommended?: boolean; disabled?: boolean; note?: string }[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [newAdmin, setNewAdmin] = useState({ username: '', password: '', role: 'admin' });
+  const origSettingsRef = useRef<any>(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
@@ -42,7 +45,18 @@ export default function Admin() {
 
   const loadStats = async () => { setStats(await adminGet<Stats>('/stats')); };
   const loadUsers = async () => { setUsers((await adminGet<{ list: AdminUser[] }>('/users')).list); };
-  const loadSettings = async () => { const s = (await adminGet<{ settings: any }>('/settings')).settings; setSettings({ ...s, ai: { ...s.ai, api_key: s.ai.api_key ? '******' : '' } }); };
+  const mask = (v?: string) => (v ? '******' : '');
+  const loadSettings = async () => {
+    const s = (await adminGet<{ settings: any }>('/settings')).settings;
+    origSettingsRef.current = JSON.parse(JSON.stringify(s));
+    setSettings({
+      ...s,
+      ai: { ...s.ai, api_key: mask(s.ai.api_key), llm_api_key: mask(s.ai.llm_api_key) },
+      tts: { ...s.tts, api_key: mask(s.tts?.api_key) },
+      stt: { ...s.stt, api_key: mask(s.stt?.api_key) },
+      voice_clone: { ...s.voice_clone, api_key: mask(s.voice_clone?.api_key) },
+    });
+  };
   const loadPresets = async () => { setPresets(await adminGet('/presets')); };
   const loadProviders = async () => {
     try { setProviders((await adminGet<{ providers: any[] }>('/llm-providers')).providers); } catch (e: any) { setErr(e.message); }
@@ -54,8 +68,58 @@ export default function Admin() {
     finally { setModelsBusy(false); }
   };
 
+  const loadAdmins = async () => { try { setAdmins((await adminGet<{ list: any[] }>('/admins')).list); } catch (e: any) { setErr(e.message); } };
+
+  const editUser = async (u: AdminUser) => {
+    const name = prompt('修改显示名称：', u.display_name);
+    if (!name) return;
+    try { await adminSend('/users/' + u.id, 'PATCH', { display_name: name }); setErr(''); flash('用户已更新'); loadUsers(); }
+    catch (e: any) { setErr(e.message); }
+  };
+
+  const delPreset = async (type: 'persona' | 'voice', item: any) => {
+    if (String(item.id).startsWith('preset-')) { setErr('内置官方预设不可删除（永久落库）'); return; }
+    if (!confirm('删除预设「' + (item.name || item.display_name) + '」？')) return;
+    try {
+      await adminSend('/presets/' + (type === 'persona' ? 'personas' : 'voices') + '/' + item.id, 'DELETE');
+      setErr(''); flash('预设已删除'); loadPresets();
+    } catch (e: any) { setErr(e.message); }
+  };
+
+  const editPreset = async (type: 'persona' | 'voice', item: any) => {
+    if (String(item.id).startsWith('preset-')) { setErr('内置官方预设不可编辑（如需调整请克隆为自定义预设）'); return; }
+    const name = prompt(type === 'persona' ? '修改预设人设名称：' : '修改预设音色名称：', item.name || item.display_name);
+    if (!name) return;
+    try {
+      const body = type === 'persona' ? { name } : { display_name: name };
+      await adminSend('/presets/' + (type === 'persona' ? 'personas' : 'voices') + '/' + item.id, 'PATCH', body);
+      setErr(''); flash('预设已更新'); loadPresets();
+    } catch (e: any) { setErr(e.message); }
+  };
+
+  const addAdmin = async () => {
+    if (!newAdmin.username || !newAdmin.password) { setErr('用户名和密码必填'); return; }
+    try {
+      await adminSend('/admins', 'POST', newAdmin);
+      setNewAdmin({ username: '', password: '', role: 'admin' }); setErr(''); flash('管理员已添加'); loadAdmins();
+    } catch (e: any) { setErr(e.message); }
+  };
+
+  const delAdmin = async (a: any) => {
+    if (!confirm('删除管理员 ' + a.username + '？')) return;
+    try { await adminSend('/admins/' + a.id, 'DELETE'); setErr(''); flash('管理员已删除'); loadAdmins(); }
+    catch (e: any) { setErr(e.message); }
+  };
+
+  const resetData = async () => {
+    if (!confirm('⚠️ 将清空全部用户、作品、消息与设置（内置官方预设除外），且不可恢复！确定？')) return;
+    if (!confirm('再次确认：真的要重置全部数据吗？')) return;
+    try { await adminSend('/data/reset', 'POST'); setErr(''); flash('数据已重置'); loadStats(); loadUsers(); loadSettings(); loadPresets(); }
+    catch (e: any) { setErr(e.message); }
+  };
+
   useEffect(() => {
-    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders();
+    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders(); loadAdmins();
   }, []);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
@@ -71,7 +135,12 @@ export default function Admin() {
   const saveSettings = async () => {
     if (!settings) return;
     try {
-      const body = { ...settings, ai: { ...settings.ai, api_key: settings.ai.api_key === '******' ? '' : settings.ai.api_key, llm_api_key: settings.ai.llm_api_key === '******' ? '' : settings.ai.llm_api_key } };
+      const body = JSON.parse(JSON.stringify(settings));
+      const clean = (o: any, keys: string[]) => { for (const k of keys) if (o[k] === '******') delete o[k]; };
+      clean(body.ai || {}, ['api_key', 'llm_api_key']);
+      clean(body.tts || {}, ['api_key']);
+      clean(body.stt || {}, ['api_key']);
+      clean(body.voice_clone || {}, ['api_key']);
       await adminSend('/settings', 'PATCH', body);
       setErr(''); flash('设置已保存');
       loadSettings();
@@ -106,7 +175,7 @@ export default function Admin() {
         </header>
 
         <nav className="mb-6 flex gap-1 rounded-xl bg-white/5 p-1 text-sm">
-          {([['stats', '数据概览'], ['users', '用户管理'], ['settings', '系统设置'], ['presets', '预设管理']] as const).map(([k, v]) => (
+          {([['stats', '数据概览'], ['users', '用户管理'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={`flex-1 rounded-lg py-2 transition ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
           ))}
         </nav>
@@ -161,7 +230,7 @@ export default function Admin() {
                     <div className="font-medium">{u.display_name}</div>
                     <div className="text-sm text-paper/40">{u.email} · {new Date(u.created_at).toLocaleDateString()}</div>
                   </div>
-                  <Button variant="danger" onClick={() => delUser(u)} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">删除</Button>
+                  <div className="flex items-center gap-2"><Button variant="subtle" onClick={() => editUser(u)} className="bg-white/10 text-paper hover:bg-white/20">编辑</Button><Button variant="danger" onClick={() => delUser(u)} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">删除</Button></div>
                 </div>
               ))}
               {users.length === 0 && <p className="py-8 text-center text-paper/40">暂无注册用户</p>}
@@ -328,7 +397,7 @@ export default function Admin() {
                 </label>
               </div>
             </div>
-            <div className="lg:col-span-2"><Button onClick={saveSettings} className="bg-paper text-ink hover:bg-paper/90">保存全部设置</Button></div>
+            <div className="lg:col-span-2 flex items-center gap-3"><Button onClick={saveSettings} className="bg-paper text-ink hover:bg-paper/90">保存全部设置</Button><Button variant="danger" onClick={resetData} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">⚠️ 重置全部数据</Button></div>
           </div>
         )}
 
@@ -343,7 +412,7 @@ export default function Admin() {
                 {presets.personas.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5">
                     <div><div className="font-medium">{p.name}</div><div className="text-xs text-paper/40">{p.tagline}</div></div>
-                    <Badge color="accent">预设</Badge>
+                    <div className="flex items-center gap-1.5"><Badge color="accent">预设</Badge><button onClick={() => editPreset('persona', p)} title="编辑" className="text-xs text-paper/50 hover:text-paper">✎</button><button onClick={() => delPreset('persona', p)} title="删除" className="text-xs text-red-300/70 hover:text-red-300">✕</button></div>
                   </div>
                 ))}
               </div>
@@ -357,9 +426,41 @@ export default function Admin() {
                 {presets.voices.map((v: any) => (
                   <div key={v.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5">
                     <div><div className="font-medium">{v.display_name}</div><div className="text-xs text-paper/40">{v.provider}</div></div>
-                    <Badge color="accent">预设</Badge>
+                    <div className="flex items-center gap-1.5"><Badge color="accent">预设</Badge><button onClick={() => editPreset('voice', v)} title="编辑" className="text-xs text-paper/50 hover:text-paper">✎</button><button onClick={() => delPreset('voice', v)} title="删除" className="text-xs text-red-300/70 hover:text-red-300">✕</button></div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'admins' && (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl bg-white/5 p-5">
+              <h2 className="mb-4 font-serif text-lg font-semibold">添加管理员</h2>
+              <div className="space-y-3">
+                <input value={newAdmin.username} onChange={e => setNewAdmin({ ...newAdmin, username: e.target.value })} placeholder="用户名" className={inputCls + ' bg-ink/80'} />
+                <input value={newAdmin.password} onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })} type="password" placeholder="密码" className={inputCls + ' bg-ink/80'} />
+                <select value={newAdmin.role} onChange={e => setNewAdmin({ ...newAdmin, role: e.target.value })} className={inputCls + ' bg-ink/80'}>
+                  <option value="admin">admin（全部权限）</option>
+                  <option value="operator">operator（运营）</option>
+                </select>
+                <Button onClick={addAdmin} className="bg-paper text-ink hover:bg-paper/90">添加管理员</Button>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white/5 p-5">
+              <h2 className="mb-4 font-serif text-lg font-semibold">管理员列表（{admins.length}）</h2>
+              <div className="space-y-2">
+                {admins.map(a => (
+                  <div key={a.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5">
+                    <div>
+                      <div className="font-medium">{a.username}</div>
+                      <div className="text-xs text-paper/40">{a.role || 'admin'}</div>
+                    </div>
+                    <Button variant="danger" onClick={() => delAdmin(a)} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">删除</Button>
+                  </div>
+                ))}  
+                {admins.length === 0 && <p className="py-6 text-center text-paper/40">暂无管理员</p>}
               </div>
             </div>
           </div>

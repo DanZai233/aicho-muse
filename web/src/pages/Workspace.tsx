@@ -16,6 +16,7 @@ import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 import CitationsPanel from '../components/CitationsPanel';
 import PaperInfoPanel from '../components/PaperInfoPanel';
 import ReferenceDocsPanel from '../components/ReferenceDocsPanel';
+import RelationshipGraph from '../components/RelationshipGraph';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
@@ -990,11 +991,14 @@ export default function Workspace() {
                 onSuggest={openSuggest} />
             )}
             {leftTab === 'characters' && project && (
+              <>
               <StructurePanel kind="characters" items={characters} setItems={setCharacters} title="人物卡" addLabel="＋ 添加人物"
                 fields={[{ key: 'name', label: '姓名', placeholder: '主角名' }, { key: 'role', label: '身份', placeholder: '主角/配角/反派' }, { key: 'description', label: '描述', placeholder: '外貌、性格、背景…', textarea: true }]}
                 projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有人物卡，为关键角色写一张设定卡"
                 onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }}
                 onSuggest={openSuggest} />
+                <RelationshipGraph projectId={project.id} characters={characters} onChanged={() => loadStructure(project.id)} />
+              </>
             )}
             {leftTab === 'timeline' && project && (
               <StructurePanel kind="timeline" items={timeline} setItems={setTimeline} title="时间线" addLabel="＋ 添加事件"
