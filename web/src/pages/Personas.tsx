@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, Persona } from '../lib/api';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 
 const EMPTY: Omit<Persona, 'id' | 'is_preset' | 'version'> = {
   name: '', tagline: '', background: '', personality: [],
-  speaking_style: { tone: '', preferences: [], avoid: [] },
-  values: [], relationship: '', expertise: [], greeting: '', avatar_color: '#8b7d6b', is_public: false,
+  speaking_style: { tone: '', preferences: [], avoid: [], catchphrase: '' },
+  values: [], relationship: '', expertise: [], greeting: '', avatar: '', avatar_color: '#8b7d6b', is_public: false,
 };
 
 function tagify(v: string) { return v.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean); }
@@ -20,6 +20,14 @@ export default function Personas() {
   const [avoids, setAvoids] = useState('');
   const [values, setValues] = useState('');
   const [expertise, setExpertise] = useState('');
+  const [catchphr, setCatchphr] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResult, setAiResult] = useState<any>(null);
+  const [aiMode, setAiMode] = useState<'generate' | 'polish'>('generate');
+  const [aiErr, setAiErr] = useState('');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewMsgs, setPreviewMsgs] = useState<{ role: string; content: string }[]>([]);
   const [previewInput, setPreviewInput] = useState('');
@@ -39,13 +47,15 @@ export default function Personas() {
     setAvoids((p?.speaking_style?.avoid || []).join('、'));
     setValues((p?.values || []).join('、'));
     setExpertise((p?.expertise || []).join('、'));
+    setCatchphr(p?.speaking_style?.catchphrase || '');
     setPreviewMsgs([]);
+    setAiResult(null); setAiPrompt(''); setAiErr('');
     setPreviewInput('');
   };
 
   const save = async () => {
     setBusy(true);
-    const body = { ...form, personality: tagify(pers), values: tagify(values), expertise: tagify(expertise), speaking_style: { ...form.speaking_style, tone: form.speaking_style.tone, preferences: tagify(prefs), avoid: tagify(avoids) } };
+    const body = { ...form, personality: tagify(pers), values: tagify(values), expertise: tagify(expertise), speaking_style: { ...form.speaking_style, tone: form.speaking_style.tone, preferences: tagify(prefs), avoid: tagify(avoids), catchphrase: catchphr } };
     try {
       if (edit) await api.patch(`/personas/${edit.id}`, body);
       else await api.post('/personas', body);
@@ -91,6 +101,72 @@ export default function Personas() {
     }
   };
 
+  const runAI = async () => {
+    if (!form.name && aiMode === 'generate' && !aiPrompt.trim()) { setAiErr('请先填写人设名称或描述创作方向'); return; }
+    setAiBusy(true); setAiErr('');
+    try {
+      if (aiMode === 'generate') {
+        const d = await api.post<{ result: any }>('/personas/ai/generate', { prompt: aiPrompt, name: form.name || undefined });
+        setAiResult(d.result);
+      } else {
+        if (!edit) { setAiErr('请先保存人设后再润色'); return; }
+        const d = await api.post<{ result: any }>('/personas/' + edit.id + '/ai/polish', { prompt: aiPrompt });
+        setAiResult(d.result);
+      }
+    } catch (e: any) { setAiErr(e.message || 'AI 处理失败'); }
+    finally { setAiBusy(false); }
+  };
+
+  const applyAI = async () => {
+    if (!aiResult) return;
+    const r = aiResult;
+    setForm((f: any) => ({
+      ...f,
+      name: r.name || f.name, tagline: r.tagline || f.tagline, background: r.background || f.background,
+      personality: Array.isArray(r.personality) ? r.personality : f.personality,
+      speaking_style: {
+        ...f.speaking_style,
+        tone: r.speaking_style?.tone || f.speaking_style?.tone,
+        preferences: Array.isArray(r.speaking_style?.preferences) ? r.speaking_style.preferences : f.speaking_style?.preferences || [],
+        avoid: Array.isArray(r.speaking_style?.avoid) ? r.speaking_style.avoid : f.speaking_style?.avoid || [],
+        catchphrase: r.speaking_style?.catchphrase || f.speaking_style?.catchphrase || '',
+      },
+      values: Array.isArray(r.values) ? r.values : f.values,
+      relationship: r.relationship || f.relationship,
+      expertise: Array.isArray(r.expertise) ? r.expertise : f.expertise,
+      greeting: r.greeting || f.greeting,
+      avatar_color: r.avatar_color || f.avatar_color,
+    }));
+    setPers((r.personality || []).join('、'));
+    setValues((r.values || []).join('、'));
+    setExpertise((r.expertise || []).join('、'));
+    setPrefs((r.speaking_style?.preferences || []).join('、'));
+    setAvoids((r.speaking_style?.avoid || []).join('、'));
+    setCatchphr(r.speaking_style?.catchphrase || '');
+    setAiResult(null); setAiPrompt(''); setAiErr('');
+  };
+
+  const uploadAvatar = async (file: File) => {
+    if (!edit) { setAiErr('请先保存人设，再上传头像'); return; }
+    if (file.size > 2 * 1024 * 1024) { setAiErr('图片不能超过 2MB'); return; }
+    setAvatarBusy(true); setAiErr('');
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onload = () => resolve(String(rd.result || ''));
+        rd.onerror = () => reject(new Error('读取失败'));
+        rd.readAsDataURL(file);
+      });
+      const m = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+      if (!m) { setAiErr('不支持的图片格式'); return; }
+      const d = await api.post<{ persona: Persona }>('/personas/' + edit.id + '/avatar', { data: m[2], mime: m[1] });
+      setEdit(d.persona);
+      setForm({ ...form, avatar: d.persona.avatar, avatar_color: d.persona.avatar_color });
+      await load();
+    } catch (e: any) { setAiErr(e.message || '上传失败'); }
+    finally { setAvatarBusy(false); }
+  };
+
   const inputCls = 'w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
   return (
@@ -113,7 +189,9 @@ export default function Personas() {
           {(tab === 'public' ? publicList : list).map(p => (
             <div key={p.id} className="rounded-2xl border border-ink/5 bg-surface p-5 shadow-soft transition hover:shadow-lift">
               <div className="mb-4 flex items-center gap-3">
-                <Avatar name={p.name} color={p.avatar_color} size="lg" />
+                {p.avatar
+                  ? <img src={'/api/v1' + p.avatar} alt={p.name} className="h-16 w-16 rounded-full object-cover shadow-soft" />
+                  : <Avatar name={p.name} color={p.avatar_color} size="lg" />}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="truncate font-serif text-lg font-semibold">{p.name}</h3>
@@ -149,6 +227,24 @@ export default function Personas() {
       </div>
 
       <Modal open={!!edit || !!form.name || edit !== null} onClose={() => setEdit(null)} title={edit ? `编辑人设 · ${edit.name}` : '新建人设'} wide>
+        <div className="mb-3 flex items-center gap-4">
+          <div className="relative">
+            {form.avatar
+              ? <img src={'/api/v1' + form.avatar} alt="头像" className="h-14 w-14 rounded-full object-cover shadow-soft" />
+              : <Avatar name={form.name || '新'} color={form.avatar_color} size="lg" />}
+            <button onClick={() => fileRef.current?.click()} disabled={avatarBusy} title="上传头像（png/jpg/webp/gif，≤2MB）"
+              className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs text-white shadow transition hover:scale-105 disabled:opacity-50">📷</button>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ''; }} />
+          </div>
+          <div className="text-xs text-ink/45">
+            {avatarBusy ? '上传中…' : '自定义头像 · 上传后立即生效'}
+            <div className="mt-1 flex gap-2">
+              <Button variant="subtle" onClick={() => { setAiMode('generate'); setAiPrompt(''); setAiResult(null); setAiErr(''); }} className="px-2 py-1 text-[11px]">✨ AI 生成人设</Button>
+              {edit && <Button variant="subtle" onClick={() => { setAiMode('polish'); setAiPrompt(''); setAiResult(null); setAiErr(''); }} className="px-2 py-1 text-[11px]">✨ AI 润色人设</Button>}
+            </div>
+          </div>
+        </div>
         <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
           <Input label="姓名" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="例如：黎文" />
           <Input label="一句话定位" value={form.tagline} onChange={v => setForm({ ...form, tagline: v })} placeholder="例如：安静的倾听者" />
@@ -156,6 +252,7 @@ export default function Personas() {
           <Input label="性格（、分隔）" value={pers} onChange={setPers} placeholder="温和、耐心、敏锐" />
           <Input label="价值观（、分隔）" value={values} onChange={setValues} placeholder="真实比华丽重要" />
           <Input label="说话风格" value={form.speaking_style.tone} onChange={v => setForm({ ...form, speaking_style: { ...form.speaking_style, tone: v } })} placeholder="例如：平静而温暖" />
+          <Input label="口头禅" value={catchphr} onChange={setCatchphr} placeholder="例如：嗯，这个故事有意思" />
           <Input label="与你的关系" value={form.relationship} onChange={v => setForm({ ...form, relationship: v })} placeholder="亦师亦友的编辑" />
           <Input label="偏好（、分隔）" value={prefs} onChange={setPrefs} placeholder="多用提问引导、偶尔引用一句诗" />
           <Input label="避免（、分隔）" value={avoids} onChange={setAvoids} placeholder="说教、替用户做决定" />
@@ -191,6 +288,39 @@ export default function Personas() {
             <Button onClick={tryChat} disabled={previewBusy || !previewInput.trim() || !form.name} className="px-3 text-xs">发送</Button>
           </div>
         </div>
+        {aiMode && (
+          <div className="mt-4 rounded-xl border border-accent/25 bg-accentlight/20 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-ink/70">{aiMode === 'generate' ? '✨ AI 生成人设' : '✨ AI 润色人设'}</p>
+              <div className="flex gap-1 text-[10px]">
+                <button onClick={() => setAiMode('generate')} className={'rounded px-2 py-0.5 ' + (aiMode === 'generate' ? 'bg-accent text-white' : 'bg-ink/5 text-ink/50')}>生成</button>
+                <button onClick={() => setAiMode('polish')} disabled={!edit} className={'rounded px-2 py-0.5 ' + (aiMode === 'polish' ? 'bg-accent text-white' : 'bg-ink/5 text-ink/50 disabled:opacity-40')}>润色</button>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <input value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); runAI(); } }}
+                placeholder={aiMode === 'generate' ? '描述你想要的创作伙伴，例如：温柔、会讲故事的民国女作家' : '想怎么调整？例如：更犀利一点，话更少'}
+                className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+              <Button onClick={runAI} disabled={aiBusy} className="px-3 text-xs">{aiBusy ? '生成中…' : '生成'}</Button>
+            </div>
+            {aiErr && <p className="mt-2 text-xs text-red-500">{aiErr}</p>}
+            {aiResult && (
+              <div className="mt-2 rounded-lg bg-surface p-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink/70">预览</span>
+                  <Button variant="subtle" onClick={applyAI} className="px-2 py-0.5 text-[11px]">采用到表单</Button>
+                </div>
+                <div className="max-h-40 overflow-y-auto text-xs leading-5 text-ink/60">
+                  <p><b>{aiResult.name}</b>{aiResult.tagline ? ' · ' + aiResult.tagline : ''}</p>
+                  <p className="mt-1 whitespace-pre-wrap">{aiResult.background}</p>
+                  {(aiResult.personality || []).length > 0 && <div className="mt-1 flex flex-wrap gap-1">{(aiResult.personality as string[]).map((t: string) => <Badge key={t}>{t}</Badge>)}</div>}
+                  {aiResult.speaking_style?.catchphrase && <p className="mt-1 text-ink/50">口头禅：{aiResult.speaking_style.catchphrase}</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="mt-3 flex gap-2">
           <Button onClick={save} disabled={busy || !form.name} className="flex-1">{busy ? '保存中…' : '保存人设'}</Button>
           <Button variant="ghost" onClick={() => setEdit(null)}>取消</Button>

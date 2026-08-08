@@ -42,9 +42,9 @@ export const api = {
 
 export type Persona = {
   id: string; name: string; tagline: string; background: string;
-  personality: string[]; speaking_style: { tone: string; preferences: string[]; avoid: string[] };
+  personality: string[]; speaking_style: { tone: string; preferences: string[]; avoid: string[]; catchphrase?: string };
   values: string[]; relationship: string; expertise: string[];
-  greeting: string; avatar_color: string; is_preset: boolean; is_public?: boolean; version: number;
+  greeting: string; avatar?: string; avatar_color: string; is_preset: boolean; is_public?: boolean; version: number;
 };
 
 export type VoiceProfile = {
@@ -72,7 +72,7 @@ export type Chapter = {
 
 export type Conversation = {
   id: string; title: string; project_id: string | null; persona_id: string | null; voice_profile_id: string | null;
-  persona?: { id: string; name: string; tagline: string; avatar_color: string } | null;
+  persona?: { id: string; name: string; tagline: string; avatar?: string; avatar_color: string } | null;
   voice?: { id: string; display_name: string } | null;
   project?: { id: string; title: string; genre: string } | null;
   last_message?: string | null; updated_at?: string;

@@ -24,6 +24,9 @@ import speechRoutes from './routes/speech.js';
 import insightsRoutes from './routes/insights.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+function dataDir() { return process.env.DATA_DIR || path.join(__dirname, '..', 'data'); }
+
+
 await initStorage();
 
 const app = express();
@@ -43,6 +46,15 @@ app.post('/api/v1/admin/login', (req, res) => {
   }
   const token = jwt.sign({ uid: a.id, role: 'admin' }, process.env.JWT_SECRET || 'aicho-muse-dev-secret-change-me', { expiresIn: '12h' });
   res.json({ code: 0, data: { token, admin: { id: a.id, username: a.username, role: a.role } } });
+});
+
+// 上传文件（人设头像等）静态访问
+app.get('/api/v1/uploads/:name', (req, res) => {
+  const name = String(req.params.name || '');
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).json({ code: 40001, message: '非法文件名' });
+  const file = path.join(dataDir(), 'uploads', name);
+  if (!fs.existsSync(file)) return res.status(404).json({ code: 40401, message: '文件不存在' });
+  res.sendFile(file);
 });
 
 app.use('/api/v1/auth', authRoutes);

@@ -29,7 +29,7 @@ function withJoins(c) {
   const last = d.messages.filter(m => m.conversation_id === c.id).sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(-1)[0];
   return {
     ...c,
-    persona: persona ? { id: persona.id, name: persona.name, tagline: persona.tagline, avatar_color: persona.avatar_color } : null,
+    persona: persona ? { id: persona.id, name: persona.name, tagline: persona.tagline, avatar: persona.avatar || null, avatar_color: persona.avatar_color } : null,
     voice: voice ? { id: voice.id, display_name: voice.display_name, params: voice.params } : null,
     project: project ? { id: project.id, title: project.title, genre: project.genre } : null,
     last_message: last ? last.content.slice(0, 60) : null,
@@ -57,6 +57,7 @@ router.post('/', (req, res) => {
     user_id: req.user.id,
     project_id: project_id || null,
     persona_id: persona ? persona.id : (d.personas.find(p => p.is_preset && p.id === 'preset-liwen')?.id || null),
+    persona_snapshot: persona ? JSON.parse(JSON.stringify(persona)) : null,
     voice_profile_id: voice ? voice.id : null,
     title: '新的创作会话',
     created_at: now,
@@ -74,7 +75,7 @@ router.patch('/:id', (req, res) => {
   if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
   const c = found.c;
   if (req.body.title) c.title = req.body.title;
-  if (req.body.persona_id) c.persona_id = req.body.persona_id;
+  if (req.body.persona_id) { c.persona_id = req.body.persona_id; const np = d.personas.find(p => p.id === req.body.persona_id && (p.is_preset || p.user_id === req.user.id)); c.persona_snapshot = np ? JSON.parse(JSON.stringify(np)) : null; }
   if (req.body.voice_profile_id !== undefined) c.voice_profile_id = req.body.voice_profile_id;
   c.updated_at = new Date().toISOString();
   saveDb();
@@ -145,7 +146,8 @@ router.get('/:id/stream', (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  const persona = d.personas.find(p => p.id === c.persona_id) || null;
+  // 历史会话按创建/切换时的人设快照渲染，人设后续编辑不回改旧会话（人设一致性 §7）
+  const persona = c.persona_snapshot || d.personas.find(p => p.id === c.persona_id) || null;
   const voice = d.voices.find(v => v.id === c.voice_profile_id) || null;
   const project = c.project_id ? d.projects.find(p => p.id === c.project_id) : null;
   const chapter = project ? d.chapters.filter(ch => ch.project_id === project.id).sort((a, b) => a.order_index - b.order_index)[0] : null;

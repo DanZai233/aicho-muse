@@ -79,7 +79,17 @@ function categorize(input) {
 
 function personaPrompt(persona) {
   if (!persona) return '';
-  return `你是${persona.name}：${persona.tagline}。背景：${persona.background}。性格：${persona.personality.join('、')}。说话风格：${persona.speaking_style?.tone || '自然'}，偏好：${(persona.speaking_style?.preferences || []).join('、')}，避免：${(persona.speaking_style?.avoid || []).join('、')}。`;
+  const parts = [
+    `你是${persona.name}${persona.tagline ? '：' + persona.tagline : ''}。`,
+    persona.background ? `背景：${persona.background}。` : '',
+    (persona.personality || []).length ? `性格：${persona.personality.join('、')}。` : '',
+    `说话风格：${persona.speaking_style?.tone || '自然'}${(persona.speaking_style?.preferences || []).length ? '，偏好：' + persona.speaking_style.preferences.join('、') : ''}${(persona.speaking_style?.avoid || []).length ? '，避免：' + persona.speaking_style.avoid.join('、') : ''}${persona.speaking_style?.catchphrase ? '，口头禅：' + persona.speaking_style.catchphrase : ''}。`,
+    (persona.values || []).length ? `你的价值观：${persona.values.join('、')}。` : '',
+    persona.relationship ? `你和用户的关系：${persona.relationship}。` : '',
+    (persona.expertise || []).length ? `你擅长：${persona.expertise.join('、')}。` : '',
+    persona.greeting ? `开场白：${persona.greeting}（初次见面或适合时自然使用，不要每次重复）。` : '',
+  ].filter(Boolean).join('\n');
+  return parts;
 }
 const LANGUAGE_NAME = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español', ru: 'Русский' };
 function languageNote(lang) {

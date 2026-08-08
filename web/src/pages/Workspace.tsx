@@ -809,7 +809,7 @@ export default function Workspace() {
           <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-ink/5 bg-surface/95 md:static md:z-auto md:w-[340px] md:shrink-0">
             <div className="flex items-center justify-between border-b border-ink/5 bg-surface/70 px-4 py-2.5">
               <div className="flex items-center gap-2.5">
-                {conv?.persona ? <Avatar name={conv.persona.name} color={conv.persona.avatar_color} size="sm" /> : <Avatar name="黎文" size="sm" />}
+                {conv?.persona ? (conv.persona.avatar ? <img src={'/api/v1' + conv.persona.avatar} alt={conv.persona.name} className="h-7 w-7 rounded-full object-cover" /> : <Avatar name={conv.persona.name} color={conv.persona.avatar_color} size="sm" />) : <Avatar name="黎文" size="sm" />}
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium">{conv?.persona?.name || '黎文'}</span>
@@ -829,7 +829,7 @@ export default function Workspace() {
             <div ref={msgsRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
               {messages.length === 0 && !streaming && (
                 <div className="flex h-full flex-col items-center justify-center text-center">
-                  <Avatar name={conv?.persona?.name || '黎文'} color={conv?.persona?.avatar_color} size="lg" />
+                  {conv?.persona?.avatar ? <img src={'/api/v1' + conv.persona.avatar} alt={conv.persona?.name || '黎文'} className="h-16 w-16 rounded-full object-cover shadow-soft" /> : <Avatar name={conv?.persona?.name || '黎文'} color={conv?.persona?.avatar_color} size="lg" />}
                   <h3 className="mt-3 font-serif text-lg font-semibold">{conv?.persona?.tagline || '今天想讲点什么？我在听。'}</h3>
                   <p className="mt-1 max-w-xs text-sm text-ink/40">口述或输入一段回忆、一个故事想法，我会陪你把它展开，并把可用内容变成可采纳的 diff。</p>
                 </div>
