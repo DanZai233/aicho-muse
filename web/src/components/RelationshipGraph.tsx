@@ -26,11 +26,12 @@ function buildGraph(cards: any[]): { nodes: GNode[]; edges: GEdge[] } {
       let targetId = nameToId.get(targetName);
       if (!targetId && idToName.has(targetName)) targetId = targetName;
       if (!targetId || targetId === c.id) continue;
+      const resolvedTargetName = idToName.get(targetId) || targetName;
       const type = String(rel.type || rel.label || rel.relation || '').trim() || '认识';
       const key = c.id + '|' + targetId + '|' + type;
       if (seen.has(key)) continue;
       seen.add(key);
-      edges.push({ id: c.id.slice(0, 6) + '-' + targetId.slice(0, 6) + '-' + type, source: c.id, sourceName: c.name, target: targetId, targetName, type, note: String(rel.note || '').trim() });
+      edges.push({ id: c.id.slice(0, 6) + '-' + targetId.slice(0, 6) + '-' + type, source: c.id, sourceName: c.name, target: targetId, targetName: resolvedTargetName, type, note: String(rel.note || '').trim() });
     }
   }
   return { nodes, edges };

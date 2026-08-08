@@ -36,13 +36,14 @@ export function buildGraph(pid) {
       let targetId = nameToId.get(targetName);
       if (!targetId && idToName.has(targetName)) targetId = targetName;
       if (!targetId || targetId === c.id) continue;
+      const resolvedTargetName = idToName.get(targetId) || targetName;
       const type = String(rel.type || rel.label || rel.relation || '').trim() || '认识';
       const key = c.id + '|' + targetId + '|' + type;
       if (seen.has(key)) continue;
       seen.add(key);
       edges.push({
         id: uuid(), source: c.id, sourceName: c.name,
-        target: targetId, targetName,
+        target: targetId, targetName: resolvedTargetName,
         type, note: String(rel.note || '').trim(),
       });
     }
