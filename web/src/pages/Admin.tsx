@@ -160,7 +160,7 @@ export default function Admin() {
   return (
     <div className="admin-root min-h-screen bg-ink/95 text-paper">
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <header className="mb-8 flex items-center justify-between">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-paper font-serif text-lg font-bold text-ink">A</div>
             <div>
@@ -174,9 +174,9 @@ export default function Admin() {
           </div>
         </header>
 
-        <nav className="mb-6 flex gap-1 rounded-xl bg-white/5 p-1 text-sm">
+        <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-white/5 p-1 text-sm">
           {([['stats', '数据概览'], ['users', '用户管理'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
-            <button key={k} onClick={() => setTab(k)} className={`flex-1 rounded-lg py-2 transition ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
+            <button key={k} onClick={() => setTab(k)} className={`min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 transition sm:px-4 ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
           ))}
         </nav>
 
@@ -225,7 +225,7 @@ export default function Admin() {
             </div>
             <div className="space-y-2">
               {users.map(u => (
-                <div key={u.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
+                <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-3">
                   <div>
                     <div className="font-medium">{u.display_name}</div>
                     <div className="text-sm text-paper/40">{u.email} · {new Date(u.created_at).toLocaleDateString()}</div>
@@ -271,8 +271,8 @@ export default function Admin() {
                     )}
                   </>
                 )}
-                <div className="flex items-center gap-2">
-                  <label className="block flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="block min-w-52 flex-1">
                     <span className="mb-1 block text-xs text-paper/50">模型（可点击下方列表快速选择）</span>
                     <input value={settings.ai.llm_model} onChange={e => setSettings({ ...settings, ai: { ...settings.ai, llm_model: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="deepseek-v4-flash / qwen-plus / gemini-2.5-flash…" />
                   </label>
@@ -304,7 +304,7 @@ export default function Admin() {
               <h2 className="mb-4 font-serif text-lg font-semibold">语音服务（STT / TTS）</h2>
               <div className="space-y-3">
                 <p className="text-xs text-paper/45">可选。留空时前端使用浏览器原生语音（Web Speech API），无需任何密钥。填入后可启用 OpenAI 兼容的 TTS / STT 代理端点。</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1 block text-xs text-paper/50">TTS API Key</span>
                     <input value={settings.tts?.api_key || ''} onChange={e => setSettings({ ...settings, tts: { ...settings.tts, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="sk-..." />
@@ -340,7 +340,7 @@ export default function Admin() {
                 </div>
                 <div className="rounded-xl bg-ink/40 p-3">
                   <p className="mb-2 text-xs font-semibold text-paper/60">声音克隆（授权制）</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <label className="block">
                       <span className="mb-1 block text-xs text-paper/50">克隆服务 API Key</span>
                       <input value={settings.voice_clone?.api_key || ''} onChange={e => setSettings({ ...settings, voice_clone: { ...settings.voice_clone, api_key: e.target.value } })} type="password" className={inputCls + ' bg-ink/80'} placeholder="Fish Audio / 火山克隆 Key" />
@@ -369,7 +369,7 @@ export default function Admin() {
             <div className="rounded-2xl bg-white/5 p-5">
               <h2 className="mb-4 font-serif text-lg font-semibold">配额与站点</h2>
               <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <label className="block">
                     <span className="mb-1 block text-xs text-paper/50">每日消息</span>
                     <input type="number" value={settings.quota.daily_messages} onChange={e => setSettings({ ...settings, quota: { ...settings.quota, daily_messages: Number(e.target.value) } })} className={inputCls + ' bg-ink/80'} />
@@ -397,7 +397,7 @@ export default function Admin() {
                 </label>
               </div>
             </div>
-            <div className="lg:col-span-2 flex items-center gap-3"><Button onClick={saveSettings} className="bg-paper text-ink hover:bg-paper/90">保存全部设置</Button><Button variant="danger" onClick={resetData} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">⚠️ 重置全部数据</Button></div>
+            <div className="flex flex-wrap items-center gap-3 lg:col-span-2"><Button onClick={saveSettings} className="bg-paper text-ink hover:bg-paper/90">保存全部设置</Button><Button variant="danger" onClick={resetData} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">⚠️ 重置全部数据</Button></div>
           </div>
         )}
 
@@ -410,7 +410,7 @@ export default function Admin() {
               </div>
               <div className="space-y-2">
                 {presets.personas.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5">
+                  <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-2.5">
                     <div><div className="font-medium">{p.name}</div><div className="text-xs text-paper/40">{p.tagline}</div></div>
                     <div className="flex items-center gap-1.5"><Badge color="accent">预设</Badge><button onClick={() => editPreset('persona', p)} title="编辑" className="text-xs text-paper/50 hover:text-paper">✎</button><button onClick={() => delPreset('persona', p)} title="删除" className="text-xs text-red-300/70 hover:text-red-300">✕</button></div>
                   </div>
@@ -424,7 +424,7 @@ export default function Admin() {
               </div>
               <div className="space-y-2">
                 {presets.voices.map((v: any) => (
-                  <div key={v.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5">
+                  <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-2.5">
                     <div><div className="font-medium">{v.display_name}</div><div className="text-xs text-paper/40">{v.provider}</div></div>
                     <div className="flex items-center gap-1.5"><Badge color="accent">预设</Badge><button onClick={() => editPreset('voice', v)} title="编辑" className="text-xs text-paper/50 hover:text-paper">✎</button><button onClick={() => delPreset('voice', v)} title="删除" className="text-xs text-red-300/70 hover:text-red-300">✕</button></div>
                   </div>
@@ -452,7 +452,7 @@ export default function Admin() {
               <h2 className="mb-4 font-serif text-lg font-semibold">管理员列表（{admins.length}）</h2>
               <div className="space-y-2">
                 {admins.map(a => (
-                  <div key={a.id} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5">
+                  <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-2.5">
                     <div>
                       <div className="font-medium">{a.username}</div>
                       <div className="text-xs text-paper/40">{a.role || 'admin'}</div>

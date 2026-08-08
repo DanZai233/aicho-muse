@@ -137,12 +137,12 @@ export default function Home() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-8 flex items-end justify-between">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold">你好，{user?.display_name}</h1>
             <p className="mt-1 text-ink/50">今天想写点什么？每一本书都从封面开始慢慢长出来。</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="subtle" onClick={() => setJoinOpen(true)}>加入协作</Button>
             <Button variant="subtle" onClick={() => setImportOpen(true)}>📥 导入文件</Button>
             <Button onClick={() => setOpen(true)} data-tour="tour-create-book">＋ 新建作品</Button>
@@ -170,7 +170,7 @@ export default function Home() {
                   {p.author_name && <p className="mt-0.5 text-[11px] text-ink/35">{p.author_name} 著</p>}
                   <div className="mt-3 flex items-center justify-between text-xs text-ink/40">
                     <span>{p.chapter_count ?? 0} 章 · {p.word_count ?? 0} 字</span>
-                    <span className="text-accent opacity-0 transition group-hover:opacity-100">继续创作 →</span>
+                    <span className="text-accent opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100">继续创作 →</span>
                   </div>
                 </div>
                 </Link>
@@ -231,8 +231,8 @@ export default function Home() {
 
       <Modal open={open} onClose={() => setOpen(false)} title="新建作品">
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <BookCover project={preview} size="md" />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex justify-center sm:block"><BookCover project={preview} size="md" /></div>
             <div className="flex-1 space-y-2">
               <Input label="书名" value={title} onChange={setTitle} placeholder="例如：我的前半生" />
               <Input label="副标题" value={subtitle} onChange={setSubtitle} placeholder="一句话副标题（可选）" />

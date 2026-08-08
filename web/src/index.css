@@ -29,6 +29,24 @@
   --surface: 255 255 255;
 }
 
+/* 移动端视口高度：兼容 iOS Safari 地址栏（100dvh 优先，旧浏览器回退 100vh） */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}
+.h-app-minus-header {
+  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
+}
+
+/* 底部安全区（iPhone 底部横条等） */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.pb-safe-input {
+  padding-bottom: max(0.625rem, env(safe-area-inset-bottom));
+}
+
 html.dark {
   background: #1e1b18;
 }
@@ -117,6 +135,14 @@ body {
 .md-preview hr { border: none; border-top: 1px solid rgb(var(--ink) / 0.12); margin: 1.2em 0; }
 .md-preview table { border-collapse: collapse; margin: 0.6em 0; }
 .md-preview th, .md-preview td { border: 1px solid rgb(var(--ink) / 0.14); padding: 0.4em 0.7em; }
+
+/* 移动端滚动条更细、更不显眼 */
+@media (max-width: 767px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
 
 /* 语音播放波形动画 */
 @keyframes waveBounce {

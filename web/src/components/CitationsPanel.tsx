@@ -67,11 +67,11 @@ export default function CitationsPanel({ projectId, citations, setCitations, onI
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button onClick={() => onInsert(i + 1)} title="在正文光标处插入 [n]"
-                  className="rounded px-1.5 py-0.5 text-[11px] text-accent opacity-0 transition group-hover:opacity-100 hover:bg-accentlight/60">插入</button>
+                  className="rounded px-1.5 py-0.5 text-[11px] text-accent opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-accentlight/60">插入</button>
                 <button onClick={() => startEdit(c)} title="编辑"
-                  className="rounded px-1.5 py-0.5 text-[11px] text-ink/40 opacity-0 transition group-hover:opacity-100 hover:bg-ink/5">✎</button>
+                  className="rounded px-1.5 py-0.5 text-[11px] text-ink/40 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-ink/5">✎</button>
                 <button onClick={() => remove(c.id)} title="删除"
-                  className="rounded px-1.5 py-0.5 text-[11px] text-ink/25 opacity-0 transition group-hover:opacity-100 hover:text-red-500">✕</button>
+                  className="rounded px-1.5 py-0.5 text-[11px] text-ink/25 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-red-500">✕</button>
               </div>
             </div>
             {c.note && <p className="mt-1 text-[11px] text-ink/35">{c.note}</p>}

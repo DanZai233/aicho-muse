@@ -123,20 +123,20 @@ export default function Voices() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-6 flex items-end justify-between">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-serif text-3xl font-semibold">助手声色</h1>
             <p className="mt-1 text-ink/50">语速、音调、情绪——让缪斯的声音配得上它的性格。</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="subtle" onClick={() => { setLibOpen(true); setLibMsg(''); if (!libItems.length) searchLibrary(); }} className="text-xs">🎧 音频广场</Button>
             <Button variant="subtle" onClick={() => { setCloneOpen(true); setCloneMsg(''); }} className="text-xs">🎙 克隆我的声音</Button>
             <Button onClick={() => openEdit()}>＋ 新建音色</Button>
           </div>
         </div>
-        <div className="mb-6 flex rounded-xl bg-ink/5 p-1 text-sm" data-tour="tour-voice-tabs">
+        <div className="mb-6 flex overflow-x-auto rounded-xl bg-ink/5 p-1 text-sm" data-tour="tour-voice-tabs">
           {([['mine', '我的音色'], ['preset', '官方预设'], ['public', '公开分享'], ['library', '音频广场']] as const).map(([k, v]) => (
-            <button key={k} onClick={() => setTab(k)} className={'flex-1 rounded-lg px-4 py-2 transition ' + (tab === k ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
+            <button key={k} onClick={() => setTab(k)} className={'min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 transition sm:px-4 ' + (tab === k ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink/50 hover:text-ink')}>{v}</button>
           ))}
         </div>
 
@@ -232,7 +232,7 @@ export default function Voices() {
               </select>
             </label>
             {form.provider !== 'system' && <Input label="音色 ID" value={form.voice_id} disabled={form.source === 'fish-library'} onChange={v => setForm({ ...form, voice_id: v })} placeholder="厂商音色 ID" />}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-ink/60">语速 {form.params.rate}</span>
                 <input type="range" min={0.6} max={1.5} step={0.05} value={form.params.rate} onChange={e => setForm({ ...form, params: { ...form.params, rate: Number(e.target.value) } })} className="w-full accent-accent" />

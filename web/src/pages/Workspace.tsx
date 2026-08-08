@@ -100,9 +100,9 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
               <div className="flex shrink-0 items-center gap-1">
                 {(kind === 'outline' || kind === 'characters') && onAI && (
                   <button onClick={() => onAI(kind, i.id, i)} title="AI 生成 / 润色"
-                    className="text-xs text-accent/70 opacity-0 transition group-hover:opacity-100 hover:text-accent">✨</button>
+                    className="text-xs text-accent/70 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-accent">✨</button>
                 )}
-                <button onClick={() => remove(i.id)} className="text-xs text-ink/25 opacity-0 transition group-hover:opacity-100 hover:text-red-500">✕</button>
+                <button onClick={() => remove(i.id)} className="text-xs text-ink/25 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-red-500">✕</button>
               </div>
             </div>
           </div>
@@ -920,7 +920,7 @@ export default function Workspace() {
 
   return (
     <Layout>
-      <div className="mx-auto flex h-[calc(100vh-56px)] max-w-[1700px] overflow-hidden">
+      <div className="mx-auto flex h-app-minus-header max-w-[1700px] overflow-hidden">
         <aside className={"fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-ink/5 bg-surface shadow-lift transition-transform duration-200 md:static md:z-auto md:translate-x-0 md:shadow-none " + (showSidebar ? 'translate-x-0' : '-translate-x-full')}>
           <div className="flex items-center gap-3 border-b border-ink/5 p-3">
             {project && <BookCover project={project} size="sm" showMeta={false} />}
@@ -977,7 +977,7 @@ export default function Workspace() {
                       <div className="truncate text-xs text-ink/35">{c.persona?.name || '黎文'}{c.last_message ? ' · ' + c.last_message : ''}</div>
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); deleteConv(c.id, c.title); }}
-                      className="absolute right-1 top-1.5 z-10 rounded-full px-1.5 text-[10px] text-ink/25 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500" title="删除会话">✕</button>
+                      className="absolute right-1 top-1.5 z-10 rounded-full px-1.5 text-[10px] text-ink/25 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-50 hover:text-red-500" title="删除会话">✕</button>
                   </div>
                 ))}
                 <button onClick={() => setShowNewConv(true)} className="mt-2 w-full rounded-lg border border-dashed border-ink/15 px-3 py-2 text-sm text-ink/40 hover:border-accent hover:text-accent">＋ 新会话</button>
@@ -1025,21 +1025,21 @@ export default function Workspace() {
         <section className="flex min-w-0 flex-1 flex-col">
           {showSidebar && <div className="fixed inset-0 z-30 bg-ink/30 md:hidden" onClick={() => setShowSidebar(false)} />}
 
-          <div className="flex items-center justify-between border-b border-ink/5 bg-surface/70 px-4 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-ink/5 bg-surface/70 px-3 py-2 lg:px-4">
             <div className="flex min-w-0 items-center gap-2">
-              <button onClick={() => setShowSidebar(true)} className="rounded-lg px-2 py-1.5 text-sm text-ink/60 hover:bg-ink/5 md:hidden">☰</button>
+              <button onClick={() => setShowSidebar(true)} aria-label="打开侧栏" className="rounded-lg px-2 py-1.5 text-sm text-ink/60 hover:bg-ink/5 md:hidden">☰</button>
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-serif text-sm font-semibold">{project?.title || '作品'}</span>
                 {chapter && <span className="hidden truncate text-xs text-ink/40 sm:inline">· {chapter.title}</span>}
               </div>
-              <div className="ml-2 flex rounded-lg bg-ink/5 p-0.5 text-xs">
+              <div className="ml-1 flex shrink-0 rounded-lg bg-ink/5 p-0.5 text-xs">
                 <button onClick={() => setBookView('write')}
-                  className={"rounded-md px-3 py-1.5 transition " + (bookView === 'write' ? 'bg-surface text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>✍ 写作</button>
+                  className={"rounded-md px-2.5 py-1.5 transition sm:px-3 " + (bookView === 'write' ? 'bg-surface text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>✍ 写作</button>
                 <button onClick={() => setBookView('preview')}
-                  className={"rounded-md px-3 py-1.5 transition " + (bookView === 'preview' ? 'bg-surface text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>📖 书</button>
+                  className={"rounded-md px-2.5 py-1.5 transition sm:px-3 " + (bookView === 'preview' ? 'bg-surface text-ink shadow-sm font-medium' : 'text-ink/50 hover:text-ink')}>📖 书</button>
               </div>
             </div>
-            <div className="flex items-center gap-1 text-xs text-ink/45">
+            <div className="flex min-w-0 basis-full items-center gap-1 overflow-x-auto whitespace-nowrap text-xs text-ink/45 lg:basis-auto lg:justify-end">
               {project && (
                 <button onClick={openShare} className="rounded-md bg-accentlight/70 px-2.5 py-1 font-medium text-ink transition hover:bg-accentlight" title="邀请协作者共同创作">🔗 协作者</button>
               )}
@@ -1113,10 +1113,10 @@ export default function Workspace() {
             <div className="flex min-h-0 flex-1">
               {chapter ? (
                 <div className="flex min-h-0 flex-1 flex-col bg-paper">
-                  <div className="flex items-center gap-2 border-b border-ink/10 bg-surface/80 px-5 py-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-ink/10 bg-surface/80 px-4 py-2 sm:px-5">
                     <span className="text-xs text-ink/35">第 {chapters.findIndex(c => c.id === chapter.id) + 1} 章</span>
                     <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
-                      className="w-1/3 min-w-40 bg-transparent font-serif text-base font-semibold outline-none" />
+                      className="min-w-0 flex-1 bg-transparent font-serif text-base font-semibold outline-none" />
                     <span className="text-xs text-ink/35">{chapter.word_count} 字</span>
                     {project?.genre === 'paper' && (
                       <>
@@ -1288,7 +1288,7 @@ export default function Workspace() {
               )}
             </div>
 
-            <div className="border-t border-ink/5 bg-surface/50 p-2.5">
+            <div className="border-t border-ink/5 bg-surface/50 px-2.5 pt-2.5 pb-safe-input">
               {pendingTrans && (
                 <div className="mb-2 rounded-xl border border-accent/25 bg-accentlight/30 p-2.5 animate-fade-up">
                   <div className="mb-1.5 flex items-center justify-between">

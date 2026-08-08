@@ -118,7 +118,7 @@ export default function Settings() {
           <h2 className="mb-4 font-serif text-lg font-semibold">语音偏好</h2>
           {prefs ? (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
                   <span className="mb-1.5 block text-xs font-medium text-ink/60">朗读语速 {prefs.tts_rate}</span>
                   <input type="range" min={0.6} max={1.5} step={0.05} value={prefs.tts_rate}

@@ -55,18 +55,18 @@ export default function SharedBook() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent font-serif text-lg font-bold text-paper">M</div>
-            <span className="font-serif text-lg font-semibold tracking-wide">Aicho Muse</span>
+            <span className="hidden font-serif text-lg font-semibold tracking-wide min-[420px]:inline">Aicho Muse</span>
           </Link>
-          <nav className="flex items-center gap-2 text-sm">
-            <Link to="/shares" className="rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">拾卷广场</Link>
+          <nav className="flex items-center gap-1 text-sm sm:gap-2">
+            <Link to="/shares" className="rounded-lg px-2 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink sm:px-3">拾卷广场</Link>
             {user ? (
               <>
-                <Link to="/workspace" className="rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">工作台</Link>
+                <Link to="/workspace" className="hidden rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink sm:inline">工作台</Link>
                 <Avatar name={user.display_name} size="sm" />
-                <button onClick={logout} className="rounded-lg px-2.5 py-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink">退出</button>
+                <button onClick={logout} className="hidden rounded-lg px-2.5 py-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink sm:inline">退出</button>
               </>
             ) : (
-              <Link to="/login" className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-paper transition hover:bg-accent/90">开始创作</Link>
+              <Link to="/login" className="rounded-lg bg-accent px-3 py-1.5 font-medium text-paper transition hover:bg-accent/90">开始创作</Link>
             )}
           </nav>
         </div>
@@ -113,7 +113,7 @@ export default function SharedBook() {
                 </button>
               ))}
             </aside>
-            <article className="min-w-0 rounded-xl border border-ink/5 bg-surface/80 px-6 py-8 shadow-soft">
+            <article className="min-w-0 rounded-xl border border-ink/5 bg-surface/80 px-4 py-6 shadow-soft sm:px-6 sm:py-8">
               <h2 className="font-serif text-xl font-semibold">{active?.title}</h2>
               <div className="mt-5 whitespace-pre-wrap font-creative text-base leading-8 text-ink/80">{active?.content || '（这一章还是空白，作者把想象留在了这里。）'}</div>
               <div className="mt-8 flex items-center justify-between border-t border-ink/5 pt-4 text-sm">

@@ -39,20 +39,20 @@ export default function SharingSquare() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent font-serif text-lg font-bold text-paper">M</div>
-            <span className="font-serif text-lg font-semibold tracking-wide">Aicho Muse</span>
+            <span className="hidden font-serif text-lg font-semibold tracking-wide min-[420px]:inline">Aicho Muse</span>
           </Link>
-          <nav className="flex items-center gap-2 text-sm">
-            <Link to="/shares" className="rounded-lg px-3 py-1.5 font-medium text-accent">拾卷</Link>
+          <nav className="flex items-center gap-1 text-sm sm:gap-2">
+            <Link to="/shares" className="rounded-lg px-2 py-1.5 font-medium text-accent sm:px-3">拾卷</Link>
             {user ? (
               <>
-                <Link to="/workspace" className="rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">工作台</Link>
+                <Link to="/workspace" className="hidden rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink sm:inline">工作台</Link>
                 <Avatar name={user.display_name} size="sm" />
-                <button onClick={logout} className="rounded-lg px-2.5 py-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink">退出</button>
+                <button onClick={logout} className="hidden rounded-lg px-2.5 py-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink sm:inline">退出</button>
               </>
             ) : (
               <>
-                <Link to="/login" className="rounded-lg px-3 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">登录</Link>
-                <Link to="/login" className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-paper transition hover:bg-accent/90">开始创作</Link>
+                <Link to="/login" className="rounded-lg px-2 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink sm:px-3">登录</Link>
+                <Link to="/login" className="rounded-lg bg-accent px-3 py-1.5 font-medium text-paper transition hover:bg-accent/90">开始创作</Link>
               </>
             )}
           </nav>
@@ -70,7 +70,7 @@ export default function SharingSquare() {
 
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(1, q, genre, sort)}
-            placeholder="搜索书名、作者、摘要…" className="w-64 rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
+            placeholder="搜索书名、作者、摘要…" className="w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none focus:border-accent sm:w-64" />
           <div className="flex gap-2">
             {SORTS.map(([k, v]) => (
               <button key={k} onClick={() => { setSort(k); load(1, q, genre, k); }}

@@ -17,6 +17,8 @@ const QUICK_NAV = [
 export default function MuseAssistant() {
   const nav = useNavigate();
   const loc = useLocation();
+  // 创作空间页已有专属对话面板，移动端隐藏悬浮助手避免遮挡
+  const isWorkspace = loc.pathname === '/workspace';
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'chat' | 'books'>('chat');
   const [input, setInput] = useState('');
@@ -76,7 +78,7 @@ export default function MuseAssistant() {
       <button
         onClick={() => setOpen(o => !o)}
         title="Muse 助手"
-        className="fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-accent text-2xl text-paper shadow-lift transition hover:scale-105 hover:shadow-2xl"
+        className={"fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-accent text-2xl text-paper shadow-lift transition hover:scale-105 hover:shadow-2xl " + (isWorkspace ? 'hidden md:flex' : 'flex')}
         style={{ boxShadow: '0 8px 28px rgba(139,125,107,0.4)' }}
       >
         {open ? '✕' : '✨'}
@@ -84,7 +86,7 @@ export default function MuseAssistant() {
 
       {/* 面板 */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-[60] flex h-[560px] max-h-[75vh] w-[380px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl border border-ink/10 bg-surface shadow-2xl animate-fade-up">
+        <div className="fixed bottom-20 right-3 left-3 z-[60] flex h-[70vh] max-h-[75vh] w-auto flex-col overflow-hidden rounded-2xl border border-ink/10 bg-surface shadow-2xl animate-fade-up sm:left-auto sm:right-6 sm:h-[560px] sm:w-[380px] sm:max-w-[calc(100vw-3rem)]">
           {/* 头部 */}
           <div className="flex items-center gap-2 border-b border-ink/5 bg-accentlight/40 px-4 py-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent font-serif text-base font-bold text-paper">M</div>

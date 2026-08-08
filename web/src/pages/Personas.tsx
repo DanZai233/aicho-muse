@@ -246,7 +246,7 @@ export default function Personas() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-6 flex items-end justify-between">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-serif text-3xl font-semibold">创作人设</h1>
             <p className="mt-1 text-ink/50">给你的缪斯一个灵魂——性格、语气、价值观都可以定义。</p>
@@ -290,7 +290,7 @@ export default function Personas() {
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {(p.personality || []).slice(0, 4).map(t => <Badge key={t}>{t}</Badge>)}
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-ink/5 pt-3">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-ink/5 pt-3">
                 {tab === 'public'
                   ? <Button variant="subtle" onClick={() => clonePublic(p)} className="text-xs">＋ 收藏到我的</Button>
                   : p.is_preset
@@ -326,7 +326,7 @@ export default function Personas() {
       </div>
 
       <Modal open={modalOpen} onClose={() => { setEdit(null); setForm(EMPTY); setModalOpen(false); }} title={edit ? `编辑人设 · ${edit.name}` : '新建人设'} wide>
-        <div className="mb-3 flex items-center gap-4">
+        <div className="mb-3 flex flex-wrap items-center gap-4">
           <div className="relative">
             {form.avatar
               ? <img src={'/api/v1' + form.avatar} alt="头像" className="h-14 w-14 rounded-full object-cover shadow-soft" />
@@ -359,7 +359,7 @@ export default function Personas() {
           <Input label="开场白" value={form.greeting} onChange={v => setForm({ ...form, greeting: v })} placeholder="今天想讲点什么？" />
           <div className="sm:col-span-2 rounded-xl border border-ink/10 bg-paper/50 p-3">
             <p className="mb-2 text-xs font-semibold text-ink/60">🔊 绑定音色（可选）</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <input value={voiceQ} onChange={e => setVoiceQ(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchVoice(); } }}
                 placeholder="搜索 Fish 音频广场：温柔、旁白、爱莉希雅…"
@@ -379,7 +379,7 @@ export default function Personas() {
                 ))}
               </div>
             )}
-            <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-[11px] text-ink/40">{(form._voiceId || form.voice_profile_id) ? '已选：' + (form._voiceTitle || 'Fish 音色') + '（保存后会话朗读将使用此音色）' : '未绑定音色，会话时默认使用全局音色'}</p>
               {(form._voiceId || form.voice_profile_id) && (
                 <button onClick={previewBoundVoice} className="shrink-0 rounded-full bg-accentlight/60 px-2.5 py-1 text-[10px] text-ink/70 transition hover:bg-accentlight">🔊 试听</button>
