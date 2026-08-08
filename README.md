@@ -117,6 +117,7 @@ docker compose up --build -d
 
 ## 文档导航
 
+- [操作与运维指南](docs/OPS_GUIDE.md) — 线上入口、管理后台账号、默认助手/音色配置、数据隔离与运维命令
 - [产品设计](docs/PRODUCT_DESIGN.md) — 愿景、用户、场景、功能与设计原则
 - [系统架构](docs/ARCHITECTURE.md) — 技术选型与整体架构
 - [数据模型](docs/DATA_MODEL.md) — 核心表结构、关系、索引与数据生命周期
