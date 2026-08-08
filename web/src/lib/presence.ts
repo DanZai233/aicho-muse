@@ -11,6 +11,7 @@ export type PresenceEvents = {
   peerJoined: (peer: Peer) => void;
   peerLeft: (memberId: string) => void;
   cursor: (memberId: string, cursor: CursorPayload) => void;
+  content: (memberId: string, content: string, rev: number) => void;
   status: (connected: boolean) => void;
 };
 
@@ -60,6 +61,7 @@ export class PresenceClient {
         case 'peer-joined': this.emit('peerJoined', msg.peer); break;
         case 'peer-left': this.emit('peerLeft', msg.memberId); break;
         case 'cursor': this.emit('cursor', msg.memberId, msg.cursor); break;
+        case 'content': this.emit('content', msg.memberId, msg.content, msg.rev || 0); break;
         default: break;
       }
     };
@@ -96,6 +98,18 @@ export class PresenceClient {
   }
 
   // 上报光标（带节流：位置变化才发，且间隔 >= reportIntervalMs）
+  private lastContentRev = 0;
+  private lastContentSent = '';
+
+  // 上报正文更新（去重：内容相同不重发；rev 递增用于防旧数据覆盖新数据）
+  sendContent(content: string) {
+    if (!this.ws || !this.joined || !this.connected) return;
+    if (content === this.lastContentSent) return;
+    this.lastContentRev += 1;
+    this.lastContentSent = content;
+    this.ws.send(JSON.stringify({ type: 'content', content, rev: this.lastContentRev }));
+  }
+
   reportCursor(offset: number, selection: { start: number; end: number } | null, scrollTop: number) {
     if (!this.ws || !this.joined || !this.connected) return;
     const now = Date.now();

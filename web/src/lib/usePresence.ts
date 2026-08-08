@@ -5,7 +5,12 @@ import { PresenceClient, type Peer, type CursorPayload, type RemoteUser } from '
 
 export type RemoteCursorEntry = { memberId: string; user: RemoteUser; cursor: CursorPayload };
 
-export function usePresence(projectId: string, chapterId: string, token: string | null) {
+export function usePresence(
+  projectId: string,
+  chapterId: string,
+  token: string | null,
+  onRemoteContent?: (memberId: string, content: string, rev: number) => void,
+) {
   const clientRef = useRef<PresenceClient | null>(null);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [cursors, setCursors] = useState<Record<string, RemoteCursorEntry>>({});
@@ -57,6 +62,7 @@ export function usePresence(projectId: string, chapterId: string, token: string 
         });
       }),
       client.on('status', (connected) => setOnline(connected)),
+      client.on('content', (memberId, content, rev) => onRemoteContent?.(memberId, content, rev)),
     ];
 
     client.connect();
@@ -71,5 +77,9 @@ export function usePresence(projectId: string, chapterId: string, token: string 
     clientRef.current?.reportCursor(offset, selection, scrollTop);
   }, []);
 
-  return { peers, cursors, online, reportCursor };
+  const sendContent = useCallback((content: string) => {
+    clientRef.current?.sendContent(content);
+  }, []);
+
+  return { peers, cursors, online, reportCursor, sendContent };
 }

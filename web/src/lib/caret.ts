@@ -65,9 +65,9 @@ export function measureCaret(ta: HTMLTextAreaElement, offset: number): CaretPos 
   // mirror 内容：前文 + 当前行 + 标记字符
   m.innerHTML = escapeHtml(prefix)
     + (line ? '' : '<br>')
-    + `<span id="caret-marker">${escapeHtml(line) || ''}<span style="display:inline-block;width:0;height:1em"></span></span>`;
+    + `<span id="caret-marker">${escapeHtml(line) || ''}<span id="caret-point" style="display:inline-block;width:0;height:1em"></span></span>`;
 
-  const marker = m.querySelector('#caret-marker') as HTMLElement | null;
+  const point = m.querySelector('#caret-point') as HTMLElement | null;
   const rect = ta.getBoundingClientRect();
   // 让 mirror 精确覆盖在 textarea 上方（fixed 定位，视口坐标），
   // 这样 marker.offsetLeft/Top 就是相对 textarea 内容区的坐标，
@@ -78,9 +78,9 @@ export function measureCaret(ta: HTMLTextAreaElement, offset: number): CaretPos 
   const lineHeight = parseFloat(mirrorStyle?.lineHeight || '0');
   const height = (lineHeight && !isNaN(lineHeight)) ? lineHeight : parseFloat(mirrorStyle?.fontSize || '16') * 1.5;
 
-  const x = marker?.offsetLeft || 0;
-  // 内容区坐标：marker.offsetTop 已含 paddingTop；再减去 textarea 的滚动偏移
-  let y = (marker?.offsetTop || 0) + (line ? 0 : lineHeight * 0.85) - ta.scrollTop;
+  const x = point?.offsetLeft || 0;
+  // 内容区坐标：point.offsetTop 已含 paddingTop；再减去 textarea 的滚动偏移
+  let y = (point?.offsetTop || 0) - ta.scrollTop;
 
   return { x, y, height };
 }

@@ -124,7 +124,19 @@ export default function Workspace() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const { token, user: me } = useAuth();
-  const { peers, cursors, reportCursor } = usePresence(projectId, chapter?.id || '', token || '');
+  // 协作内容同步：本地输入防抖后广播；远端内容在本地未输入时应用（避免覆盖正在写的内容）
+  const localEditAtRef = useRef(0);
+  const chapterIdRef = useRef('');
+  chapterIdRef.current = chapter?.id || '';
+  const contentSendTimer = useRef<any>(null);
+  const handleRemoteContent = useCallback((_memberId: string, content: string) => {
+    if (Date.now() - localEditAtRef.current < 1200) return; // 本地正在输入，跳过远端覆盖
+    const cid = chapterIdRef.current;
+    if (!cid) return;
+    setChapter(prev => (prev && prev.id === cid) ? { ...prev, content, word_count: content.length } : prev);
+    setChapters(prev => prev.map(c => c.id === cid ? { ...c, content, word_count: content.length } : c));
+  }, []);
+  const { peers, cursors, reportCursor, sendContent } = usePresence(projectId, chapter?.id || '', token || '', handleRemoteContent);
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [conv, setConv] = useState<Conversation | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -451,8 +463,11 @@ export default function Workspace() {
   };
   const updateContent = (content: string) => {
     if (!chapter) return;
+    localEditAtRef.current = Date.now();
     const ch = { ...chapter, content, word_count: content.length };
     setChapter(ch); setChapters(prev => prev.map(c => c.id === ch.id ? ch : c));
+    if (contentSendTimer.current) clearTimeout(contentSendTimer.current);
+    contentSendTimer.current = setTimeout(() => sendContent(content), 500);
   };
 
   // 论文模式：在正文光标处插入引用标记 [n]

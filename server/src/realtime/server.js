@@ -108,6 +108,14 @@ export function attachPresenceServer(httpServer) {
         return;
       }
 
+      // 正文更新（远端协作者输入内容 → 广播给房间其他人）
+      if (msg.type === 'content' && state.room) {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        const rev = Math.max(0, Math.floor(Number(msg.rev) || 0));
+        state.room.broadcast({ type: 'content', memberId: state.memberId, content, rev }, state.memberId);
+        return;
+      }
+
       // 显式离开当前章节
       if (msg.type === 'leave' && state.room) {
         state.room.remove(state.memberId);
