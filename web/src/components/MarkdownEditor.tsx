@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { marked } from 'marked';
 import { Button } from './ui';
 
@@ -10,6 +10,10 @@ type Props = {
   onSave: () => void;
   placeholder?: string;
   fontSize?: 'md' | 'lg';
+  remoteCursors?: ReactNode;
+  // 实时光标：外部注入 textarea 引用（供坐标测量），并在选区/滚动变化时回调（内部已节流）
+  taRef?: React.RefObject<HTMLTextAreaElement>;
+  onActivity?: (offset: number, selection: { start: number; end: number } | null, scrollTop: number) => void;
 };
 
 const TOOLS = [
@@ -26,8 +30,9 @@ const TOOLS = [
   { key: 'hr', label: '分割线', icon: '—', line: '---\n' },
 ];
 
-export default function MarkdownEditor({ value, onChange, onSave, placeholder, fontSize = 'lg' }: Props) {
-  const taRef = useRef<HTMLTextAreaElement>(null);
+export default function MarkdownEditor({ value, onChange, onSave, placeholder, fontSize = 'lg', remoteCursors, taRef: externalTaRef, onActivity }: Props) {
+  const innerTaRef = useRef<HTMLTextAreaElement>(null);
+  const taRef = externalTaRef || innerTaRef;
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
   const undoRef = useRef<string[]>([]);
@@ -117,6 +122,16 @@ export default function MarkdownEditor({ value, onChange, onSave, placeholder, f
 
   const html = useCallback(() => marked.parse(value || '') as string, [value]);
 
+  // 光标活动上报：编辑、点击、键盘、滚动
+  const reportActivity = useCallback(() => {
+    const ta = taRef.current;
+    if (!ta || !onActivity) return;
+    const selection = ta.selectionStart !== ta.selectionEnd
+      ? { start: ta.selectionStart, end: ta.selectionEnd }
+      : null;
+    onActivity(ta.selectionStart, selection, ta.scrollTop);
+  }, [onActivity, taRef]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* 工具栏 */}
@@ -145,14 +160,21 @@ export default function MarkdownEditor({ value, onChange, onSave, placeholder, f
 
       {/* 编辑区 */}
       {mode === 'edit' ? (
-        <textarea
-          ref={taRef}
-          value={value}
-          onChange={e => handleChange(e.target.value)}
-          placeholder={placeholder || '在这里写下你的故事…（支持 Markdown）'}
-          spellCheck={false}
-          className={`font-creative flex-1 resize-none bg-transparent px-6 py-4 leading-8 outline-none ${fontSize === 'lg' ? 'text-base' : 'text-sm'}`}
-        />
+        <div className="relative min-h-0 flex-1">
+          <textarea
+            ref={taRef}
+            value={value}
+            onChange={e => { handleChange(e.target.value); requestAnimationFrame(reportActivity); }}
+            onKeyUp={reportActivity}
+            onClick={reportActivity}
+            onSelect={reportActivity}
+            onScroll={reportActivity}
+            placeholder={placeholder || '在这里写下你的故事…（支持 Markdown）'}
+            spellCheck={false}
+            className={`font-creative h-full w-full resize-none bg-transparent px-6 py-4 leading-8 outline-none ${fontSize === 'lg' ? 'text-base' : 'text-sm'}`}
+          />
+          {remoteCursors}
+        </div>
       ) : (
         <div
           className="md-preview font-creative flex-1 overflow-y-auto bg-surface/30 px-6 py-4 text-base leading-8"

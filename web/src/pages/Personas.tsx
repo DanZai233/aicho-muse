@@ -276,7 +276,7 @@ export default function Personas() {
             </div>
           </div>
         </div>
-        <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input label="姓名" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="例如：黎文" />
           <Input label="一句话定位" value={form.tagline} onChange={v => setForm({ ...form, tagline: v })} placeholder="例如：安静的倾听者" />
           <div className="sm:col-span-2"><Input label="背景故事" value={form.background} onChange={v => setForm({ ...form, background: v })} textarea rows={3} placeholder="他/她从哪里来，经历过什么" /></div>

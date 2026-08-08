@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input } from '../components/ui';
 import MarkdownEditor from '../components/MarkdownEditor';
 import BookCover from '../components/BookCover';
 import DiffReview from '../components/DiffReview';
+import RemoteCursors, { colorForMember } from '../components/presence/RemoteCursors';
+import OnlineAvatars from '../components/presence/OnlineAvatars';
+import { usePresence } from '../lib/usePresence';
+import { measureCaret } from '../lib/caret';
 import { getSpeechRecognition, startQuietRecording, speak, stopSpeak, stopSpeakTTS, speakWithTTS, interruptSpeech } from '../lib/speech';
 import { saveDraft, getDraft, clearDraft, listPending } from '../lib/drafts';
 
@@ -103,9 +108,12 @@ export default function Workspace() {
   const projectId = params.get('project') || '';
   const convParam = params.get('conv') || '';
 
+
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapter, setChapter] = useState<Chapter | null>(null);
+  const { token, user: me } = useAuth();
+  const { peers, cursors, reportCursor } = usePresence(projectId, chapter?.id || '', token || '');
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [conv, setConv] = useState<Conversation | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -355,6 +363,40 @@ export default function Workspace() {
     const ch = { ...chapter, content, word_count: content.length };
     setChapter(ch); setChapters(prev => prev.map(c => c.id === ch.id ? ch : c));
   };
+
+  // 实时光标：本地选择变化 → 节流上报 offset + scrollTop
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const handleEditorSelection = useCallback(() => {
+    const ta = editorRef.current;
+    if (!ta) return;
+    const offset = ta.selectionStart;
+    const selection = ta.selectionStart !== ta.selectionEnd
+      ? { start: ta.selectionStart, end: ta.selectionEnd }
+      : null;
+    reportCursor(offset, selection, ta.scrollTop);
+  }, [reportCursor]);
+
+  // 远端光标坐标：基于本地 textarea 与远端 offset 计算
+  const measureRemoteCursor = useCallback((memberId: string) => {
+    const ta = editorRef.current;
+    const cur = cursors[memberId];
+    if (!ta || !cur) return null;
+    try {
+      return measureCaret(ta, cur.cursor.offset);
+    } catch {
+      return null;
+    }
+  }, [cursors]);
+
+  const remoteCursors = useMemo(
+    () => (
+      <RemoteCursors
+        cursors={Object.values(cursors)}
+        measure={measureRemoteCursor}
+      />
+    ),
+    [cursors, measureRemoteCursor],
+  );
   const addChapter = async () => {
     if (!project) return;
     const d = await api.post<{ chapter: Chapter }>('/projects/' + project.id + '/chapters', {});
@@ -804,6 +846,7 @@ export default function Workspace() {
                     <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
                       className="w-1/3 min-w-40 bg-transparent font-serif text-base font-semibold outline-none" />
                     <span className="text-xs text-ink/35">{chapter.word_count} 字</span>
+                    <OnlineAvatars peers={peers} currentUserId={me?.id} />
                     <button onClick={cycleChapterStatus} title="点击推进章节状态：初稿 → 修改中 → 已定稿" className={"rounded-full px-2 py-0.5 text-xs font-medium transition " + (chapter.status === 'final' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : chapter.status === 'reviewed' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-ink/5 text-ink/60 hover:bg-ink/10')}>
                       {chapter.status === 'final' ? '✓ 已定稿' : chapter.status === 'reviewed' ? '● 修改中' : '○ 初稿'}
                     </button>
@@ -811,7 +854,15 @@ export default function Workspace() {
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-8">
                     <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col rounded-lg bg-surface shadow-soft ring-1 ring-ink/5">
-                      <MarkdownEditor value={chapter.content} onChange={updateContent} onSave={() => saveChapter(chapter)} placeholder="在这一页写下你的故事…（支持 Markdown）" />
+                      <MarkdownEditor
+                        value={chapter.content}
+                        onChange={updateContent}
+                        onSave={() => saveChapter(chapter)}
+                        placeholder="在这一页写下你的故事…（支持 Markdown）"
+                        taRef={editorRef}
+                        onActivity={handleEditorSelection}
+                        remoteCursors={remoteCursors}
+                      />
                     </div>
                   </div>
 

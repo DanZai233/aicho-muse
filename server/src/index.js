@@ -22,6 +22,8 @@ import adminRoutes from './routes/admin.js';
 import trashRoutes, { startTrashReaper } from './routes/trash.js';
 import speechRoutes from './routes/speech.js';
 import insightsRoutes from './routes/insights.js';
+import assistantRoutes from './routes/assistant.js';
+import { attachPresenceServer } from './realtime/server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function dataDir() { return process.env.DATA_DIR || path.join(__dirname, '..', 'data'); }
@@ -71,6 +73,7 @@ app.use('/api/v1', chapterRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/trash', trashRoutes);
 app.use('/api/v1/insights', insightsRoutes);
+app.use('/api/v1/assistant', assistantRoutes);
 
 startTrashReaper();
 
@@ -86,6 +89,8 @@ if (fs.existsSync(webDist)) {
 }
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`Aicho Muse server running at http://localhost:${PORT}`);
 });
+attachPresenceServer(httpServer);
+console.log('[Realtime] presence WebSocket 已挂载（/ws）');

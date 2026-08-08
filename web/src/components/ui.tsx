@@ -34,12 +34,12 @@ export function Modal({ open, onClose, title, children, wide = false }: {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className={`${wide ? 'max-w-2xl' : 'max-w-md'} w-full rounded-2xl bg-surface p-6 shadow-lift animate-fade-up`} onClick={e => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
+      <div className={`${wide ? 'max-w-2xl' : 'max-w-md'} flex max-h-[90vh] w-full flex-col rounded-2xl bg-surface p-6 shadow-lift animate-fade-up`} onClick={e => e.stopPropagation()}>
+        <div className="mb-4 flex shrink-0 items-center justify-between">
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
           <button onClick={onClose} className="rounded-full p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink">✕</button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">{children}</div>
       </div>
     </div>
   );
