@@ -10,6 +10,7 @@ export class PresenceRoom {
     this.projectId = projectId;
     this.chapterId = chapterId;
     this.members = new Map(); // memberId -> { ws, user, cursor, lastSeen }
+    this.latestContent = null; // 最新正文 { content, rev, memberId, ts }，新成员加入时同步
   }
 
   get size() { return this.members.size; }
@@ -25,6 +26,12 @@ export class PresenceRoom {
 
   remove(memberId) {
     return this.members.delete(memberId);
+  }
+
+  // 保存最新正文并广播
+  publishContent(memberId, content, rev) {
+    this.latestContent = { content, rev, memberId, ts: Date.now() };
+    this.broadcast({ type: 'content', memberId, content, rev }, memberId);
   }
 
   updateCursor(memberId, cursor) {

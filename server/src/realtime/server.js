@@ -76,6 +76,11 @@ export function attachPresenceServer(httpServer) {
         state.memberId = memberId;
         console.log('[Realtime] room', room.projectId?.slice(0, 8), room.chapterId?.slice(0, 8), 'members=', [...room.members.keys()].map(id => id.slice(0, 8)).join(','));
 
+        // 新成员加入即同步：把房间最新正文推给他（若存在）
+        if (room.latestContent) {
+          send({ type: 'content', memberId: room.latestContent.memberId, content: room.latestContent.content, rev: room.latestContent.rev });
+        }
+
         // 告知新加入者当前活跃成员
         send({
           type: 'peers',
@@ -112,7 +117,7 @@ export function attachPresenceServer(httpServer) {
       if (msg.type === 'content' && state.room) {
         const content = typeof msg.content === 'string' ? msg.content : '';
         const rev = Math.max(0, Math.floor(Number(msg.rev) || 0));
-        state.room.broadcast({ type: 'content', memberId: state.memberId, content, rev }, state.memberId);
+        state.room.publishContent(state.memberId, content, rev);
         return;
       }
 

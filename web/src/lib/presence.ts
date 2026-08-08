@@ -36,6 +36,7 @@ export class PresenceClient {
   private lastReportAt: number | null = null;
   private connected = false;
   private joined = false;
+  private currentContent = '';
 
   constructor(opts: PresenceOptions) {
     this.opts = opts;
@@ -97,6 +98,14 @@ export class PresenceClient {
     }
   }
 
+  // 设置本地当前内容（join 后作为初始同步广播给房间，服务端也推回最新内容）
+  setLocalContent(content: string) {
+    this.currentContent = content;
+    if (this.connected && this.joined && this.ws) {
+      this.sendContent(content);
+    }
+  }
+
   // 上报光标（带节流：位置变化才发，且间隔 >= reportIntervalMs）
   private lastContentRev = 0;
   private lastContentSent = '';
@@ -105,6 +114,7 @@ export class PresenceClient {
   sendContent(content: string) {
     if (!this.ws || !this.joined || !this.connected) return;
     if (content === this.lastContentSent) return;
+    this.currentContent = content;
     this.lastContentRev += 1;
     this.lastContentSent = content;
     this.ws.send(JSON.stringify({ type: 'content', content, rev: this.lastContentRev }));
