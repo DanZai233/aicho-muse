@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import Login from './pages/Login';
+import Brand from './pages/Brand';
 import Home from './pages/Home';
 import Workspace from './pages/Workspace';
 import Personas from './pages/Personas';
@@ -14,6 +15,12 @@ function Protected({ children }: { children: React.ReactElement }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
+// 根路径：已登录 → 工作台（Home），未登录 → 品牌页
+function HomeOrBrand() {
+  const { token } = useAuth();
+  return token ? <Home /> : <Brand />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -21,7 +28,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<Admin />} />
-        <Route path="/" element={<Protected><Home /></Protected>} />
+        <Route path="/" element={<HomeOrBrand />} />
         <Route path="/workspace" element={<Protected><Workspace /></Protected>} />
         <Route path="/personas" element={<Protected><Personas /></Protected>} />
         <Route path="/voices" element={<Protected><Voices /></Protected>} />
