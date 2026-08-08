@@ -38,6 +38,7 @@ export function attachPresenceServer(httpServer) {
     const state = { isAlive: true, memberId: null, room: null };
     ws._state = state; // 供周期清理读取
     heartbeat(ws, state);
+    console.log('[Realtime] connection', user ? user.id.slice(0, 8) : 'unauth', req.url?.slice(0, 40));
 
     if (!user) {
       ws.close(4001, 'unauthorized');
@@ -56,6 +57,7 @@ export function attachPresenceServer(httpServer) {
       // 加入/切换章节房间
       if (msg.type === 'join') {
         const { projectId, chapterId } = msg;
+        console.log('[Realtime] join', user.id.slice(0, 8), projectId?.slice(0, 8), chapterId?.slice(0, 8));
         if (!projectId || !chapterId) return;
         const acc = checkProjectAccess(user.id, projectId);
         if (!acc.ok) { send({ type: 'error', code: acc.reason }); return; }
@@ -72,6 +74,7 @@ export function attachPresenceServer(httpServer) {
         room.add(memberId, ws, user);
         state.room = room;
         state.memberId = memberId;
+        console.log('[Realtime] room', room.projectId?.slice(0, 8), room.chapterId?.slice(0, 8), 'members=', [...room.members.keys()].map(id => id.slice(0, 8)).join(','));
 
         // 告知新加入者当前活跃成员
         send({
@@ -122,6 +125,7 @@ export function attachPresenceServer(httpServer) {
         state.room.remove(state.memberId);
         state.room.broadcast({ type: 'peer-left', memberId: state.memberId }, state.memberId);
         removeRoomIfEmpty(state.room.projectId, state.room.chapterId);
+        console.log('[Realtime] close-remove', state.memberId.slice(0, 8), 'left=', state.room.members.size);
       }
     });
 

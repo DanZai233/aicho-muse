@@ -15,9 +15,13 @@ export function usePresence(projectId: string, chapterId: string, token: string 
   const peersRef = useRef<Peer[]>([]);
   peersRef.current = peers;
 
-  // 创建/销毁客户端
+  // 创建/销毁客户端：token/projectId/chapterId 任一变化都重建。
+  // 注意：组件首次挂载时 chapter 可能还没加载（异步拉取），若此时只 disconnect 不重连，
+  // 后续章节加载完成 setChapter 也无法恢复连接（ws 已置空）。因此章节切换直接重建客户端。
   useEffect(() => {
-    if (!token || !projectId) return;
+    if (!token || !projectId || !chapterId) return;
+    setPeers([]);
+    setCursors({});
     const client = new PresenceClient({ projectId, chapterId, token, reportIntervalMs: 4000 });
     clientRef.current = client;
 
@@ -61,19 +65,7 @@ export function usePresence(projectId: string, chapterId: string, token: string 
       client.disconnect();
       clientRef.current = null;
     };
-    // chapterId 变化时重建客户端太重，交给 setChapter
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, projectId]);
-
-  // 章节切换
-  useEffect(() => {
-    const c = clientRef.current;
-    if (!c) return;
-    if (!chapterId) { c.disconnect(); return; }
-    c.setChapter(chapterId);
-    setPeers([]);
-    setCursors({});
-  }, [chapterId]);
+  }, [token, projectId, chapterId]);
 
   const reportCursor = useCallback((offset: number, selection: { start: number; end: number } | null, scrollTop: number) => {
     clientRef.current?.reportCursor(offset, selection, scrollTop);
