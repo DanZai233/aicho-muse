@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, VoiceProfile } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button, Badge, Modal, Input } from '../components/ui';
-import { speak, stopSpeak } from '../lib/speech';
+import { speak, speakWithTTS, stopSpeak } from '../lib/speech';
 
 const PREVIEW_TEXT = '你好，我是你的缪斯。今天想写点什么？';
 
@@ -102,7 +102,11 @@ export default function Voices() {
 
   const preview = (v: VoiceProfile) => {
     stopSpeak();
-    speak(PREVIEW_TEXT, { rate: v.params.rate, pitch: (v.params.pitch || 0) / 2 + 1 });
+    if (v.provider === 'fish-audio' && v.voice_id) {
+      speakWithTTS(PREVIEW_TEXT, { rate: v.params.rate, pitch: (v.params.pitch || 0) / 2 + 1, voiceId: v.voice_id });
+    } else {
+      speak(PREVIEW_TEXT, { rate: v.params.rate, pitch: (v.params.pitch || 0) / 2 + 1 });
+    }
   };
 
   return (
