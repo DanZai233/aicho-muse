@@ -11,13 +11,14 @@ function getMirror() {
   mirror = document.createElement('pre');
   mirror.setAttribute('aria-hidden', 'true');
   mirror.style.cssText = [
-    'position:absolute',
+    'position:fixed',
     'visibility:hidden',
     'white-space:pre-wrap',
     'word-wrap:break-word',
     'overflow-wrap:break-word',
     'pointer-events:none',
     'z-index:-1',
+    'margin:0',
   ].join(';');
   document.body.appendChild(mirror);
   mirrorStyle = mirror.style as unknown as CSSStyleDeclaration;
@@ -67,21 +68,19 @@ export function measureCaret(ta: HTMLTextAreaElement, offset: number): CaretPos 
     + `<span id="caret-marker">${escapeHtml(line) || ''}<span style="display:inline-block;width:0;height:1em"></span></span>`;
 
   const marker = m.querySelector('#caret-marker') as HTMLElement | null;
-  const padTop = parseFloat(mirrorStyle?.paddingTop || '0') || 0;
-  const padLeft = parseFloat(mirrorStyle?.paddingLeft || '0') || 0;
   const rect = ta.getBoundingClientRect();
-  const mrect = m.getBoundingClientRect();
+  // 让 mirror 精确覆盖在 textarea 上方（fixed 定位，视口坐标），
+  // 这样 marker.offsetLeft/Top 就是相对 textarea 内容区的坐标，
+  // 不再需要视口差值换算（旧实现把 mirror 留在 body 底部，减出了负坐标）。
+  m.style.left = rect.left + 'px';
+  m.style.top = rect.top + 'px';
 
   const lineHeight = parseFloat(mirrorStyle?.lineHeight || '0');
   const height = (lineHeight && !isNaN(lineHeight)) ? lineHeight : parseFloat(mirrorStyle?.fontSize || '16') * 1.5;
 
-  let x = padLeft + (marker?.offsetLeft || 0);
-  let y = padTop + (marker?.offsetTop || 0) + (line ? 0 : lineHeight * 0.85);
-
-  // 相对 textarea 内容区（含滚动）
-  x += mrect.left - rect.left - (mirrorStyle?.borderLeftWidth ? parseFloat(mirrorStyle.borderLeftWidth) : 0);
-  y += mrect.top - rect.top - (mirrorStyle?.borderTopWidth ? parseFloat(mirrorStyle.borderTopWidth) : 0);
-  y -= ta.scrollTop;
+  const x = marker?.offsetLeft || 0;
+  // 内容区坐标：marker.offsetTop 已含 paddingTop；再减去 textarea 的滚动偏移
+  let y = (marker?.offsetTop || 0) + (line ? 0 : lineHeight * 0.85) - ta.scrollTop;
 
   return { x, y, height };
 }
