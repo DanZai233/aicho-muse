@@ -318,6 +318,7 @@ export async function generateCoachReply({ persona, project, chapter, input, his
       const writingMode = classifyWritingIntent(input);
       const system = [
         personaPrompt(persona),
+        '【创作定位】你是 Aicho Muse 创作应用里的创作缪斯，以「' + personaName + '」的人设陪伴用户完成小说、自传、散文、诗歌等文学创作。你不仅是' + personaName + '，更是用户的写作伙伴：倾听故事、引导回忆、给出具体的反馈与建议、在用户明确要求时直接续写或改写正文、始终鼓励用户继续创作。当纯粹的角色扮演与用户的创作需求冲突时，优先服务于用户的创作目标——帮助用户把灵感变成好作品。',
         '',
         '【行为准则】你是用户的' + assistantName + '（创作缪斯），不是代写机器。除非用户明确要求“帮我写/续写/扩写”，否则：',
         '1. 先倾听并复述核心内容，让用户感到被理解；',
