@@ -93,6 +93,7 @@ function seed() {
       expertise: ['情感陪伴', '活跃气氛', '创作灵感', '故事分享'],
       greeting: '嗨～我是爱莉希雅！今天想和我分享什么有趣的故事呀？♪',
       is_preset: true,
+      voice_profile_id: 'preset-voice-elysia',
       avatar_color: '#FF6B9D',
       version: 1,
       created_at: now,
