@@ -68,17 +68,36 @@ function executeTool(toolCall, input, project, chapter) {
 }
 
 // Agent 主入口
-export async function runWritingAgent({ persona, project, chapter, input, history, userId, conversationId, referenceDocs }) {
+export async function runWritingAgent({ persona, project, chapter, input, history, userId, conversationId, referenceDocs, linkedProjectIds }) {
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
   const userName = (userPrefs?.my_name || '').trim();
   const writingMode = classifyWritingIntent(input);
 
-  // 记忆检索
+  // 记忆检索：按书隔离——只取「用户级记忆 + 当前作品记忆 + 本会话显式接入的其他作品记忆」，
+  // 未接入的作品绝不混入。跨书记忆标注书名，让 AI 知道来源。
+  const linkIds = Array.isArray(linkedProjectIds) ? linkedProjectIds.filter(Boolean) : [];
+  const allUserProjects = (db().projects || []).filter(p => p.user_id === userId || (p.collaborators || []).some(c => c.user_id === userId));
+  const oldProjectMemoryCount = (db().memories || []).filter(m => m.user_id === userId && m.scope === 'project' && !m.project_id).length;
+  const titleOf = (pid) => allUserProjects.find(p => p.id === pid)?.title || '';
   const memories = userId ? (db().memories || [])
-    .filter(m => m.user_id === userId)
+    .filter(m => {
+      if (m.user_id !== userId) return false;
+      if (m.scope === 'project') {
+        if (m.project_id) return m.project_id === project?.id || linkIds.includes(m.project_id);
+        return allUserProjects.length <= 1;   // 旧数据兜底：仅一本书时安全
+      }
+      return true;                            // 用户级记忆跨作品保留
+    })
     .sort((a, b) => Number(b.scope === 'project') - Number(a.scope === 'project') || (b.importance || 0) - (a.importance || 0))
-    .slice(0, 5) : [];
+    .slice(0, 8)
+    .map(m => {
+      // 跨书记忆打上书名标签，便于 AI 区分来源
+      if (m.project_id && m.project_id !== project?.id) {
+        return { ...m, content: m.content, _tag: titleOf(m.project_id) || '其他作品' };
+      }
+      return m;
+    }) : [];
 
   const s = db().settings.ai;
   const hasUni = (process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none';

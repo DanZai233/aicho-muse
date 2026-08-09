@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { Button, Input } from '../components/ui';
+import { api } from '../lib/api';
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -14,6 +15,11 @@ export default function Login() {
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [siteInfo, setSiteInfo] = useState<{ site_name: string; announcement: string; allow_registration: boolean; registration_message: string } | null>(null);
+
+  useEffect(() => {
+    api.get<{ site: { site_name: string; announcement: string; allow_registration: boolean; registration_message: string } }>('/auth/site', false).then(d => setSiteInfo(d.site)).catch(() => {});
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +46,7 @@ export default function Login() {
         </div>
         <div className="rounded-2xl border border-ink/5 bg-surface p-6 shadow-soft">
           <div className="mb-5 flex rounded-lg bg-ink/5 p-1 text-sm">
-            {(['login', 'register'] as const).map(m => (
+            {(siteInfo && siteInfo.allow_registration === false ? ['login'] as const : ['login', 'register'] as const).map(m => (
               <button key={m} onClick={() => setMode(m)}
                 className={`flex-1 rounded-md py-1.5 font-medium transition ${mode === m ? 'bg-surface text-ink shadow-sm' : 'text-ink/50'}`}>
                 {m === 'login' ? '登录' : '注册'}
@@ -55,6 +61,9 @@ export default function Login() {
             <Button type="submit" disabled={busy || !email || !password} className="w-full">{busy ? '请稍候…' : mode === 'login' ? '登录' : '创建账号'}</Button>
           </form>
         </div>
+        {siteInfo?.announcement && (
+          <div className="mt-5 rounded-xl border border-accent/20 bg-accentlight/30 px-4 py-3 text-center text-xs leading-5 text-ink/60">{siteInfo.announcement}</div>
+        )}
         <p className="mt-5 text-center text-xs text-ink/40">语音与文字平等 · 人设声色自定义 · 缪斯陪跑</p>
       </div>
     </div>

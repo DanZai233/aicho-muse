@@ -30,6 +30,7 @@ function withJoins(c) {
   const last = d.messages.filter(m => m.conversation_id === c.id).sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(-1)[0];
   return {
     ...c,
+    linked_project_ids: c.linked_project_ids || [],
     persona: persona ? { id: persona.id, name: persona.name, tagline: persona.tagline, avatar: persona.avatar || null, avatar_color: persona.avatar_color } : null,
     voice: voice ? { id: voice.id, display_name: voice.display_name, provider: voice.provider, voice_id: voice.voice_id || null, params: voice.params } : null,
     project: project ? { id: project.id, title: project.title, genre: project.genre } : null,
@@ -78,6 +79,17 @@ router.patch('/:id', (req, res) => {
   if (req.body.title) c.title = req.body.title;
   if (req.body.persona_id) { c.persona_id = req.body.persona_id; const np = d.personas.find(p => p.id === req.body.persona_id && (p.is_preset || p.user_id === req.user.id)); c.persona_snapshot = np ? JSON.parse(JSON.stringify(np)) : null; }
   if (req.body.voice_profile_id !== undefined) c.voice_profile_id = req.body.voice_profile_id;
+  // 记忆跨书接入：本会话临时允许引用其他作品（自己的书）的记忆
+  if (Array.isArray(req.body.linked_project_ids)) {
+    const ids = req.body.linked_project_ids.slice(0, 8);
+    for (const pid of ids) {
+      const pj = d.projects.find(x => x.id === pid);
+      if (!pj || (pj.user_id !== req.user.id && !(pj.collaborators || []).some(c => c.user_id === req.user.id))) {
+        return res.status(403).json({ code: 40301, message: '无权接入该作品的记忆库' });
+      }
+    }
+    c.linked_project_ids = ids;
+  }
   c.updated_at = new Date().toISOString();
   saveDb();
   res.json({ code: 0, data: { conversation: withJoins(c) } });
@@ -166,6 +178,12 @@ router.get('/:id/stream', (req, res) => {
   const history = d.messages.filter(m => m.conversation_id === c.id).slice(-12)
     .map(m => ({ role: m.role, content: m.content }));
 
+  // 记忆跨书接入：读取本会话临时接入的其他作品
+  const linkedProjectIds = (c.linked_project_ids || []).filter(pid => {
+    const pj = d.projects.find(x => x.id === pid);
+    return pj && (pj.user_id === req.user.id || (pj.collaborators || []).some(x => x.user_id === req.user.id));
+  });
+
   const lastUser = [...d.messages].reverse().find(m => m.conversation_id === c.id && m.role === 'user');
   const input = lastUser ? lastUser.content : '';
 
@@ -193,7 +211,7 @@ router.get('/:id/stream', (req, res) => {
     try {
       send('start', { ok: true });
       const { reply, replyType, source, tool, params } = await runWritingAgent({
-        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id, conversationId: c.id, referenceDocs,
+        persona, project, chapter, input, history, wantVoice: lastUser?.reply_as_voice, userId: req.user.id, conversationId: c.id, referenceDocs, linkedProjectIds,
       });
       // 流式输出：按句分片
       const chunks = reply.split(/(?<=[。！？!?；;])/).filter(s => s.trim());

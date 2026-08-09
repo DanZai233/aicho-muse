@@ -138,7 +138,7 @@ function seed() {
     settings: {
       ai: { provider: 'none', base_url: '', api_key: '', model: 'gpt-4o-mini', system_prompt_mode: 'default', llm_provider: 'none', llm_api_key: '', llm_model: '' },
       quota: { daily_messages: 100, messages_per_minute: 30, tts_per_hour: 60, stt_minutes_per_day: 30 },
-      site: { site_name: 'Aicho Muse', announcement: '' },
+      site: { site_name: 'Aicho Muse', announcement: '', allow_registration: true, registration_message: '', default_persona_id: '', default_voice_id: '' },
       tts: { provider: 'fish-audio', voice_uri: '', rate: 1, pitch: 1, api_key: '', base_url: 'https://api.fish.audio', model: 's2.1-pro-free', no_save_audio: false },
       stt: { api_key: '', base_url: '', model: 'whisper-1', no_save_audio: false },
       voice_clone: { api_key: '', base_url: '', model: 'fishaudio/fish-speech-1.5' },
@@ -147,6 +147,7 @@ function seed() {
       { id: 'admin-root', username: 'admin', password_hash: '$2a$10$zi2vYGtrKf4SyKDjvOiMH.7hP4GRKmKDUEU8ZEoRto41GXYdCuymq', role: 'superadmin', created_at: now },
     ],
     memories: [],
+    feedback: [],
     outline_nodes: [],
     character_cards: [],
     timeline_events: [],

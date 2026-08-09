@@ -295,7 +295,7 @@ export async function callLLM(messages, opts = {}) {
   }
   return null;
 }
-export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId }) {
+export async function generateCoachReply({ persona, project, chapter, input, history, wantVoice, userId, linkedProjectIds }) {
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
   const userName = (userPrefs?.my_name || '').trim();
@@ -303,11 +303,12 @@ export async function generateCoachReply({ persona, project, chapter, input, his
   // 其他作品的记忆绝不混入，避免跨书串味（兼容旧数据：scope=project 但无 project_id 的，
   // 仅当用户只有一部作品时安全注入，否则丢弃以防混淆）
   const allUserProjects = (db().projects || []).filter(p => p.user_id === userId || (p.collaborators || []).some(c => c.user_id === userId));
+  const linkIds = Array.isArray(linkedProjectIds) ? linkedProjectIds.filter(Boolean) : [];
   const oldProjectMemoryCount = (db().memories || []).filter(m => m.user_id === userId && m.scope === 'project' && !m.project_id).length;
   const memorySource = userId ? (db().memories || []).filter(m => {
     if (m.user_id !== userId) return false;
     if (m.scope === 'project') {
-      if (m.project_id) return m.project_id === project?.id;   // 只取当前作品
+      if (m.project_id) return m.project_id === project?.id || linkIds.includes(m.project_id);   // 当前作品 + 显式接入的其他作品
       return allUserProjects.length <= 1;                       // 旧数据兜底：仅一本书时安全
     }
     return true;                                                // 用户级记忆跨作品保留
@@ -316,7 +317,9 @@ export async function generateCoachReply({ persona, project, chapter, input, his
     .sort((a, b) => (b.importance || 0) - (a.importance || 0))
     .slice(0, 5);
   const memoryText = memories.length ? memories.map(m => {
-    const tag = m.scope === 'project' ? '本作品' : '用户';
+    const tag = m.project_id && m.project_id !== project?.id
+      ? '《' + (allUserProjects.find(p => p.id === m.project_id)?.title || '其他作品') + '》'
+      : (m.scope === 'project' ? '本作品' : '用户');
     return '- [' + tag + '] ' + m.content;
   }).join('\n') : '';
 

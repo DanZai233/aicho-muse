@@ -46,7 +46,10 @@ export function buildAgentSystemPrompt({ persona, project, chapter, assistantNam
     project?.genre === 'paper' ? buildPaperPrompt(project) : '',
     chapter ? `当前章节：${chapter.title}。` : '',
     project ? buildSmartContext(project.id, chapter?.id) : '',
-    memories?.length ? `【记忆上下文】你记得这些关于用户的创作信息：\n${memories.map(m => '- [' + (m.scope === 'project' ? '作品' : '用户') + '] ' + m.content).join('\n')}` : '',
+    memories?.length ? `【记忆上下文】你记得这些关于用户的创作信息（[] 内标注来源，跨作品接入的记忆不要与原作品混淆，引用时需符合当前作品语境）：\n${memories.map(m => {
+      const tag = m._tag ? '《' + m._tag + '》' : (m.scope === 'project' ? '本作品' : '用户');
+      return '- [' + tag + '] ' + m.content;
+    }).join('\n')}` : '',
     referenceDocs && referenceDocs.length ? buildReferenceSection(project, referenceDocs) : '',
   ].filter(Boolean);
   return parts.join('\n');

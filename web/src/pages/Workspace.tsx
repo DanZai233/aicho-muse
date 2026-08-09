@@ -18,6 +18,7 @@ import PaperInfoPanel from '../components/PaperInfoPanel';
 import ReferenceDocsPanel from '../components/ReferenceDocsPanel';
 import RelationshipGraph from '../components/RelationshipGraph';
 import ReviewModal from '../components/ReviewModal';
+import MemoryLinkModal from '../components/MemoryLinkModal';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
@@ -207,6 +208,8 @@ export default function Workspace() {
   const [shareMsg, setShareMsg] = useState('');
   const [showSharePanel, setShowSharePanel] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  const [memOpen, setMemOpen] = useState(false);
+  const [linkedMems, setLinkedMems] = useState<string[]>([]);
   const [refDocs, setRefDocs] = useState<ReferenceDoc[]>([]);
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [refMsg, setRefMsg] = useState('');
@@ -324,9 +327,14 @@ export default function Workspace() {
     if (!project) return;
     const match = convs.find(c => c.project_id === project.id);
     setConv(prev => {
-      if (prev && convs.find(c => c.id === prev.id)) return prev;
+      if (prev && convs.find(c => c.id === prev.id)) {
+        if (prev.linked_project_ids) setLinkedMems(prev.linked_project_ids);
+        return prev;
+      }
       const target = convParam ? convs.find(c => c.id === convParam) : null;
-      return target || match || null;
+      const next = target || match || null;
+      if (next?.linked_project_ids) setLinkedMems(next.linked_project_ids);
+      return next;
     });
   }, [project, convs, convParam]);
 
@@ -1335,6 +1343,7 @@ export default function Workspace() {
                     </div>
                   )}
                   <button onClick={() => { setInput(p => (p ? p + ' ' : '') + '@' + (chapter?.title || '当前章节') + ' '); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="在输入中引用当前章节">@当前章节</button>
+                  <button onClick={() => conv && setMemOpen(true)} className={'rounded-full px-2.5 py-0.5 text-xs transition ' + (linkedMems.length ? 'bg-accent text-paper' : 'bg-accentlight/50 text-ink/65 hover:bg-accentlight')} title="打开记忆库，接入其他作品的记忆">@记忆{linkedMems.length ? ` ×${linkedMems.length}` : ''}</button>
                   <button onClick={() => { setInput(p => (p ? p + ' ' : '') + '把这句话记进灵感箱：'); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="把要说的话记成一条灵感">💡 灵感</button>
                   {chapter?.content && (
                     <button onClick={() => { const last = chapter.content.split(/\n+/).filter(Boolean).pop() || ''; setInput('帮我润色这段话：' + (last.length > 60 ? last.slice(0, 60) + '…' : last)); inputRef.current?.focus(); }} className="rounded-full bg-accentlight/50 px-2.5 py-0.5 text-xs text-ink/65 hover:bg-accentlight" title="请助手润色当前章节最后一段">✨ 帮我润色</button>
@@ -1642,6 +1651,14 @@ export default function Workspace() {
       {draftRestored && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{draftRestored}</div>}
       {notice && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-amber-600 px-5 py-2.5 text-sm text-white shadow-lift animate-fade-up">{notice}</div>}
 
+      <MemoryLinkModal
+        open={memOpen}
+        convId={conv?.id || null}
+        currentProjectId={project?.id || null}
+        linked={linkedMems}
+        onClose={() => setMemOpen(false)}
+        onSaved={(ids) => setLinkedMems(ids)}
+      />
       <ReviewModal
         open={showReview}
         projectId={project?.id || ''}

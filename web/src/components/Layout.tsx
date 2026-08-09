@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import MuseAssistant from './assistant/MuseAssistant';
+import FeedbackModal from './FeedbackModal';
 import OnboardingTour from './OnboardingTour';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [installEvt, setInstallEvt] = useState<any>(null);
   const [installed, setInstalled] = useState(() => (window.matchMedia('(display-mode: standalone)').matches));
   const [dismissed, setDismissed] = useState(() => localStorage.getItem('am_install_dismissed') === '1');
+  const [fbOpen, setFbOpen] = useState(false);
 
   useEffect(() => {
     const onPrompt = (e: Event) => { e.preventDefault(); setInstallEvt(e); };
@@ -58,6 +60,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/voices" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">声色</Link>
             <Link to="/settings" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">设置</Link>
             <Link to="/shares" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">拾卷</Link>
+            <button onClick={() => setFbOpen(true)} className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink" title="反馈建议">反馈</button>
             <button onClick={() => setDark(d => !d)} title={dark ? '切换浅色模式' : '切换深色模式'}
               className="ml-1 rounded-lg px-2.5 py-1.5 text-ink/60 transition hover:bg-ink/5 hover:text-ink">
               {dark ? '☀️' : '🌙'}
@@ -91,6 +94,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/voices" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">🎙 声色</Link>
               <Link to="/settings" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">⚙ 设置</Link>
               <Link to="/shares" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">📚 拾卷</Link>
+              <button onClick={() => { setFbOpen(true); setMenuOpen(false); }} className="rounded-lg px-3 py-2.5 text-left text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">💌 反馈建议</button>
               {user && (
                 <button onClick={() => { logout(); nav('/login'); setMenuOpen(false); }}
                   className="rounded-lg px-3 py-2.5 text-left text-sm text-ink/50 hover:bg-ink/5 hover:text-ink">↩ 退出登录</button>
@@ -102,6 +106,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
       {user && <MuseAssistant />}
       {user && <OnboardingTour />}
+      {user && (
+        <>
+          <button onClick={() => setFbOpen(true)} title="反馈建议"
+            className="fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-xl text-paper shadow-lift transition hover:scale-105 hover:bg-accent/90">
+            💌
+          </button>
+          <FeedbackModal open={fbOpen} onClose={() => setFbOpen(false)} />
+        </>
+      )}
     </div>
   );
 }

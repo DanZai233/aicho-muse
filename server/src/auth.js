@@ -19,6 +19,18 @@ export function authRequired(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = { id: payload.uid, role: payload.role };
+    // 管理员 token 走 admin_users；普通用户需存在且未被禁用
+    if (payload.role === 'admin') {
+      const a = db().admin_users.find(x => x.id === payload.uid);
+      if (!a) return res.status(401).json({ code: 40101, message: '登录已过期' });
+      req.admin = a;
+      req.user = { id: a.id, role: 'admin' };
+      return next();
+    }
+    const u = db().users.find(x => x.id === payload.uid);
+    if (!u) return res.status(401).json({ code: 40101, message: '账号不存在' });
+    if (u.status === 'disabled') return res.status(403).json({ code: 40301, message: '账号已被禁用，请联系管理员' });
+    req.user = { id: u.id, role: u.role || 'user' };
     next();
   } catch {
     return res.status(401).json({ code: 40101, message: '登录已过期' });
@@ -27,15 +39,17 @@ export function authRequired(req, res, next) {
 
 export function adminRequired(req, res, next) {
   authRequired(req, res, () => {
-    const u = db().admin_users.find(x => x.id === req.user.id);
-    if (!u) return res.status(403).json({ code: 40301, message: '需要管理员权限' });
-    req.admin = u;
+    if (!req.admin) return res.status(403).json({ code: 40301, message: '需要管理员权限' });
     next();
   });
 }
 
 export function registerUser({ email, password, display_name }) {
   const d = db();
+  if (d.settings?.site?.allow_registration === false) {
+    const msg = d.settings.site.registration_message || '当前暂未开放注册，请联系管理员';
+    throw new Error(msg);
+  }
   if (!email || !password) throw new Error('邮箱和密码必填');
   if (password.length < 6) throw new Error('密码至少 6 位');
   if (d.users.some(u => u.email === email)) throw new Error('该邮箱已注册');

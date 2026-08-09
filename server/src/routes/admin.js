@@ -31,6 +31,20 @@ router.get('/stats', (req, res) => {
       conversations_today: convToday,
       ai_provider: (process.env.LLM_PROVIDER || d.settings.ai.llm_provider || d.settings.ai.provider || 'none'),
       ai_model: (process.env.LLM_MODEL || d.settings.ai.llm_model || d.settings.ai.model || ''),
+      trend: (() => {
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+          const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+          days.push({
+            date: day,
+            messages: d.messages.filter(m => m.created_at.startsWith(day)).length,
+            new_users: d.users.filter(u => u.created_at.startsWith(day)).length,
+            new_projects: d.projects.filter(p => p.created_at.startsWith(day)).length,
+            new_conversations: d.conversations.filter(c => c.created_at.startsWith(day)).length,
+          });
+        }
+        return days;
+      })(),
       reply_types: {
         question: d.messages.filter(m => m.reply_type === 'question').length,
         feedback: d.messages.filter(m => m.reply_type === 'feedback').length,
@@ -45,7 +59,19 @@ router.get('/stats', (req, res) => {
 // ---------- 用户管理 ----------
 router.get('/users', (req, res) => {
   const d = db();
-  res.json({ code: 0, data: { list: d.users.map(u => ({ id: u.id, email: u.email, display_name: u.display_name, locale: u.locale, created_at: u.created_at })), total: d.users.length } });
+  const list = d.users.map(u => {
+    const projectIds = d.projects.filter(p => p.user_id === u.id || (p.collaborators || []).some(c => c.user_id === u.id)).map(p => p.id);
+    const convIds = d.conversations.filter(c => c.user_id === u.id).map(c => c.id);
+    return {
+      id: u.id, email: u.email, display_name: u.display_name, locale: u.locale, status: u.status || 'active',
+      created_at: u.created_at, last_active: u.last_active_at || null,
+      projects: projectIds.length,
+      conversations: convIds.length,
+      messages: d.messages.filter(m => convIds.includes(m.conversation_id)).length,
+      memories: d.memories.filter(m => m.user_id === u.id).length,
+    };
+  }).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  res.json({ code: 0, data: { list, total: list.length } });
 });
 
 router.patch('/users/:id', (req, res) => {
@@ -54,6 +80,7 @@ router.patch('/users/:id', (req, res) => {
   if (!u) return res.status(404).json({ code: 40401, message: '用户不存在' });
   if (req.body.display_name) u.display_name = req.body.display_name;
   if (req.body.locale) u.locale = req.body.locale;
+  if (req.body.status === 'disabled' || req.body.status === 'active') u.status = req.body.status;
   u.updated_at = new Date().toISOString();
   saveDb();
   res.json({ code: 0, data: { ok: true } });
@@ -79,6 +106,7 @@ router.delete('/users/:id', (req, res) => {
   d.timeline_events = d.timeline_events.filter(t => !projectIds.includes(t.project_id));
   d.idea_notes = d.idea_notes.filter(i => !projectIds.includes(i.project_id));
   d.memories = d.memories.filter(m => m.user_id !== u.id);
+  d.feedback = d.feedback.filter(f => f.user_id !== u.id);
   d.trash = d.trash.filter(t => t.kind === 'project' ? !projectIds.includes(t.id) : !chapterIds.includes(t.id));
   saveDb();
   res.json({ code: 0, data: { ok: true } });
@@ -268,6 +296,53 @@ router.delete('/admins/:id', (req, res) => {
   const d = db();
   if (req.params.id === req.user.id) return res.status(400).json({ code: 40001, message: '不能删除自己' });
   d.admin_users = d.admin_users.filter(a => a.id !== req.params.id);
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
+});
+
+// ---------- 管理员修改自己的密码 ----------
+router.post('/me/password', (req, res) => {
+  const d = db();
+  const a = d.admin_users.find(x => x.id === req.admin.id);
+  if (!a) return res.status(404).json({ code: 40401, message: '管理员不存在' });
+  const { old_password, new_password } = req.body || {};
+  if (!old_password || !new_password) return res.status(400).json({ code: 40001, message: '旧密码和新密码必填' });
+  if (!bcrypt.compareSync(old_password, a.password_hash)) return res.status(400).json({ code: 40001, message: '旧密码不正确' });
+  if (String(new_password).length < 8) return res.status(400).json({ code: 40001, message: '新密码至少 8 位' });
+  a.password_hash = bcrypt.hashSync(String(new_password), 10);
+  a.updated_at = new Date().toISOString();
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
+});
+
+// ---------- 用户反馈管理 ----------
+router.get('/feedback', (req, res) => {
+  const d = db();
+  const status = String(req.query.status || '');
+  let list = d.feedback.map(f => {
+    const u = d.users.find(x => x.id === f.user_id);
+    return { ...f, user_email: u?.email || null, user_name: u?.display_name || null };
+  }).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  if (status) list = list.filter(f => f.status === status);
+  res.json({ code: 0, data: { list, total: list.length, open_count: list.filter(f => f.status === 'open').length } });
+});
+
+router.patch('/feedback/:id', (req, res) => {
+  const d = db();
+  const f = d.feedback.find(x => x.id === req.params.id);
+  if (!f) return res.status(404).json({ code: 40401, message: '反馈不存在' });
+  if (req.body.status && ['open', 'done', 'ignored'].includes(req.body.status)) f.status = req.body.status;
+  if (req.body.note !== undefined) f.note = String(req.body.note || '').slice(0, 1000);
+  f.updated_at = new Date().toISOString();
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
+});
+
+router.delete('/feedback/:id', (req, res) => {
+  const d = db();
+  const f = d.feedback.find(x => x.id === req.params.id);
+  if (!f) return res.status(404).json({ code: 40401, message: '反馈不存在' });
+  d.feedback = d.feedback.filter(x => x.id !== f.id);
   saveDb();
   res.json({ code: 0, data: { ok: true } });
 });

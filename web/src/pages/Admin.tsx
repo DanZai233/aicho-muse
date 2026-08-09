@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Badge } from '../components/ui';
 
-type Stats = { users: number; projects: number; chapters: number; conversations: number; messages: number; messages_today: number; conversations_today: number; ai_provider: string; ai_model?: string; memories?: number; reply_types?: Record<string, number> };
-type AdminUser = { id: string; email: string; display_name: string; created_at: string };
+type Stats = { users: number; projects: number; chapters: number; conversations: number; messages: number; messages_today: number; conversations_today: number; ai_provider: string; ai_model?: string; memories?: number; reply_types?: Record<string, number>; trend?: { date: string; messages: number; new_users: number; new_projects: number; new_conversations: number }[] };
+type AdminUser = { id: string; email: string; display_name: string; status?: string; created_at: string; projects?: number; conversations?: number; messages?: number; memories?: number; last_active?: string | null };
+type FeedbackItem = { id: string; user_id: string; user_email?: string | null; user_name?: string | null; contact: string; content: string; page: string; status: string; note?: string; created_at: string; updated_at?: string };
 
 const inputCls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
@@ -25,7 +26,7 @@ async function adminSend<T>(p: string, method: string, body?: unknown): Promise<
 
 export default function Admin() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'admins'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'admins'>('stats');
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -34,6 +35,12 @@ export default function Admin() {
   const [models, setModels] = useState<{ id: string; recommended?: boolean; disabled?: boolean; note?: string }[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
   const [admins, setAdmins] = useState<any[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
+  const [feedbackFilter, setFeedbackFilter] = useState('');
+  const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '', confirm: '' });
+  const [pwMsg, setPwMsg] = useState('');
+  const [personaOptions, setPersonaOptions] = useState<any[]>([]);
+  const [voiceOptions, setVoiceOptions] = useState<any[]>([]);
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '', role: 'admin' });
   const origSettingsRef = useRef<any>(null);
   const [msg, setMsg] = useState('');
@@ -69,6 +76,25 @@ export default function Admin() {
   };
 
   const loadAdmins = async () => { try { setAdmins((await adminGet<{ list: any[] }>('/admins')).list); } catch (e: any) { setErr(e.message); } };
+  const loadFeedback = async () => {
+    try { setFeedback((await adminGet<{ list: FeedbackItem[] }>('/feedback' + (feedbackFilter ? '?status=' + feedbackFilter : ''))).list); }
+    catch (e: any) { setErr(e.message); }
+  };
+  const loadOptions = async () => {
+    try {
+      const [ps, vj] = await Promise.all([
+        adminGet<{ personas: any[]; voices: any[] }>('/presets').catch(() => ({ personas: [], voices: [] })),
+        fetch('/api/v1/personas?page_size=100', { headers: adminHeaders() }).then(r => r.json()).catch(() => ({ data: { list: [] } })),
+      ]);
+      const all = (ps.personas || []).concat(vj.data?.list || []);
+      setPersonaOptions(all);
+    } catch { /* ignore */ }
+    try {
+      const r = await fetch('/api/v1/voice-profiles?page_size=100', { headers: adminHeaders() });
+      const j = await r.json();
+      setVoiceOptions(j.data?.list || []);
+    } catch { /* ignore */ }
+  };
 
   const editUser = async (u: AdminUser) => {
     const name = prompt('修改显示名称：', u.display_name);
@@ -111,6 +137,27 @@ export default function Admin() {
     catch (e: any) { setErr(e.message); }
   };
 
+  const changePassword = async () => {
+    if (!passwordForm.old_password || !passwordForm.new_password) { setPwMsg('请填写旧密码和新密码'); return; }
+    if (passwordForm.new_password.length < 8) { setPwMsg('新密码至少 8 位'); return; }
+    if (passwordForm.new_password !== passwordForm.confirm) { setPwMsg('两次输入的新密码不一致'); return; }
+    try {
+      await adminSend('/me/password', 'POST', { old_password: passwordForm.old_password, new_password: passwordForm.new_password });
+      setPasswordForm({ old_password: '', new_password: '', confirm: '' }); setPwMsg(''); flash('密码已修改，请牢记新密码');
+    } catch (e: any) { setErr(e.message); }
+  };
+
+  const setUserStatus = async (u: AdminUser, status: string) => {
+    if (!confirm((status === 'disabled' ? '禁用' : '恢复') + '用户 ' + u.display_name + '？' + (status === 'disabled' ? '其将无法登录' : ''))) return;
+    try { await adminSend('/users/' + u.id, 'PATCH', { status }); setErr(''); flash('已' + (status === 'disabled' ? '禁用' : '恢复')); loadUsers(); }
+    catch (e: any) { setErr(e.message); }
+  };
+
+  const setFeedbackStatus = async (f: FeedbackItem, status: string) => {
+    try { await adminSend('/feedback/' + f.id, 'PATCH', { status }); setErr(''); flash('反馈已更新'); loadFeedback(); }
+    catch (e: any) { setErr(e.message); }
+  };
+
   const resetData = async () => {
     if (!confirm('⚠️ 将清空全部用户、作品、消息与设置（内置官方预设除外），且不可恢复！确定？')) return;
     if (!confirm('再次确认：真的要重置全部数据吗？')) return;
@@ -119,7 +166,7 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders(); loadAdmins();
+    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders(); loadAdmins(); loadFeedback(); loadOptions();
   }, []);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
@@ -175,7 +222,7 @@ export default function Admin() {
         </header>
 
         <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-white/5 p-1 text-sm">
-          {([['stats', '数据概览'], ['users', '用户管理'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
+          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={`min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 transition sm:px-4 ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
           ))}
         </nav>
@@ -215,6 +262,31 @@ export default function Admin() {
               </div>
             </div>
           )}
+          {stats.trend && (
+            <div className="mt-4 rounded-2xl bg-white/5 p-5">
+              <h3 className="mb-3 font-serif text-lg font-semibold">近 7 天趋势</h3>
+              <div className="grid gap-4 lg:grid-cols-4">
+                {(['messages', 'new_users', 'new_projects', 'new_conversations'] as const).map(k => (
+                  <div key={k}>
+                    <p className="mb-2 text-xs text-paper/50">{k === 'messages' ? '消息' : k === 'new_users' ? '新增用户' : k === 'new_projects' ? '新作品' : '新会话'}</p>
+                    <div className="flex items-end gap-1.5" style={{ height: 64 }}>
+                      {stats.trend!.map(t => {
+                        const max = Math.max(1, ...stats.trend!.map(x => x[k]));
+                        const h = Math.max(4, Math.round((t[k] / max) * 56));
+                        return (
+                          <div key={t.date} className="flex flex-1 flex-col items-center gap-1">
+                            <span className="text-[9px] text-paper/50">{t[k]}</span>
+                            <div className="w-full rounded-t bg-accent/70" style={{ height: h }} title={t.date + ' ' + t[k]} />
+                            <span className="text-[8px] text-paper/35">{t.date.slice(5)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           </>
         )}
 
@@ -226,11 +298,26 @@ export default function Admin() {
             <div className="space-y-2">
               {users.map(u => (
                 <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-3">
-                  <div>
-                    <div className="font-medium">{u.display_name}</div>
-                    <div className="text-sm text-paper/40">{u.email} · {new Date(u.created_at).toLocaleDateString()}</div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{u.display_name}</span>
+                      {u.status === 'disabled' && <Badge color="amber">已禁用</Badge>}
+                    </div>
+                    <div className="text-sm text-paper/40">{u.email} · 注册于 {new Date(u.created_at).toLocaleDateString()}{u.last_active ? ' · 最近活跃 ' + new Date(u.last_active).toLocaleDateString() : ''}</div>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-paper/50">
+                      <span className="rounded-full bg-white/5 px-2 py-0.5">作品 {u.projects ?? 0}</span>
+                      <span className="rounded-full bg-white/5 px-2 py-0.5">会话 {u.conversations ?? 0}</span>
+                      <span className="rounded-full bg-white/5 px-2 py-0.5">消息 {u.messages ?? 0}</span>
+                      <span className="rounded-full bg-white/5 px-2 py-0.5">记忆 {u.memories ?? 0}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2"><Button variant="subtle" onClick={() => editUser(u)} className="bg-white/10 text-paper hover:bg-white/20">编辑</Button><Button variant="danger" onClick={() => delUser(u)} className="bg-red-500/20 text-red-300 hover:bg-red-500/30">删除</Button></div>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant="subtle" onClick={() => editUser(u)} className="bg-white/10 px-2.5 py-1 text-xs text-paper hover:bg-white/20">编辑</Button>
+                    {u.status === 'disabled'
+                      ? <Button variant="subtle" onClick={() => setUserStatus(u, 'active')} className="bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/25">恢复</Button>
+                      : <Button variant="subtle" onClick={() => setUserStatus(u, 'disabled')} className="bg-amber-500/15 px-2.5 py-1 text-xs text-amber-300 hover:bg-amber-500/25">禁用</Button>}
+                    <Button variant="danger" onClick={() => delUser(u)} className="bg-red-500/20 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/30">删除</Button>
+                  </div>
                 </div>
               ))}
               {users.length === 0 && <p className="py-8 text-center text-paper/40">暂无注册用户</p>}
@@ -392,8 +479,30 @@ export default function Admin() {
                   <input value={settings.site.site_name} onChange={e => setSettings({ ...settings, site: { ...settings.site, site_name: e.target.value } })} className={inputCls + ' bg-ink/80'} />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs text-paper/50">公告</span>
+                  <span className="mb-1 block text-xs text-paper/50">首页/登录页公告</span>
                   <textarea value={settings.site.announcement} onChange={e => setSettings({ ...settings, site: { ...settings.site, announcement: e.target.value } })} rows={2} className={inputCls + ' bg-ink/80 resize-y'} />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded-xl bg-ink/40 px-3 py-2.5">
+                  <span className="text-sm text-paper/80">开放注册</span>
+                  <input type="checkbox" checked={settings.site.allow_registration !== false} onChange={e => setSettings({ ...settings, site: { ...settings.site, allow_registration: e.target.checked } })} className="h-4 w-4 accent-accent" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-paper/50">关闭注册时的提示语</span>
+                  <input value={settings.site.registration_message || ''} onChange={e => setSettings({ ...settings, site: { ...settings.site, registration_message: e.target.value } })} className={inputCls + ' bg-ink/80'} placeholder="例如：内测中，请联系管理员开通账号" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-paper/50">默认创作人设（新用户/新作品默认）</span>
+                  <select value={settings.site.default_persona_id || ''} onChange={e => setSettings({ ...settings, site: { ...settings.site, default_persona_id: e.target.value } })} className={inputCls + ' bg-ink/80'}>
+                    <option value="">系统默认（黎文）</option>
+                    {personaOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-paper/50">默认音色（朗读/TTS 优先）</span>
+                  <select value={settings.site.default_voice_id || ''} onChange={e => setSettings({ ...settings, site: { ...settings.site, default_voice_id: e.target.value } })} className={inputCls + ' bg-ink/80'}>
+                    <option value="">系统默认</option>
+                    {voiceOptions.map(v => <option key={v.id} value={v.id}>{v.display_name}</option>)}
+                  </select>
                 </label>
               </div>
             </div>
@@ -434,8 +543,60 @@ export default function Admin() {
           </div>
         )}
 
+        {tab === 'feedback' && (
+          <div className="rounded-2xl bg-white/5 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-serif text-lg font-semibold">用户反馈（{feedback.length}）</h2>
+              <div className="flex gap-1 rounded-lg bg-white/5 p-1 text-xs">
+                {[['', '全部'], ['open', '待处理'], ['done', '已处理'], ['ignored', '已忽略']].map(([k, v]) => (
+                  <button key={k} onClick={() => { setFeedbackFilter(k); setTimeout(loadFeedback, 0); }}
+                    className={'rounded-md px-3 py-1.5 transition ' + (feedbackFilter === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper')}>{v}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {feedback.map(f => (
+                <div key={f.id} className="rounded-xl bg-white/5 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-paper/50">
+                      {f.user_name || '匿名用户'}{f.user_email ? ' · ' + f.user_email : ''} · {new Date(f.created_at).toLocaleString('zh-CN')}
+                      {f.contact ? ' · 📮 ' + f.contact : ''}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {f.status === 'open' && <Badge color="amber">待处理</Badge>}
+                      {f.status === 'done' && <Badge color="green">已处理</Badge>}
+                      {f.status === 'ignored' && <Badge>已忽略</Badge>}
+                    </div>
+                  </div>
+                  {f.page && <p className="mt-1 text-[10px] text-paper/35">页面：{f.page}</p>}
+                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-paper/85">{f.content}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {f.status !== 'done' && <button onClick={() => setFeedbackStatus(f, 'done')} className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/25">✓ 标记已处理</button>}
+                    {f.status !== 'ignored' && <button onClick={() => setFeedbackStatus(f, 'ignored')} className="rounded-full bg-white/10 px-3 py-1 text-xs text-paper/60 transition hover:bg-white/20">忽略</button>}
+                    {f.status === 'done' && <button onClick={() => setFeedbackStatus(f, 'open')} className="rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-300 transition hover:bg-amber-500/25">重新打开</button>}
+                    <button onClick={async () => { if (!confirm('删除这条反馈？')) return; try { await adminSend('/feedback/' + f.id, 'DELETE'); setErr(''); flash('反馈已删除'); loadFeedback(); } catch (e: any) { setErr(e.message); } }}
+                      className="rounded-full bg-red-500/15 px-3 py-1 text-xs text-red-300 transition hover:bg-red-500/25">删除</button>
+                  </div>
+                </div>
+              ))}
+              {feedback.length === 0 && <p className="py-8 text-center text-paper/40">暂无反馈</p>}
+            </div>
+          </div>
+        )}
+
         {tab === 'admins' && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl bg-white/5 p-5">
+              <h2 className="mb-4 font-serif text-lg font-semibold">修改我的密码</h2>
+              <div className="space-y-3">
+                <input value={passwordForm.old_password} onChange={e => setPasswordForm({ ...passwordForm, old_password: e.target.value })} type="password" placeholder="当前密码" className={inputCls + ' bg-ink/80'} />
+                <input value={passwordForm.new_password} onChange={e => setPasswordForm({ ...passwordForm, new_password: e.target.value })} type="password" placeholder="新密码（至少 8 位）" className={inputCls + ' bg-ink/80'} />
+                <input value={passwordForm.confirm} onChange={e => setPasswordForm({ ...passwordForm, confirm: e.target.value })} type="password" placeholder="再次输入新密码" className={inputCls + ' bg-ink/80'} />
+                {pwMsg && <p className="text-xs text-amber-300">{pwMsg}</p>}
+                <Button onClick={changePassword} className="bg-paper text-ink hover:bg-paper/90">更新密码</Button>
+                <p className="text-[11px] leading-4 text-paper/40">默认密码 admin123 已公开泄露，建议立即修改为强密码。</p>
+              </div>
+            </div>
             <div className="rounded-2xl bg-white/5 p-5">
               <h2 className="mb-4 font-serif text-lg font-semibold">添加管理员</h2>
               <div className="space-y-3">

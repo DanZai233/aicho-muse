@@ -24,11 +24,25 @@ router.post('/login', (req, res) => {
   if (!user || !checkPassword(password, user.password_hash)) {
     return res.status(401).json({ code: 40101, message: '邮箱或密码错误' });
   }
+  if (user.status === 'disabled') return res.status(403).json({ code: 40301, message: '账号已被禁用，请联系管理员' });
   res.json({ code: 0, data: { token: signToken(user), user: publicUser(user) } });
 });
 
 router.post('/logout', authRequired, (req, res) => {
   res.json({ code: 0, data: { ok: true } });
+});
+
+// 公开站点信息（登录/注册页展示公告、注册开关）
+router.get('/site', (req, res) => {
+  const s = db().settings.site || {};
+  res.json({ code: 0, data: { site: {
+    site_name: s.site_name || 'Aicho Muse',
+    announcement: s.announcement || '',
+    allow_registration: s.allow_registration !== false,
+    registration_message: s.registration_message || '',
+    default_persona_id: s.default_persona_id || '',
+    default_voice_id: s.default_voice_id || '',
+  } } });
 });
 
 router.get('/me', authRequired, (req, res) => {

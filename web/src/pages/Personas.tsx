@@ -359,6 +359,30 @@ export default function Personas() {
           <Input label="开场白" value={form.greeting} onChange={v => setForm({ ...form, greeting: v })} placeholder="今天想讲点什么？" />
           <div className="sm:col-span-2 rounded-xl border border-ink/10 bg-paper/50 p-3">
             <p className="mb-2 text-xs font-semibold text-ink/60">🔊 绑定音色（可选）</p>
+            {/* 我的音色：自己收藏/创建的音色直接选择 */}
+            {voices.some(v => !v.is_preset) && (
+              <div className="mb-2">
+                <p className="mb-1.5 text-[11px] text-ink/45">我的音色（收藏 / 创建的）</p>
+                <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                  {voices.filter(v => !v.is_preset).map(v => {
+                    const active = form.voice_profile_id === v.id && !form._voiceId;
+                    return (
+                      <span key={v.id} className={"flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition " + (active ? 'border-accent bg-accentlight text-ink font-medium' : 'border-ink/10 bg-surface text-ink/60 hover:border-accent/40')}>
+                        <button onClick={() => setForm({ ...form, voice_profile_id: v.id, _voiceId: null, _voiceTitle: null })}
+                          className="max-w-40 truncate" title={v.display_name}>{v.display_name}{active ? ' ✓' : ''}</button>
+                        <button onClick={(e) => { e.stopPropagation(); speakWithTTS(PREVIEW_TEXT, { voiceId: v.voice_id }); }}
+                          className="shrink-0 text-[10px] text-ink/40 hover:text-accent" title="试听">▶</button>
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="my-2 flex items-center gap-2">
+                  <span className="h-px flex-1 bg-ink/8" />
+                  <span className="text-[10px] text-ink/30">或从音频广场搜索</span>
+                  <span className="h-px flex-1 bg-ink/8" />
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <input value={voiceQ} onChange={e => setVoiceQ(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchVoice(); } }}
