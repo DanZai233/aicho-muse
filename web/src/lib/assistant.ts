@@ -1,7 +1,10 @@
 // 统一 AI 助手：API 类型与调用
 import { api } from './api';
 
-export type AssistantAction = { label: string; to: string };
+export type AssistantAction =
+  | { type: 'nav'; label: string; to: string }
+  | { type: 'open_project'; label: string; id: string }
+  | { type: 'create_project'; label: string; title: string; genre?: string; subtitle?: string; author_name?: string; theme?: string; language?: string; cover_color?: string };
 export type AskResult = { answer: string; actions: AssistantAction[] };
 
 export type ProjectBrief = {

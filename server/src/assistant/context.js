@@ -42,10 +42,20 @@ export function projectChapterContext(projectId, limit = 3) {
   }));
 }
 
-// 知识库上下文：用户长期记忆 + 人设资料
-export function knowledgeContext(userId) {
+// 知识库上下文：用户长期记忆（按作品隔离）+ 人设资料
+// focusProjectId 传入时，项目级记忆只取该作品；用户级记忆始终保留
+export function knowledgeContext(userId, focusProjectId) {
   const d = db();
-  const memories = (d.memories || []).filter(m => m.user_id === userId)
+  const allUserProjects = d.projects.filter(p => p.user_id === userId || (p.collaborators || []).some(c => c.user_id === userId));
+  const memories = (d.memories || [])
+    .filter(m => {
+      if (m.user_id !== userId) return false;
+      if (m.scope === 'project') {
+        if (m.project_id) return m.project_id === focusProjectId;
+        return allUserProjects.length <= 1; // 旧数据兜底：仅一本书时安全
+      }
+      return true;
+    })
     .sort((a, b) => (b.importance || 0) - (a.importance || 0))
     .slice(0, 20)
     .map(m => m.content || '');
@@ -68,7 +78,7 @@ export function buildContextText(userId, focusProjectId) {
     const b = projectBrief(p, chs);
     return `- 《${b.title}》[${b.genre}]${b.theme ? '，主题：' + b.theme : ''}，${b.chapter_count} 章 ${b.word_count} 字${b.summary ? '，摘要：' + b.summary : ''}`;
   });
-  const kb = knowledgeContext(userId);
+  const kb = knowledgeContext(userId, focusProjectId);
   const memoryText = kb.memories.length ? kb.memories.map(m => '- ' + m).join('\n') : '（暂无）';
   const personaText = kb.personas.length
     ? kb.personas.map(p => `- ${p.name}${p.tagline ? '（' + p.tagline + '）' : ''}${p.personality ? ' 性格：' + p.personality : ''}`).join('\n')

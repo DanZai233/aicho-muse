@@ -2,9 +2,12 @@
 // 支持：页面/功能导航、作品库与摘要问答、知识库问答
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { askAssistant, listProjectBriefs, summarizeProject, type AskResult, type ProjectBrief } from '../../lib/assistant';
+import { askAssistant, listProjectBriefs, summarizeProject, type AskResult, type ProjectBrief, type AssistantAction } from '../../lib/assistant';
+import { api } from '../../lib/api';
+import { Button } from '../ui';
 
-type Msg = { role: 'user' | 'assistant'; content: string; actions?: AskResult['actions']; busy?: boolean };
+type Msg = { role: 'user' | 'assistant'; content: string; actions?: AskResult['actions']; busy?: boolean; actingLabel?: string | null };
+type CreateDraft = { title: string; genre: string; subtitle: string; author_name: string; theme: string; language: string; cover_color: string };
 
 const QUICK_NAV = [
   { label: '📚 我的书', to: '/' },
@@ -26,6 +29,9 @@ export default function MuseAssistant() {
   const [busy, setBusy] = useState(false);
   const [briefs, setBriefs] = useState<ProjectBrief[] | null>(null);
   const [summarizing, setSummarizing] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<CreateDraft | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
 
   // 打开时加载作品摘要列表
@@ -41,6 +47,49 @@ export default function MuseAssistant() {
   const go = (to: string) => {
     nav(to);
     setOpen(false);
+  };
+
+  const runAction = async (a: AssistantAction, msgIdx: number) => {
+    if (a.type === 'nav') { go(a.to); return; }
+    if (a.type === 'open_project') { go('/workspace?project=' + a.id); return; }
+    if (a.type === 'create_project') {
+      setCreateDraft({
+        title: a.title,
+        genre: a.genre || 'fiction',
+        subtitle: a.subtitle || '',
+        author_name: a.author_name || '',
+        theme: a.theme || '',
+        language: a.language || 'zh-CN',
+        cover_color: a.cover_color || '#8b7d6b',
+      });
+      setCreateErr('');
+      setMsgs(prev => prev.map((m, i) => i === msgIdx ? { ...m, actingLabel: null } : m));
+    }
+  };
+
+  const doCreate = async () => {
+    if (!createDraft || !createDraft.title.trim() || creating) return;
+    setCreating(true); setCreateErr('');
+    try {
+      const d = await api.post<{ project: { id: string } }>('/projects', {
+        title: createDraft.title.trim(),
+        genre: createDraft.genre,
+        subtitle: createDraft.subtitle,
+        author_name: createDraft.author_name,
+        theme: createDraft.theme,
+        language: createDraft.language,
+        cover_color: createDraft.cover_color,
+        default_persona_id: 'preset-liwen',
+      });
+      setCreateDraft(null);
+      setOpen(false);
+      nav('/workspace?project=' + d.project.id);
+      listProjectBriefs().then(setBriefs).catch(() => {});
+    } catch (e: any) {
+      setCreateErr(e.message || '创建失败');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const send = async () => {
@@ -126,7 +175,7 @@ export default function MuseAssistant() {
                       {m.actions && m.actions.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {m.actions.map((a, j) => (
-                            <button key={j} onClick={() => go(a.to)}
+                            <button key={j} onClick={() => runAction(a, i)}
                               className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-medium text-paper transition hover:bg-accent/90">
                               {a.label}
                             </button>
@@ -179,6 +228,52 @@ export default function MuseAssistant() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 创建作品确认弹层 */}
+      {createDraft && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm" onClick={() => !creating && setCreateDraft(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl animate-fade-up" onClick={e => e.stopPropagation()}>
+            <h3 className="font-serif text-lg font-semibold">📖 创建这本书</h3>
+            <p className="mt-1 text-xs text-ink/45">Muse 已经帮你填好了，确认后一键创建并进入写作页。</p>
+            <div className="mt-3 space-y-2.5">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-ink/55">书名</span>
+                <input value={createDraft.title} onChange={e => setCreateDraft({ ...createDraft, title: e.target.value })}
+                  className="w-full rounded-lg border border-ink/10 bg-paper/60 px-3 py-2 text-sm outline-none focus:border-accent" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-ink/55">体裁</span>
+                <select value={createDraft.genre} onChange={e => setCreateDraft({ ...createDraft, genre: e.target.value })}
+                  className="w-full rounded-lg border border-ink/10 bg-paper/60 px-3 py-2 text-sm outline-none">
+                  <option value="biography">自传</option>
+                  <option value="fiction">小说</option>
+                  <option value="prose">散文</option>
+                  <option value="poetry">诗歌</option>
+                  <option value="script">剧本</option>
+                  <option value="paper">论文</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-ink/55">副标题（可选）</span>
+                <input value={createDraft.subtitle} onChange={e => setCreateDraft({ ...createDraft, subtitle: e.target.value })}
+                  className="w-full rounded-lg border border-ink/10 bg-paper/60 px-3 py-2 text-sm outline-none focus:border-accent" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-ink/55">主题（可选）</span>
+                <input value={createDraft.theme} onChange={e => setCreateDraft({ ...createDraft, theme: e.target.value })}
+                  className="w-full rounded-lg border border-ink/10 bg-paper/60 px-3 py-2 text-sm outline-none focus:border-accent" />
+              </label>
+            </div>
+            {createErr && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{createErr}</p>}
+            <div className="mt-4 flex gap-2">
+              <Button onClick={doCreate} disabled={creating || !createDraft.title.trim()} className="flex-1">
+                {creating ? '创建中…' : '✨ 一键创建并开始写作'}
+              </Button>
+              <Button variant="ghost" onClick={() => setCreateDraft(null)} disabled={creating}>取消</Button>
+            </div>
+          </div>
         </div>
       )}
     </>

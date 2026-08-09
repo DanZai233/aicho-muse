@@ -17,6 +17,7 @@ import CitationsPanel from '../components/CitationsPanel';
 import PaperInfoPanel from '../components/PaperInfoPanel';
 import ReferenceDocsPanel from '../components/ReferenceDocsPanel';
 import RelationshipGraph from '../components/RelationshipGraph';
+import ReviewModal from '../components/ReviewModal';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
@@ -205,6 +206,7 @@ export default function Workspace() {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMsg, setShareMsg] = useState('');
   const [showSharePanel, setShowSharePanel] = useState(false);
+  const [showReview, setShowReview] = useState(false);
   const [refDocs, setRefDocs] = useState<ReferenceDoc[]>([]);
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [refMsg, setRefMsg] = useState('');
@@ -1055,6 +1057,8 @@ export default function Workspace() {
               )}
               {project && (
                 <span className="flex items-center gap-0.5">
+                  <button onClick={() => setShowReview(true)} title="请一位评者为这部作品写文评"
+                    className="rounded-md bg-accentlight/70 px-2.5 py-1 font-medium text-ink transition hover:bg-accentlight">📜 文评</button>
                   <button onClick={exportMd} className="rounded-md px-2 py-1 hover:bg-ink/5" title="Markdown">MD</button>
                   <button onClick={exportPdf} className="rounded-md px-2 py-1 hover:bg-ink/5" title="PDF">PDF</button>
                   <button onClick={exportDocx} className="rounded-md px-2 py-1 hover:bg-ink/5" title="Word">DOCX</button>
@@ -1637,6 +1641,13 @@ export default function Workspace() {
       )}
       {draftRestored && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{draftRestored}</div>}
       {notice && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-amber-600 px-5 py-2.5 text-sm text-white shadow-lift animate-fade-up">{notice}</div>}
+
+      <ReviewModal
+        open={showReview}
+        projectId={project?.id || ''}
+        projectTitle={project?.title || ''}
+        onClose={() => setShowReview(false)}
+      />
     </Layout>
   );
 }

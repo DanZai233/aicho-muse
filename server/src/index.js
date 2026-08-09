@@ -29,6 +29,7 @@ import citationRoutes from './routes/citations.js';
 import shareRoutes from './routes/shares.js';
 import referenceDocRoutes from './routes/reference-docs.js';
 import relationshipRoutes from './routes/relationships.js';
+import reviewRoutes from './routes/review.js';
 import { attachPresenceServer } from './realtime/server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -86,6 +87,7 @@ app.use('/api/v1', importRoutes);
 app.use('/api/v1', citationRoutes);
 app.use('/api/v1', referenceDocRoutes);
 app.use('/api/v1', relationshipRoutes);
+app.use('/api/v1', reviewRoutes);
 startTrashReaper();
 startAutoSaveSnapshot();
 

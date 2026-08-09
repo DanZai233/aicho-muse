@@ -299,12 +299,26 @@ export async function generateCoachReply({ persona, project, chapter, input, his
   const userPrefs = userId ? (db().users || []).find(u => u.id === userId)?.prefs : null;
   const assistantName = userPrefs?.assistant_name || '缪斯';
   const userName = (userPrefs?.my_name || '').trim();
-  // 记忆检索：项目级优先（与当前作品强相关），再按 importance 排序，最多注入 5 条（Prompt Engineering §1/§9）
-  const memories = userId ? (db().memories || [])
-    .filter(m => m.user_id === userId)
-    .sort((a, b) => Number(b.scope === 'project') - Number(a.scope === 'project') || (b.importance || 0) - (a.importance || 0))
-    .slice(0, 5) : [];
-  const memoryText = memories.length ? memories.map(m => '- [' + (m.scope === 'project' ? '作品' : '用户') + '] ' + m.content).join('\n') : '';
+  // 记忆检索：严格按书隔离——只注入「当前作品的记忆」+「用户级记忆（无作品归属）」，
+  // 其他作品的记忆绝不混入，避免跨书串味（兼容旧数据：scope=project 但无 project_id 的，
+  // 仅当用户只有一部作品时安全注入，否则丢弃以防混淆）
+  const allUserProjects = (db().projects || []).filter(p => p.user_id === userId || (p.collaborators || []).some(c => c.user_id === userId));
+  const oldProjectMemoryCount = (db().memories || []).filter(m => m.user_id === userId && m.scope === 'project' && !m.project_id).length;
+  const memorySource = userId ? (db().memories || []).filter(m => {
+    if (m.user_id !== userId) return false;
+    if (m.scope === 'project') {
+      if (m.project_id) return m.project_id === project?.id;   // 只取当前作品
+      return allUserProjects.length <= 1;                       // 旧数据兜底：仅一本书时安全
+    }
+    return true;                                                // 用户级记忆跨作品保留
+  }) : [];
+  const memories = memorySource
+    .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+    .slice(0, 5);
+  const memoryText = memories.length ? memories.map(m => {
+    const tag = m.scope === 'project' ? '本作品' : '用户';
+    return '- [' + tag + '] ' + m.content;
+  }).join('\n') : '';
 
   const s = db().settings.ai;
   const personaName = persona?.name || '黎文';
@@ -452,8 +466,8 @@ export function consistencyCheck(text, characters = [], timeline = []) {
 export function extractMemory(input, projectId) {
   const items = [];
   const m = input.match(/(我|我们|他|她|主角)(很|非常|特别)?(喜欢|热爱|害怕|讨厌|想要|希望|相信|记得)(.{2,20})/);
-  if (m) items.push({ scope: projectId ? 'project' : 'user', key: '偏好/态度', content: `${m[1]}${m[2] || ''}${m[3]}${m[4]}`, importance: 3 });
+  if (m) items.push({ scope: projectId ? 'project' : 'user', project_id: projectId || null, key: '偏好/态度', content: `${m[1]}${m[2] || ''}${m[3]}${m[4]}`, importance: 3 });
   const n = input.match(/(决定|确定|定下)[^。！？]{2,30}/);
-  if (n) items.push({ scope: projectId ? 'project' : 'user', key: '创作决定', content: n[0], importance: 4 });
+  if (n) items.push({ scope: projectId ? 'project' : 'user', project_id: projectId || null, key: '创作决定', content: n[0], importance: 4 });
   return items;
 }
