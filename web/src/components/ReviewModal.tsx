@@ -1,10 +1,12 @@
-// 文评弹窗：为作品生成风格化文评，仪式感动效 + 逐字浮现 + 语音朗读
+// 文评弹窗：为作品生成风格化文评，可选择助手人设（用 TA 的性格写）与朗读音色
+// 仪式感动效 + 逐字浮现 + 语音朗读
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../lib/api';
+import { api, Persona, VoiceProfile } from '../lib/api';
 import { speakWithTTS, stopSpeakTTS } from '../lib/speech';
 
 export type ReviewStyle = { id: string; name: string; icon: string; desc: string };
 type Review = { score: number; summary: string; paragraphs: string[]; quote: string };
+type ReviewResp = { style?: ReviewStyle; persona?: { id: string; name: string; avatar?: string; avatar_color?: string } | null; review: Review };
 
 const STYLE_FALLBACK: ReviewStyle[] = [
   { id: 'gentle', name: '温柔鼓励', icon: '🌿', desc: '温暖而有洞察' },
@@ -23,25 +25,62 @@ function scoreColor(score: number) {
   return '#7b4f8a';
 }
 
-export default function ReviewModal({ projectId, projectTitle, open, onClose }: {
-  projectId: string; projectTitle: string; open: boolean; onClose: () => void;
+export default function ReviewModal({ projectId, projectTitle, open, onClose, defaultPersonaId }: {
+  projectId: string; projectTitle: string; open: boolean; onClose: () => void; defaultPersonaId?: string | null;
 }) {
   const [styles, setStyles] = useState<ReviewStyle[]>(STYLE_FALLBACK);
   const [styleId, setStyleId] = useState('gentle');
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [personaId, setPersonaId] = useState<string>('');
+  const [voices, setVoices] = useState<VoiceProfile[]>([]);
+  const [voiceId, setVoiceId] = useState<string>('');
   const [phase, setPhase] = useState<'pick' | 'loading' | 'reveal'>('pick');
   const [review, setReview] = useState<Review | null>(null);
+  const [reviewPersona, setReviewPersona] = useState<ReviewResp['persona']>(null);
   const [err, setErr] = useState('');
   const [visibleChars, setVisibleChars] = useState(0);
   const [playing, setPlaying] = useState(false);
   const timerRef = useRef<any>(null);
   const fullText = useMemo(() => review ? [...(review.paragraphs || []), review.quote ? '—— ' + review.quote : ''].join('\n\n') : '', [review]);
+  const selectedVoice = voices.find(v => v.voice_id === voiceId) || null;
+
+  // 打开时加载人设 / 音色，并按作品默认人设预选
+  useEffect(() => {
+    if (!open) return;
+    api.get<{ list: Persona[] }>('/personas?page_size=60').then(d => {
+      setPersonas(d.list || []);
+      const pid = defaultPersonaId && d.list.some(p => p.id === defaultPersonaId) ? defaultPersonaId : '';
+      setPersonaId(pid);
+    }).catch(() => {});
+    api.get<{ list: VoiceProfile[] }>('/voices?page_size=60').then(d => setVoices(d.list || [])).catch(() => {});
+  }, [open, defaultPersonaId]);
+
+  // 选中人设后自动带上 TA 绑定的音色（人设/音色各自异步加载，用 effect 兜底顺序）
+  useEffect(() => {
+    if (!personaId || !voices.length || !personas.length) return;
+    const bind = personas.find(p => p.id === personaId);
+    if (!bind?.voice_profile_id) return;
+    const vp = voices.find(v => v.id === bind.voice_profile_id);
+    if (vp?.voice_id) setVoiceId(vp.voice_id);
+  }, [personaId, voices, personas]);
+
+  // 切换人设时自动带上 TA 绑定的音色
+  const pickPersona = (pid: string) => {
+    setPersonaId(pid);
+    const bind = personas.find(p => p.id === pid);
+    if (bind?.voice_profile_id) {
+      const vp = voices.find(v => v.id === bind.voice_profile_id);
+      if (vp?.voice_id) { setVoiceId(vp.voice_id); return; }
+    }
+    if (!pid) setVoiceId('');
+  };
 
   // 关闭时清理
   useEffect(() => {
     if (!open) {
       clearInterval(timerRef.current);
       stopSpeakTTS();
-      setPhase('pick'); setReview(null); setVisibleChars(0); setPlaying(false); setErr('');
+      setPhase('pick'); setReview(null); setReviewPersona(null); setVisibleChars(0); setPlaying(false); setErr('');
     }
   }, [open]);
 
@@ -50,19 +89,18 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose }: 
   const run = async () => {
     setPhase('loading'); setErr('');
     try {
-      const d = await api.post<{ review: Review }>('/projects/' + projectId + '/review', { style: styleId });
+      const d = await api.post<ReviewResp>('/projects/' + projectId + '/review', { style: styleId, persona_id: personaId || undefined });
       setReview(d.review);
+      setReviewPersona(d.persona || null);
       setVisibleChars(0);
       setPhase('reveal');
       // 逐字浮现：按 ~45ms/字 分批
-      const step = Math.max(1, Math.ceil((d.review.paragraphs.join('').length + d.review.quote.length) / 80));
+      const total = d.review.paragraphs.join('').length + (d.review.quote || '').length + 8;
+      const step = Math.max(1, Math.ceil(total / 80));
       timerRef.current = setInterval(() => {
         setVisibleChars(v => {
           const next = v + step;
-          if (next >= (d.review.paragraphs.join('').length + (d.review.quote || '').length + 8)) {
-            clearInterval(timerRef.current);
-            return d.review.paragraphs.join('').length + (d.review.quote || '').length + 8;
-          }
+          if (next >= total) { clearInterval(timerRef.current); return total; }
           return next;
         });
       }, 45);
@@ -75,13 +113,21 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose }: 
   const togglePlay = async () => {
     if (playing) { stopSpeakTTS(); setPlaying(false); return; }
     if (!review || !fullText) return;
-    const ok = await speakWithTTS(fullText, { onEnd: () => setPlaying(false), onStart: () => setPlaying(true) });
+    const ok = await speakWithTTS(fullText, { onEnd: () => setPlaying(false), onStart: () => setPlaying(true), voiceId: voiceId || undefined });
     if (!ok) setPlaying(true);
+  };
+
+  const previewVoice = async () => {
+    if (!voiceId) return;
+    stopSpeakTTS();
+    await speakWithTTS('这是文评的朗读音色试听，愿你笔下的故事，被温柔地读出来。', { voiceId });
   };
 
   const visibleText = review ? (review.paragraphs.join('\n\n') + (review.quote ? '\n\n—— ' + review.quote : '')).slice(0, visibleChars) : '';
 
   if (!open) return null;
+
+  const personaLabel = reviewPersona?.name || personas.find(p => p.id === personaId)?.name || '';
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/50 p-4 backdrop-blur-md animate-fade-up" onClick={() => phase !== 'loading' && onClose()}>
@@ -118,6 +164,46 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose }: 
                   </button>
                 ))}
               </div>
+
+              {/* 评者人设：用助手性格写文评 */}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-ink/60">🎭 评者人设（可选，用 TA 的性格来写）</p>
+                {personas.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-ink/15 px-3 py-2 text-xs text-ink/35">还没有自定义人设，可用「默认」+ 上方风格直接生成</p>
+                ) : (
+                  <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                    <button onClick={() => pickPersona('')}
+                      className={'rounded-full px-3 py-1.5 text-xs transition ' + (!personaId ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/55 hover:bg-ink/10')}>
+                      默认（纯风格）
+                    </button>
+                    {personas.map(p => (
+                      <button key={p.id} onClick={() => pickPersona(p.id)}
+                        className={'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ' + (personaId === p.id ? 'bg-ink text-paper' : 'bg-ink/5 text-ink/55 hover:bg-ink/10')}>
+                        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: p.avatar_color || '#8b7d6b' }} />
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 朗读音色 */}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-ink/60">🔊 朗读音色（可选，文评朗读用）</p>
+                <div className="flex items-center gap-2">
+                  <select value={voiceId} onChange={e => setVoiceId(e.target.value)}
+                    className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-paper/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent/50">
+                    <option value="">默认音色</option>
+                    {voices.map(v => <option key={v.id} value={v.voice_id}>{v.display_name}{v.is_preset ? '（官方）' : ''}</option>)}
+                  </select>
+                  {voiceId && (
+                    <button onClick={previewVoice} className="shrink-0 rounded-xl bg-accentlight/70 px-3 py-2 text-xs text-ink transition hover:bg-accentlight" title="试听音色">
+                      ▶ 试听
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
               <button onClick={run} className="w-full rounded-xl bg-ink py-2.5 text-sm font-medium text-paper transition hover:bg-ink/85">
                 ✨ 请 TA 写一篇文评
@@ -153,7 +239,7 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose }: 
                     {review.score >= 85 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">很有灵气</span>}
                     {review.score >= 75 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">值得期待</span>}
                     {review.score < 75 && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] text-rose-600">尚需打磨</span>}
-                    <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/45">{styles.find(s => s.id === styleId)?.name}</span>
+                    <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/45">{styles.find(s => s.id === styleId)?.name}{personaLabel ? ' · ' + personaLabel : ''}</span>
                   </div>
                 </div>
               </div>

@@ -1646,6 +1646,7 @@ export default function Workspace() {
         open={showReview}
         projectId={project?.id || ''}
         projectTitle={project?.title || ''}
+        defaultPersonaId={project?.default_persona_id || null}
         onClose={() => setShowReview(false)}
       />
     </Layout>

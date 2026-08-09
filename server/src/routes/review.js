@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db } from '../db.js';
-import { callLLM } from '../ai.js';
+import { callLLM, personaPrompt } from '../ai.js';
 import { findProject } from '../access.js';
 
 const router = Router();
@@ -23,14 +23,15 @@ function styleOf(id) {
   return REVIEW_STYLES.find(s => s.id === id) || REVIEW_STYLES[0];
 }
 
-function buildReviewPrompt({ project, chapters, style }) {
+function buildReviewPrompt({ project, chapters, style, persona }) {
   const title = project?.title || '未命名作品';
   const genre = project?.genre || '';
   const theme = project?.theme || '';
   const body = chapters.map(c => `【第${(c.order_index || 0) + 1}章 ${c.title || ''}】\n${(c.content || '').slice(0, 1200)}`).join('\n\n');
   const wordCount = chapters.reduce((s, c) => s + (c.content || '').length, 0);
+  const personaBlock = persona ? personaPrompt(persona) : '';
   return {
-    system: `${style.persona}
+    system: `${personaBlock ? personaBlock + '\n\n' : ''}${style.persona}
 你正在为一部作品写「文评」。请用中文输出，格式如下（严格 JSON，不要其他文字）：
 {
   "score": 0-100 的整数评分,
@@ -41,7 +42,7 @@ function buildReviewPrompt({ project, chapters, style }) {
 要求：
 1. 结合作品实际内容给出具体评价，不要空泛。
 2. 段落之间要有层次：先总评感受，再谈优点（细节/语言/结构），再指出可提升处，最后收束。
-3. 符合所选评论者的人设语气。
+3. 以选中「评者」的性格与说话风格为主，结合所选评论视角，保持角色语气鲜明，不要写成通用 AI 腔。
 4. 若作品还很短（不足 200 字），请真诚鼓励开始，并给一两个具体的推进建议。`,
     user: `作品信息：
 书名：《${title}》
@@ -86,15 +87,21 @@ router.post('/projects/:id/review', async (req, res) => {
   const d = db();
   const chapters = d.chapters.filter(c => c.project_id === found.p.id).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
   const style = styleOf(req.body?.style);
+  // 可选：用助手人设的性格来写文评（默认人设/预设/公开/自己的均可）
+  let persona = null;
+  if (req.body?.persona_id) {
+    persona = d.personas.find(x => x.id === req.body.persona_id && (x.is_preset || x.is_public || x.user_id === req.user.id)) || null;
+  }
+  const personaInfo = persona ? { id: persona.id, name: persona.name, tagline: persona.tagline || '', avatar: persona.avatar || '', avatar_color: persona.avatar_color || '#8b7d6b', voice_profile_id: persona.voice_profile_id || null } : null;
 
   // 无 LLM 配置时直接兜底
   const s = d.settings.ai;
   const hasLLM = ((process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none') || (s.api_key && s.provider !== 'none');
   if (!hasLLM) {
-    return res.json({ code: 0, data: { style, review: fallbackReview({ project: found.p, chapters, style }) } });
+    return res.json({ code: 0, data: { style, persona: personaInfo, review: fallbackReview({ project: found.p, chapters, style, persona }) } });
   }
 
-  const { system, user } = buildReviewPrompt({ project: found.p, chapters, style });
+  const { system, user } = buildReviewPrompt({ project: found.p, chapters, style, persona });
   try {
     const raw = await callLLM([
       { role: 'system', content: system },
@@ -122,7 +129,7 @@ router.post('/projects/:id/review', async (req, res) => {
     if (!review) review = fallbackReview({ project: found.p, chapters, style });
     return res.json({ code: 0, data: { style, review } });
   } catch (e) {
-    return res.json({ code: 0, data: { style, review: fallbackReview({ project: found.p, chapters, style }) } });
+    return res.json({ code: 0, data: { style, persona: personaInfo, review: fallbackReview({ project: found.p, chapters, style, persona }) } });
   }
 });
 

@@ -161,7 +161,7 @@ export default function Home() {
                 <Link to={'/workspace?project=' + p.id} className="flex items-start gap-4">
                 <BookCover project={p} size="md" />
                 <div className="min-w-0 flex-1 pt-1">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2 pr-14">
                     <BadgeText text={GENRE_LABEL[p.genre] || p.genre} />
                     <span className="text-[10px] text-ink/30">{p.status === 'final' ? '已完成' : p.status === 'reviewed' ? '修改中' : '创作中'}</span>
                   </div>

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
-import { TextDecoder } from 'node:util';
+import { extractText } from '../textlib.js';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
 import { callLLM } from '../ai.js';
@@ -19,56 +19,6 @@ const upload = multer({
 const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
 
 function projectOf(id) { return id ? db().projects.find(p => p.id === id) : null; }
-
-// 统计字符串中的 CJK 汉字数量（判断解码结果更像哪种编码）
-function countCJK(str) {
-  let n = 0;
-  for (const ch of str) {
-    const cp = ch.codePointAt(0);
-    if (cp >= 0x4e00 && cp <= 0x9fff) n++;
-  }
-  return n;
-}
-
-// 文本编码自动识别：BOM 优先；无 BOM 时先严格 UTF-8，再按 GBK/GB18030 候选，
-// 用 CJK 汉字密度判断哪个解码结果更合理（GBK 双字节序列常碰巧是合法 UTF-8，
-// 仅靠 fatal 探测不可靠，必须内容启发式）。
-function decodeText(buf) {
-  // UTF-8 BOM
-  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
-    return new TextDecoder('utf-8').decode(buf.subarray(3));
-  }
-  // UTF-16 LE / BE BOM
-  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
-    return new TextDecoder('utf-16le').decode(buf.subarray(2));
-  }
-  if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
-    return new TextDecoder('utf-16be').decode(buf.subarray(2));
-  }
-  // 无 BOM：严格 UTF-8 探测
-  let utf8 = null;
-  try { utf8 = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { /* 非法 UTF-8 */ }
-  // GB18030 候选（覆盖 GBK/GB2312 全部字节，不会抛错）
-  const gbk = new TextDecoder('gb18030').decode(buf);
-  if (utf8 !== null) {
-    // 两个都能解：按 CJK 汉字密度判定。
-    const cjkUtf8 = countCJK(utf8);
-    const cjkGbk = countCJK(gbk);
-    if (cjkGbk > cjkUtf8 * 1.5 && cjkGbk >= 3) return gbk;
-    return utf8;
-  }
-  return gbk;
-}
-
-async function extractText(file) {
-  const ext = path.extname(file.originalname || '').toLowerCase();
-  if (ext === '.docx') {
-    const mammoth = await import('mammoth');
-    const r = await mammoth.extractRawText({ buffer: file.buffer });
-    return (r.value || '').replace(/\r\n/g, '\n');
-  }
-  return decodeText(file.buffer).replace(/^\uFEFF/, '');
-}
 
 // 切分章节：支持 Markdown 标题（#/##/###）与中文"第X章/回/节"两种结构。
 // 若文档第一个标题是 #（一级），视为作品标题而非章节。
