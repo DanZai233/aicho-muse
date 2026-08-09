@@ -3,7 +3,7 @@
 // 支持 LLM 生成与规则兜底，返回结构化的「评分 + 段落式评论 + 一句金句」供前端仪式感展示。
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
-import { db } from '../db.js';
+import { db, saveDb, uuid } from '../db.js';
 import { callLLM, personaPrompt } from '../ai.js';
 import { findProject } from '../access.js';
 
@@ -22,6 +22,40 @@ export const REVIEW_STYLES = [
 function styleOf(id) {
   return REVIEW_STYLES.find(s => s.id === id) || REVIEW_STYLES[0];
 }
+
+// 文评落库：保存完整文评 + 评价人 + 音色信息（供「收下的文评」查看与重播）
+function persistReview({ projectId, userId, style, persona, review, source }) {
+  try {
+    const d = db();
+    const now = new Date().toISOString();
+    const rec = {
+      id: uuid(),
+      project_id: projectId,
+      user_id: userId,
+      style_id: style?.id || '',
+      style_name: style?.name || '',
+      persona_id: persona?.id || null,
+      persona_name: persona?.name || '',
+      persona_avatar: persona?.avatar || '',
+      persona_avatar_color: persona?.avatar_color || '#8b7d6b',
+      voice_id: persona?.voice_id || null,
+      voice_name: persona?.voice_name || '',
+      score: review?.score ?? 70,
+      summary: review?.summary || '',
+      paragraphs: review?.paragraphs || [],
+      quote: review?.quote || '',
+      source: source || 'llm',
+      created_at: now,
+    };
+    d.reviews.push(rec);
+    saveDb();
+    return rec;
+  } catch (e) {
+    console.error('[Review] 落库失败:', e.message);
+    return null;
+  }
+}
+
 
 function buildReviewPrompt({ project, chapters, style, persona }) {
   const title = project?.title || '未命名作品';
@@ -102,7 +136,9 @@ router.post('/projects/:id/review', async (req, res) => {
   const s = d.settings.ai;
   const hasLLM = ((process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none') || (s.api_key && s.provider !== 'none');
   if (!hasLLM) {
-    return res.json({ code: 0, data: { style, persona: personaInfo, review: fallbackReview({ project: found.p, chapters, style, persona }) } });
+    const fb = fallbackReview({ project: found.p, chapters, style, persona });
+    const rec = persistReview({ projectId: found.p.id, userId: req.user.id, style, persona: personaInfo, review: fb, source: 'rules' });
+    return res.json({ code: 0, data: { style, persona: personaInfo, review: fb, saved: !!rec, review_id: rec?.id || null } });
   }
 
   const { system, user } = buildReviewPrompt({ project: found.p, chapters, style, persona });
@@ -173,11 +209,48 @@ router.post('/projects/:id/review', async (req, res) => {
       } else break;
     }
     if (!review) review = fallbackReview({ project: found.p, chapters, style, persona });
-    return res.json({ code: 0, data: { style, persona: personaInfo, review } });
+    const rec = persistReview({ projectId: found.p.id, userId: req.user.id, style, persona: personaInfo, review, source: 'llm' });
+    return res.json({ code: 0, data: { style, persona: personaInfo, review, saved: !!rec, review_id: rec?.id || null } });
   } catch (e) {
     console.error('[Review] 生成失败:', e.message);
-    return res.json({ code: 0, data: { style, persona: personaInfo, review: fallbackReview({ project: found.p, chapters, style, persona }) } });
+    const fb = fallbackReview({ project: found.p, chapters, style, persona });
+    const rec = persistReview({ projectId: found.p.id, userId: req.user.id, style, persona: personaInfo, review: fb, source: 'fallback' });
+    return res.json({ code: 0, data: { style, persona: personaInfo, review: fb, saved: !!rec, review_id: rec?.id || null } });
   }
+});
+
+// 某本书的文评列表（自己可看，协作者可看）
+router.get('/projects/:id/reviews', (req, res) => {
+  const found = findProject(req, req.params.id);
+  if (!found) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  const d = db();
+  const list = d.reviews
+    .filter(r => r.project_id === found.p.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  res.json({ code: 0, data: { list, total: list.length } });
+});
+
+// 我的全部文评
+router.get('/reviews', (req, res) => {
+  const d = db();
+  const list = d.reviews
+    .filter(r => r.user_id === req.user.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map(r => {
+      const p = d.projects.find(x => x.id === r.project_id);
+      return { ...r, project_title: p?.title || '（已删除作品）' };
+    });
+  res.json({ code: 0, data: { list, total: list.length } });
+});
+
+// 删除一条文评
+router.delete('/reviews/:id', (req, res) => {
+  const d = db();
+  const r = d.reviews.find(x => x.id === req.params.id && x.user_id === req.user.id);
+  if (!r) return res.status(404).json({ code: 40401, message: '文评不存在' });
+  d.reviews = d.reviews.filter(x => x.id !== r.id);
+  saveDb();
+  res.json({ code: 0, data: { ok: true } });
 });
 
 // GET /api/v1/review/styles 风格预设列表

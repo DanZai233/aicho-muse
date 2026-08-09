@@ -38,6 +38,7 @@ const COLLECTIONS = {
   idea_notes: { json: ['tags'] },
   memories: { json: [] },
   feedback: { json: [] },
+  reviews: { json: [] },
   citations: { json: [] },
   shares: { json: ['likes'] },
   reference_docs: { json: [] },

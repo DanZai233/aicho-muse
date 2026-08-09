@@ -107,6 +107,7 @@ router.delete('/users/:id', (req, res) => {
   d.idea_notes = d.idea_notes.filter(i => !projectIds.includes(i.project_id));
   d.memories = d.memories.filter(m => m.user_id !== u.id);
   d.feedback = d.feedback.filter(f => f.user_id !== u.id);
+  d.reviews = d.reviews.filter(r => r.user_id !== u.id);
   d.trash = d.trash.filter(t => t.kind === 'project' ? !projectIds.includes(t.id) : !chapterIds.includes(t.id));
   saveDb();
   res.json({ code: 0, data: { ok: true } });

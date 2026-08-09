@@ -6,7 +6,7 @@ import { speakWithTTS, stopSpeakTTS } from '../lib/speech';
 
 export type ReviewStyle = { id: string; name: string; icon: string; desc: string };
 type Review = { score: number; summary: string; paragraphs: string[]; quote: string };
-type ReviewResp = { style?: ReviewStyle; persona?: { id: string; name: string; avatar?: string; avatar_color?: string; voice_profile_id?: string | null; voice_id?: string; voice_name?: string } | null; review: Review };
+type ReviewResp = { style?: ReviewStyle; persona?: { id: string; name: string; avatar?: string; avatar_color?: string; voice_profile_id?: string | null; voice_id?: string; voice_name?: string } | null; review: Review; saved?: boolean; review_id?: string | null };
 
 const STYLE_FALLBACK: ReviewStyle[] = [
   { id: 'gentle', name: '温柔鼓励', icon: '🌿', desc: '温暖而有洞察' },
@@ -86,7 +86,7 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
     if (!open) {
       clearInterval(timerRef.current);
       stopSpeakTTS();
-      setPhase('pick'); setReview(null); setReviewPersona(null); setVisibleChars(0); setPlaying(false); setErr('');
+      setPhase('pick'); setReview(null); setReviewPersona(null); setVisibleChars(0); setPlaying(false); setErr(''); setSaved(false); setReviewId(null);
     }
   }, [open]);
 
@@ -98,6 +98,8 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
       const d = await api.post<ReviewResp>('/projects/' + projectId + '/review', { style: styleId, persona_id: personaId || undefined });
       setReview(d.review);
       setReviewPersona(d.persona || null);
+      setSaved(!!d.saved);
+      setReviewId(d.review_id || null);
       setVisibleChars(0);
       setPhase('reveal');
       // 逐字浮现：按 ~45ms/字 分批
@@ -117,6 +119,8 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
   };
 
   const [ttsLoading, setTtsLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const togglePlay = async () => {
     if (playing) { stopSpeakTTS(); setPlaying(false); return; }
     if (!review || !fullText) return;
@@ -278,6 +282,7 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
                 <button onClick={run} className="rounded-full bg-ink/5 px-4 py-2 text-xs text-ink/60 transition hover:bg-ink/10">
                   ↻ 换一种风格
                 </button>
+                {saved ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] text-emerald-700">✓ 已收藏到文评簿</span> : null}
                 <button onClick={onClose} className="ml-auto rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/85">收下这篇文评</button>
               </div>
             </div>

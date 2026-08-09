@@ -152,6 +152,7 @@ function seed() {
     ],
     memories: [],
     feedback: [],
+    reviews: [],
     outline_nodes: [],
     character_cards: [],
     timeline_events: [],

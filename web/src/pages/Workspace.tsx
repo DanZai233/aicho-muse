@@ -19,6 +19,7 @@ import ReferenceDocsPanel from '../components/ReferenceDocsPanel';
 import RelationshipGraph from '../components/RelationshipGraph';
 import ReviewModal from '../components/ReviewModal';
 import MemoryLinkModal from '../components/MemoryLinkModal';
+import ReviewsPanel from '../components/ReviewsPanel';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
 const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
@@ -183,7 +184,7 @@ export default function Workspace() {
   const [suggestMsg, setSuggestMsg] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState('');
-  const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas' | 'citations' | 'refs'>('book');
+  const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas' | 'citations' | 'refs' | 'reviews'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
   const [characters, setCharacters] = useState<StructItem[]>([]);
   const [timeline, setTimeline] = useState<StructItem[]>([]);
@@ -978,7 +979,7 @@ export default function Workspace() {
             </div>
           </div>
           <div className="flex gap-0.5 border-b border-ink/5 px-2 py-2 text-xs">
-            {([['book', '书'], ['outline', '大纲'], ['characters', '人物'], ['timeline', '时间线'], ['ideas', '灵感'], ...(project?.genre === 'paper' ? [['citations', '文献'] as const] : []), ['refs', '参考']] as const).map(([k, v]) => (
+            {([['book', '书'], ['outline', '大纲'], ['characters', '人物'], ['timeline', '时间线'], ['ideas', '灵感'], ...(project?.genre === 'paper' ? [['citations', '文献'] as const] : []), ['refs', '参考'], ['reviews', '文评']] as const).map(([k, v]) => (
               <button key={k} onClick={() => setLeftTab(k as typeof leftTab)}
                 className={"flex-1 rounded-md px-1 py-1.5 transition " + (leftTab === k ? 'bg-accentlight/80 font-medium text-ink' : 'text-ink/45 hover:text-ink')}>{v}</button>
             ))}
@@ -1050,6 +1051,9 @@ export default function Workspace() {
             {leftTab === 'refs' && (
               <ReferenceDocsPanel docs={refDocs} onUpload={uploadRef} onDelete={deleteRef}
                 onPick={id => setPickedRefs(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])} picked={pickedRefs} />
+            )}
+            {leftTab === 'reviews' && project && (
+              <ReviewsPanel projectId={project.id} />
             )}
             {refMsg && <p className="mt-2 px-2 text-xs text-ink/55">{refMsg}</p>}
           </div>
