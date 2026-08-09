@@ -6,7 +6,7 @@ import { speakWithTTS, stopSpeakTTS } from '../lib/speech';
 
 export type ReviewStyle = { id: string; name: string; icon: string; desc: string };
 type Review = { score: number; summary: string; paragraphs: string[]; quote: string };
-type ReviewResp = { style?: ReviewStyle; persona?: { id: string; name: string; avatar?: string; avatar_color?: string } | null; review: Review };
+type ReviewResp = { style?: ReviewStyle; persona?: { id: string; name: string; avatar?: string; avatar_color?: string; voice_profile_id?: string | null; voice_id?: string; voice_name?: string } | null; review: Review };
 
 const STYLE_FALLBACK: ReviewStyle[] = [
   { id: 'gentle', name: '温柔鼓励', icon: '🌿', desc: '温暖而有洞察' },
@@ -75,6 +75,12 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
     if (!pid) setVoiceId('');
   };
 
+  // 生成返回后：用后端返回的人设音色（若用户没手动改过）
+  const manualVoiceRef = useRef(false);
+  useEffect(() => {
+    if (reviewPersona?.voice_id && !manualVoiceRef.current) setVoiceId(reviewPersona.voice_id);
+  }, [reviewPersona]);
+
   // 关闭时清理
   useEffect(() => {
     if (!open) {
@@ -110,11 +116,18 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
     }
   };
 
+  const [ttsLoading, setTtsLoading] = useState(false);
   const togglePlay = async () => {
     if (playing) { stopSpeakTTS(); setPlaying(false); return; }
     if (!review || !fullText) return;
-    const ok = await speakWithTTS(fullText, { onEnd: () => setPlaying(false), onStart: () => setPlaying(true), voiceId: voiceId || undefined });
-    if (!ok) setPlaying(true);
+    setTtsLoading(true);
+    const ok = await speakWithTTS(fullText, {
+      voiceId: voiceId || undefined,
+      onLoading: () => setTtsLoading(true),
+      onEnd: () => { setTtsLoading(false); setPlaying(false); },
+      onStart: () => { setTtsLoading(false); setPlaying(true); },
+    });
+    if (!ok) { setTtsLoading(false); setPlaying(true); }
   };
 
   const previewVoice = async () => {
@@ -128,6 +141,7 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
   if (!open) return null;
 
   const personaLabel = reviewPersona?.name || personas.find(p => p.id === personaId)?.name || '';
+  const voiceLabel = reviewPersona?.voice_name || selectedVoice?.display_name || (voiceId ? '自定义音色' : '');
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/50 p-4 backdrop-blur-md animate-fade-up" onClick={() => phase !== 'loading' && onClose()}>
@@ -142,8 +156,8 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
             <div className="flex items-center gap-2.5">
               <span className="text-2xl">{styles.find(s => s.id === styleId)?.icon || '📜'}</span>
               <div>
-                <h3 className="font-serif text-lg font-semibold">文评 · 《{projectTitle}》</h3>
-                <p className="text-xs text-ink/45">为你的作品，留下一段认真的话</p>
+                <h3 className="font-serif text-lg font-semibold">文评 · 《{projectTitle}》{personaLabel ? ' · ' + personaLabel : ''}</h3>
+                <p className="text-xs text-ink/45">{personaLabel ? personaLabel + ' 正在读你的作品' : '为你的作品，留下一段认真的话'}</p>
               </div>
             </div>
             <button onClick={onClose} className="rounded-full p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink" disabled={phase === 'loading'}>✕</button>
@@ -191,9 +205,13 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
               <div>
                 <p className="mb-1.5 text-xs font-medium text-ink/60">🔊 朗读音色（可选，文评朗读用）</p>
                 <div className="flex items-center gap-2">
-                  <select value={voiceId} onChange={e => setVoiceId(e.target.value)}
+                  <select value={voiceId} onChange={e => { manualVoiceRef.current = true; setVoiceId(e.target.value); }}
                     className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-paper/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent/50">
                     <option value="">默认音色</option>
+                    {/* 人设绑定音色（即使不在我的列表里也显示） */}
+                    {reviewPersona?.voice_id && !voices.some(v => v.voice_id === reviewPersona.voice_id) && (
+                      <option value={reviewPersona.voice_id}>{reviewPersona.voice_name || reviewPersona.name + ' 的音色'}（人设绑定）</option>
+                    )}
                     {voices.map(v => <option key={v.id} value={v.voice_id}>{v.display_name}{v.is_preset ? '（官方）' : ''}</option>)}
                   </select>
                   {voiceId && (
@@ -217,8 +235,8 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
                 <div className="absolute inset-0 animate-ping rounded-full bg-accent/20" />
                 <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-accent text-2xl text-paper">📜</div>
               </div>
-              <p className="mt-4 text-sm text-ink/55">正在细读你的作品…</p>
-              <p className="mt-1 text-xs text-ink/35">这一篇，值得慢慢写。</p>
+              <p className="mt-4 text-sm text-ink/55">{personaLabel ? personaLabel + ' 正在细读你的作品…' : '正在细读你的作品…'}</p>
+              <p className="mt-1 text-xs text-ink/35">这一篇，值得慢慢写{voiceLabel ? ' · 🔊 ' + voiceLabel : ''}。</p>
             </div>
           )}
 
@@ -240,6 +258,7 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
                     {review.score >= 75 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">值得期待</span>}
                     {review.score < 75 && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] text-rose-600">尚需打磨</span>}
                     <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/45">{styles.find(s => s.id === styleId)?.name}{personaLabel ? ' · ' + personaLabel : ''}</span>
+                    {voiceLabel && <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/45">🔊 {voiceLabel}</span>}
                   </div>
                 </div>
               </div>
@@ -252,9 +271,9 @@ export default function ReviewModal({ projectId, projectTitle, open, onClose, de
 
               {/* 操作 */}
               <div className="mt-5 flex items-center gap-2">
-                <button onClick={togglePlay}
-                  className={'flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium transition ' + (playing ? 'bg-ink text-paper' : 'bg-accentlight/70 text-ink hover:bg-accentlight')}>
-                  {playing ? '⏹ 停止朗读' : '🔊 朗读文评'}
+                <button onClick={togglePlay} disabled={ttsLoading}
+                  className={'flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium transition disabled:opacity-50 ' + (playing ? 'bg-ink text-paper' : 'bg-accentlight/70 text-ink hover:bg-accentlight')}>
+                  {ttsLoading ? '⏳ 正在生成语音…' : playing ? '⏹ 停止朗读' : '🔊 朗读文评'}
                 </button>
                 <button onClick={run} className="rounded-full bg-ink/5 px-4 py-2 text-xs text-ink/60 transition hover:bg-ink/10">
                   ↻ 换一种风格

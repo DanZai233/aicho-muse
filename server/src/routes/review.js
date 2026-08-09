@@ -92,7 +92,11 @@ router.post('/projects/:id/review', async (req, res) => {
   if (req.body?.persona_id) {
     persona = d.personas.find(x => x.id === req.body.persona_id && (x.is_preset || x.is_public || x.user_id === req.user.id)) || null;
   }
-  const personaInfo = persona ? { id: persona.id, name: persona.name, tagline: persona.tagline || '', avatar: persona.avatar || '', avatar_color: persona.avatar_color || '#8b7d6b', voice_profile_id: persona.voice_profile_id || null } : null;
+  let personaInfo = persona ? { id: persona.id, name: persona.name, tagline: persona.tagline || '', avatar: persona.avatar || '', avatar_color: persona.avatar_color || '#8b7d6b', voice_profile_id: persona.voice_profile_id || null } : null;
+  if (personaInfo?.voice_profile_id) {
+    const vp = d.voices.find(v => v.id === personaInfo.voice_profile_id);
+    if (vp?.voice_id) personaInfo = { ...personaInfo, voice_id: vp.voice_id, voice_name: vp.display_name || '' };
+  }
 
   // 无 LLM 配置时直接兜底
   const s = d.settings.ai;
@@ -102,33 +106,76 @@ router.post('/projects/:id/review', async (req, res) => {
   }
 
   const { system, user } = buildReviewPrompt({ project: found.p, chapters, style, persona });
+
+  // 容错解析文评 JSON：即使 LLM 输出被截断/包裹多余文字，也尽量提取已生成的内容
+  function parseReview(raw) {
+    const text = String(raw || '');
+    const block = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const rawJson = block ? block[1] : text;
+    const m = rawJson.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const candidate = m[0];
+    let obj = null;
+    try { obj = JSON.parse(candidate); }
+    catch {
+      // 被截断的 JSON：尝试补齐缺失的数组结尾/引号，尽量保留已生成内容
+      try {
+        let fixed = candidate
+          .replace(/,\s*([}\]])\s*$/, '$1')
+          .replace(/"quote"\s*:\s*"[^"]*$/s, '"quote": ""')
+          .replace(/"paragraphs"\s*:\s*\[[\s\S]*?$/s, '"paragraphs": []');
+        const closer = fixed.lastIndexOf('}');
+        if (closer >= 0) fixed = fixed.slice(0, closer) + '}';
+        obj = JSON.parse(fixed);
+      } catch { /* 仍失败则走兜底 */ }
+    }
+    if (!obj || !(obj.summary || obj.paragraphs || obj.score != null)) return null;
+    // 保留所有已生成的段落（截断时少丢内容）
+    const paras = (Array.isArray(obj.paragraphs) ? obj.paragraphs : []).map(x => String(x).trim()).filter(Boolean).slice(0, 8);
+    return {
+      score: Math.max(0, Math.min(100, Number(obj.score) || 70)),
+      summary: String(obj.summary || '').slice(0, 40),
+      paragraphs: paras.length ? paras : [String(obj.paragraphs || obj.summary || text).trim()],
+      quote: String(obj.quote || '').slice(0, 80),
+      truncated: !!(!candidate.trimEnd().endsWith('}') || /"quote"\s*:\s*"[^"]*$/s.test(candidate)),
+    };
+  }
+
   try {
-    const raw = await callLLM([
+    let raw = await callLLM([
       { role: 'system', content: system },
       { role: 'user', content: user },
-    ], { temperature: 0.75, max_tokens: 1200 });
-    // 解析 JSON（容忍代码块）
-    const block = String(raw || '').match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const rawJson = block ? block[1] : String(raw || '');
-    const m = rawJson.match(/\{[\s\S]*\}/);
-    let review = null;
-    if (m) {
-      try {
-        const p = JSON.parse(m[0]);
-        if (p && (p.summary || p.paragraphs || p.score != null)) {
-          review = {
-            score: Math.max(0, Math.min(100, Number(p.score) || 70)),
-            summary: String(p.summary || '').slice(0, 40),
-            paragraphs: (Array.isArray(p.paragraphs) ? p.paragraphs : []).map(x => String(x).trim()).filter(Boolean).slice(0, 6),
-            quote: String(p.quote || '').slice(0, 80),
-          };
-          if (!review.paragraphs.length) review.paragraphs = [String(p.paragraphs || p.summary || raw).trim()];
+    ], { temperature: 0.75, max_tokens: 2000, noFallback: true });
+    let review = parseReview(raw);
+
+    // 截断补全：最多再请求 2 次，让模型续写剩余段落
+    let rounds = 0;
+    while (review && review.truncated && rounds < 2) {
+      rounds++;
+      const lastPara = review.paragraphs[review.paragraphs.length - 1] || '';
+      const cont = await callLLM([
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+        { role: 'assistant', content: '已生成到：' + (review.summary ? review.summary + '。' : '') + '正文最后一段：「' + lastPara.slice(-80) + '」' },
+        { role: 'user', content: '继续把文评写完，直接从刚才中断的地方接着写剩余段落，不要重复已写内容，输出严格 JSON（可包含全部字段）。' },
+      ], { temperature: 0.75, max_tokens: 2000, noFallback: true }).catch(() => '');
+      const more = parseReview(cont);
+      if (more) {
+        review.score = more.score || review.score;
+        review.summary = more.summary || review.summary;
+        // 追加新段落（去重）
+        for (const para of more.paragraphs) {
+          if (para && !review.paragraphs.includes(para)) review.paragraphs.push(para);
         }
-      } catch { /* 解析失败则走兜底 */ }
+        if (more.quote) review.quote = more.quote;
+        review.truncated = more.truncated;
+        if (!more.truncated) break;
+      } else break;
     }
-    if (!review) review = fallbackReview({ project: found.p, chapters, style });
-    return res.json({ code: 0, data: { style, review } });
+    if (!review) review = fallbackReview({ project: found.p, chapters, style, persona });
+    return res.json({ code: 0, data: { style, persona: personaInfo, review } });
   } catch (e) {
+    console.error('[Review] 生成失败:', e.message);
     return res.json({ code: 0, data: { style, persona: personaInfo, review: fallbackReview({ project: found.p, chapters, style, persona }) } });
   }
 });
