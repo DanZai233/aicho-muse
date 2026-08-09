@@ -75,25 +75,10 @@ router.post('/tts/synthesize', authRequired, async (req, res) => {
     }
     let buf;
     if (cfg.provider === 'fish-audio') {
-      // 未配置音色时，自动从音频广场取第一个公开音色作为默认（并缓存）
+      // 音色来源：前端显式传 voice_id（会话音色→人设音色→站点默认）→ 后台配置的 TTS 音色。
+      // 不再自动抓取广场随机音色，避免朗读声与人设不一致。
       let refId = String(voice_id || '') || cfg.voice || '';
-      if (!refId) {
-        try {
-          const lib = await fetch(cfg.base_url + '/model?self_only=false&page_size=1&page=1', { headers: { Authorization: 'Bearer ' + cfg.api_key }, signal: AbortSignal.timeout(15000) });
-          if (lib.ok) {
-            const ld = await lib.json();
-            const first = (ld.items || []).find(i => i.state === 'trained');
-            if (first) {
-              refId = first._id;
-              const s2 = db().settings;
-              s2.tts = { ...(s2.tts || {}), voice_uri: refId };
-              // 不阻塞：异步持久化
-              import('../db.js').then(m => m.saveDb()).catch(() => {});
-            }
-          }
-        } catch { /* 广场获取失败则仍用空 */ }
-      }
-      if (!refId) return res.status(502).json({ code: 50201, message: 'Fish TTS 需要音色：请先在「助手声色 → 音频广场」收藏一个音色，或在后台配置 TTS 音色 ID' });
+      if (!refId) return res.status(502).json({ code: 50201, message: 'Fish TTS 需要音色：请选择一个人设绑定音色，或在后台配置 TTS 音色 ID' });
       // Fish Audio：model 放 header，reference_id 为音色（音频广场收藏的 voice_id 或预设音色）
       const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.api_key, model: cfg.model };
       const body = {

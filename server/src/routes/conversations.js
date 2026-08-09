@@ -27,12 +27,17 @@ function withJoins(c) {
   const persona = c.persona_id ? d.personas.find(p => p.id === c.persona_id) : null;
   const voice = c.voice_profile_id ? d.voices.find(v => v.id === c.voice_profile_id) : null;
   const project = c.project_id ? d.projects.find(p => p.id === c.project_id) : null;
+  // 朗读音色优先级：会话显式选择的音色 → 人设绑定的音色 → 站点默认音色
+  let effectiveVoice = voice;
+  if (!effectiveVoice && persona?.voice_profile_id) effectiveVoice = d.voices.find(v => v.id === persona.voice_profile_id) || null;
+  if (!effectiveVoice && d.settings?.site?.default_voice_id) effectiveVoice = d.voices.find(v => v.id === d.settings.site.default_voice_id) || null;
   const last = d.messages.filter(m => m.conversation_id === c.id).sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(-1)[0];
   return {
     ...c,
     linked_project_ids: c.linked_project_ids || [],
     persona: persona ? { id: persona.id, name: persona.name, tagline: persona.tagline, avatar: persona.avatar || null, avatar_color: persona.avatar_color } : null,
     voice: voice ? { id: voice.id, display_name: voice.display_name, provider: voice.provider, voice_id: voice.voice_id || null, params: voice.params } : null,
+    effective_voice: effectiveVoice ? { id: effectiveVoice.id, display_name: effectiveVoice.display_name, provider: effectiveVoice.provider, voice_id: effectiveVoice.voice_id || null, params: effectiveVoice.params } : null,
     project: project ? { id: project.id, title: project.title, genre: project.genre } : null,
     last_message: last ? last.content.slice(0, 60) : null,
     updated_at: last ? last.created_at : c.created_at,
@@ -77,7 +82,12 @@ router.patch('/:id', (req, res) => {
   if (!found) return res.status(404).json({ code: 40401, message: '会话不存在' });
   const c = found.c;
   if (req.body.title) c.title = req.body.title;
-  if (req.body.persona_id) { c.persona_id = req.body.persona_id; const np = d.personas.find(p => p.id === req.body.persona_id && (p.is_preset || p.user_id === req.user.id)); c.persona_snapshot = np ? JSON.parse(JSON.stringify(np)) : null; }
+  if (req.body.persona_id !== undefined) {
+    const np = req.body.persona_id ? d.personas.find(p => p.id === req.body.persona_id && (p.is_preset || p.user_id === req.user.id)) : null;
+    if (req.body.persona_id && !np) return res.status(404).json({ code: 40401, message: '人设不存在' });
+    c.persona_id = np ? np.id : null;
+    c.persona_snapshot = np ? JSON.parse(JSON.stringify(np)) : null;
+  }
   if (req.body.voice_profile_id !== undefined) c.voice_profile_id = req.body.voice_profile_id;
   // 记忆跨书接入：本会话临时允许引用其他作品（自己的书）的记忆
   if (Array.isArray(req.body.linked_project_ids)) {

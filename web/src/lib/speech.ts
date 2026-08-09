@@ -83,12 +83,18 @@ export function interruptSpeech() { stopSpeakTTS(); }
 // 未配置 Key / 失败时自动回退浏览器原生 speechSynthesis。
 let ttsAudio: HTMLAudioElement | null = null;
 
+let ttsBusy = false;
+
 export async function speakWithTTS(
   text: string,
-  opts: { rate?: number; pitch?: number; onEnd?: () => void; onStart?: () => void; voiceId?: string } = {},
+  opts: { rate?: number; pitch?: number; onEnd?: () => void; onStart?: () => void; onLoading?: () => void; voiceId?: string } = {},
 ): Promise<boolean> {
   // 同一时间只允许一段音频：先打断正在播放的 TTS / 浏览器语音
   stopSpeakTTS();
+  if (ttsBusy) return false;
+  ttsBusy = true;
+  opts.onLoading?.();
+  const finish = () => { ttsBusy = false; };
   try {
     const token = localStorage.getItem('am_token');
     const resp = await fetch('/api/v1/tts/synthesize', {
@@ -100,14 +106,15 @@ export async function speakWithTTS(
     if (json?.code === 0 && json.data?.audio_url) {
       const el = new Audio(json.data.audio_url);
       ttsAudio = el;
-      el.onplay = () => opts.onStart?.();
-      const done = () => { if (ttsAudio === el) { ttsAudio = null; opts.onEnd?.(); } };
+      el.onplay = () => { finish(); opts.onStart?.(); };
+      const done = () => { if (ttsAudio === el) { ttsAudio = null; finish(); opts.onEnd?.(); } };
       el.onended = done;
       el.onerror = done;
       el.play().catch(done);
       return true;
     }
-  } catch { /* 回退浏览器 */ }
+    finish();
+  } catch { finish(); /* 回退浏览器 */ }
   return speak(text, { rate: opts.rate, pitch: opts.pitch, onEnd: opts.onEnd, onStart: opts.onStart });
 }
 

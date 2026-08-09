@@ -94,6 +94,7 @@ export type Conversation = {
   linked_project_ids?: string[];
   persona?: { id: string; name: string; tagline: string; avatar?: string; avatar_color: string } | null;
   voice?: { id: string; display_name: string; provider?: string; voice_id?: string | null; params?: { rate: number; pitch: number; emotion: string; energy: number } } | null;
+  effective_voice?: { id: string; display_name: string; provider?: string; voice_id?: string | null; params?: { rate: number; pitch: number; emotion: string; energy: number } } | null;
   project?: { id: string; title: string; genre: string } | null;
   last_message?: string | null; updated_at?: string;
 };

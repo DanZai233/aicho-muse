@@ -346,7 +346,28 @@ export default function Workspace() {
     setConv(c); await loadMessages(c.id); setDiffMsg(null); setChatOpen(true);
   };
 
+  const openConvPicker = () => {
+    if (conv) {
+      setNewPersona(conv.persona_id || '');
+      setNewVoice(conv.voice_profile_id || conv.effective_voice?.id || '');
+    } else {
+      setNewPersona(''); setNewVoice('');
+    }
+    setShowNewConv(true);
+  };
+
   const createConv = async () => {
+    if (conv) {
+      // 当前已有会话：应用新选择（人设/音色）到本会话，保留消息
+      const d = await api.patch<{ conversation: Conversation }>('/conversations/' + conv.id, {
+        persona_id: newPersona || undefined,
+        voice_profile_id: newVoice || null,
+      });
+      setConv(d.conversation);
+      setShowNewConv(false);
+      await loadConvs();
+      return;
+    }
     const d = await api.post<{ conversation: Conversation }>('/conversations', {
       project_id: project?.id || null, persona_id: newPersona, voice_profile_id: newVoice,
     });
@@ -408,12 +429,13 @@ export default function Workspace() {
   // 播放一条助手回复：TTS 生成期间置 loading（禁用播放按钮），生成完成自动播放
   const speakMessage = (m: { id: string; content: string }) => {
     if (ttsLoadingId) return;
-    const voiceId = conv?.voice?.voice_id || undefined;
+    const voiceId = conv?.effective_voice?.voice_id || conv?.voice?.voice_id || undefined;
     setTtsLoadingId(m.id);
     speakWithTTS(m.content, {
       rate: prefs?.tts_rate ?? 1,
       pitch: prefs?.tts_pitch ?? 1,
       voiceId,
+      onLoading: () => setTtsLoadingId(m.id),
       onStart: () => { setTtsLoadingId(null); setSpeaking(true); setSpeakingId(m.id); },
       onEnd: () => { setSpeaking(false); setSpeakingId(null); },
     }).finally(() => setTtsLoadingId(cur => cur === m.id ? null : cur));
@@ -421,12 +443,13 @@ export default function Workspace() {
 
   // 自动播放（audio_ready / read_aloud），避免重复生成
   const autoSpeak = (text: string, msgId: string, opts?: { rate?: number; pitch?: number }) => {
-    const voiceId = conv?.voice?.voice_id || undefined;
+    const voiceId = conv?.effective_voice?.voice_id || conv?.voice?.voice_id || undefined;
     setTtsLoadingId(msgId);
     speakWithTTS(text, {
       rate: opts?.rate ?? prefs?.tts_rate ?? 1,
       pitch: opts?.pitch ?? prefs?.tts_pitch ?? 1,
       voiceId,
+      onLoading: () => setTtsLoadingId(msgId),
       onStart: () => { setTtsLoadingId(null); setSpeaking(true); setSpeakingId(msgId); },
       onEnd: () => { setSpeaking(false); setSpeakingId(null); },
     }).finally(() => setTtsLoadingId(cur => cur === msgId ? null : cur));
@@ -1228,8 +1251,9 @@ export default function Workspace() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium">{conv?.persona?.name || '黎文'}</span>
                     <button onClick={() => setShowPersonaCard(true)} title="查看当前人设配置" className="text-[10px] text-accent hover:underline">人设卡</button>
+                    <button onClick={openConvPicker} title="更换人设/朗读音色" className="text-[10px] text-ink/40 hover:text-accent hover:underline">换</button>
                   </div>
-                  <div className="text-xs text-ink/40">{conv?.persona?.tagline || '安静的倾听者'}{conv?.voice ? ' · ' + conv.voice.display_name : ''}</div>
+                  <div className="text-xs text-ink/40">{conv?.persona?.tagline || '安静的倾听者'}{conv?.effective_voice ? ' · 🔊 ' + conv.effective_voice.display_name : ''}</div>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -1367,13 +1391,19 @@ export default function Workspace() {
         )}
       </div>
 
-      <Modal open={showNewConv} onClose={() => setShowNewConv(false)} title="新的创作会话">
+      <Modal open={showNewConv} onClose={() => setShowNewConv(false)} title={conv ? '人设与朗读音色' : '新的创作会话'}>
         <div className="space-y-4">
+          <p className="text-xs leading-5 text-ink/50">{conv ? '更换后立即生效，消息记录保留。朗读将跟随所选人设的音色。' : '选好你想要的创作伙伴，TA 的声音也会跟着走。'}</p>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-ink/60">选择人设</span>
             <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
               {(project?.team_persona_ids?.length ? [...personas.filter(p => (project.team_persona_ids || []).includes(p.id)), ...personas.filter(p => !(project.team_persona_ids || []).includes(p.id))] : personas).map(p => (
-                <button key={p.id} onClick={() => setNewPersona(p.id)}
+                <button key={p.id} onClick={() => {
+                  setNewPersona(p.id);
+                  // 选人设自动带上 TA 绑定的音色（会话朗读跟着人设走）
+                  const bind = p.voice_profile_id ? voices.find(v => v.id === p.voice_profile_id) : null;
+                  if (bind) setNewVoice(bind.id);
+                }}
                   className={"flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition " + (newPersona === p.id ? 'bg-accentlight/70' : 'hover:bg-ink/5')}>
                   <Avatar name={p.name} color={p.avatar_color} size="sm" />
                   <div><div className="flex items-center gap-1.5">{p.name}{project?.team_persona_ids?.includes(p.id) && <span className="text-[9px] text-accent">团队</span>}</div><div className="text-xs text-ink/40">{p.tagline}</div></div>
@@ -1390,7 +1420,7 @@ export default function Workspace() {
               ))}
             </div>
           </label>
-          <Button onClick={createConv} className="w-full">开始对话</Button>
+          <Button onClick={createConv} className="w-full">{conv ? '保存并应用' : '开始对话'}</Button>
         </div>
       </Modal>
 
