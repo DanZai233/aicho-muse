@@ -690,10 +690,20 @@ export default function Workspace() {
   };
   const applyTool = async () => {
     if (!chapter || !toolResult) return;
-    await api.post('/tools/apply', { chapter_id: chapter.id, text: toolResult });
+    // diff 里如果有删除/替换原段，先让用户确认（防止误删之前写的内容）
+    const deletes = toolDiff.filter(d => d.type === 'delete' || d.type === 'replace');
+    let mode = 'append';
+    if (deletes.length > 0) {
+      const preview = deletes.slice(0, 3).map(d => '· ' + (d.old || '').slice(0, 30) + (d.old && d.old.length > 30 ? '…' : '')).join('\n');
+      const ok = confirm('这次改动会删除/替换以下原文段落（共 ' + deletes.length + ' 处）：\n\n' + preview + '\n\n是否确认替换？选「取消」则只保留新增内容、原文不动。');
+      mode = ok ? 'replace' : 'append';
+    }
+    const d = await api.post<{ chapter: Chapter; applied: string }>('/tools/apply', { chapter_id: chapter.id, text: toolResult, mode });
     await loadProject(project!.id);
-    const fresh = (await api.get<{ chapter: Chapter }>('/chapters/' + chapter.id)).chapter;
-    setChapter(fresh); setToolResult(''); setToolDiff([]);
+    setChapter(d.chapter);
+    setToolResult(''); setToolDiff([]);
+    setNotice(mode === 'replace' ? '已按新文本替换章节' : '已应用（原文保留，新增内容已加入）');
+    setTimeout(() => setNotice(null), 3000);
   };
   const runCheck = async () => {
     if (!chapter) return;

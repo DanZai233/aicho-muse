@@ -398,17 +398,26 @@ export async function runWritingTool(mode, text, instruction, language) {
       };
       const userContent = `请对以下文本进行${modeMap[mode] || mode}${instruction ? `，要求：${instruction}` : ''}。\n\n原文：\n${text}`;
             const sysByMode = {
-        polish: '你是专业的中文文学编辑。对原文润色：保持原意与语气，保留作者核心意象与个人风格，修正病句与冗余。输出：\n1) 改写稿；\n2) 以“——编辑注：”开头给出 2–3 条改动说明（指出改了什么、为什么）。',
-        expand: '你是专业的中文文学编辑。扩写原文：丰富细节与画面，保持原有语气与核心信息，不改变情节走向。输出：\n1) 扩写稿；\n2) 以“——编辑注：”开头给一句说明（你补充了什么）。',
-        condense: '你是专业的中文文学编辑。缩写原文：保留核心情节与信息，删去冗余修饰。输出：\n1) 缩写稿；\n2) 以“——编辑注：”开头给一句说明（删减了什么）。',
-        continue: '你是专业的中文文学编辑。延续上文的情节与语气续写 300–500 字：不引入与已定设定冲突的新角色，结尾留一个自然的悬念或推进。输出：\n1) 续写稿；\n2) 以“——编辑注：”开头给一句接续理由。',
-        restyle: '你是专业的中文文学编辑。将原文改为指定风格（如冷峻、诗意、克制）：只变表达，不变情节与信息。输出：\n1) 改写稿；\n2) 以“——编辑注：”开头给出 2–3 处原句→改写句对照说明。',
+        polish: '你是专业的中文文学编辑。对原文润色：保持原意与语气，保留作者核心意象与个人风格，修正病句与冗余。**必须输出润色后的完整全文（含原文所有段落，不得删减任何内容），不要只输出修改的片段。**输出：\n1) 改写稿（完整全文）；\n2) 以“——编辑注：”开头给出 2–3 条改动说明（指出改了什么、为什么）。',
+        expand: '你是专业的中文文学编辑。扩写原文：丰富细节与画面，保持原有语气与核心信息，不改变情节走向。**必须保留原文全部内容并在其基础上扩写，输出扩写后的完整全文（原文一句都不能丢），不要只输出新增片段。**输出：\n1) 扩写稿（完整全文）；\n2) 以“——编辑注：”开头给一句说明（你补充了什么）。',
+        condense: '你是专业的中文文学编辑。缩写原文：保留核心情节与信息，删去冗余修饰。**输出缩写后的完整全文（可删减修饰，但保留所有关键情节与段落主线）。**输出：\n1) 缩写稿（完整全文）；\n2) 以“——编辑注：”开头给一句说明（删减了什么）。',
+        continue: '你是专业的中文文学编辑。延续上文的情节与语气续写 300–500 字：不引入与已定设定冲突的新角色，结尾留一个自然的悬念或推进。**必须先在开头完整保留原文，再接续新内容，输出“原文+续写”的完整全文，不要只输出续写片段。**输出：\n1) 续写稿（完整全文）；\n2) 以“——编辑注：”开头给一句接续理由。',
+        restyle: '你是专业的中文文学编辑。将原文改为指定风格（如冷峻、诗意、克制）：只变表达，不变情节与信息。**必须输出改风格后的完整全文（含原文所有内容），不要只输出改写片段。**输出：\n1) 改写稿（完整全文）；\n2) 以“——编辑注：”开头给出 2–3 处原句→改写句对照说明。',
       };
       let sys = sysByMode[mode] || sysByMode.polish;
       const lang = languageNote(language);
       if (lang) sys = lang + '\n' + sys;
-      const result = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: userContent }], { max_tokens: 1200, temperature: 0.7 });
-      if (result) return { result: cleanWritingOutput(result), source: 'llm' };
+      const result = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: userContent }], { max_tokens: 1600, temperature: 0.7 });
+      if (result) {
+        let out = cleanWritingOutput(result);
+        const orig = String(text || '').trim();
+        const origKey = orig.split(/\n+/).map(x => x.trim()).filter(Boolean).slice(0, 2).join('|').slice(0, 40);
+        // 若模型没保留原文（扩写/续写/润色/风格迁移都要求完整全文），自动把原文拼回开头，绝不丢内容
+        if (orig && !out.includes(origKey) && ['expand', 'continue', 'polish', 'restyle'].includes(mode)) {
+          out = orig + '\n\n' + out;
+        }
+        return { result: out, source: 'llm' };
+      }
     } catch (e) {
       console.error('[AI] 写作工具降级:', e.message);
     }

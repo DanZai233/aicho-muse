@@ -115,18 +115,44 @@ router.post('/check', (req, res) => {
 });
 
 router.post('/apply', (req, res) => {
-  const { chapter_id, text } = req.body || {};
+  const { chapter_id, text, mode } = req.body || {};
   const ch = ownChapter(req, chapter_id);
   if (!ch) return res.status(404).json({ code: 40401, message: '章节不存在' });
   const d = db();
+  const orig = ch.content || '';
+  const incoming = String(text || '').trim();
+  if (!incoming) return res.status(400).json({ code: 40001, message: '没有可应用的文本' });
+
+  // 判断工具结果是否已包含原文：取原文前两段做归一化包含检测
+  const norm = (x) => x.replace(/[\s，。！？、；：,.!?;:""''「」『』（）()—…·]/g, '');
+  const origPs = orig.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const origKey = norm(origPs.slice(0, Math.min(2, origPs.length)).join(''));
+  const containsOrig = origKey && norm(incoming).includes(origKey);
+
+  let finalText;
+  let applied = 'append';
+  if (mode === 'replace') {
+    // 用户明确确认整章替换（前端有删除确认）
+    finalText = incoming;
+    applied = 'replace';
+  } else if (containsOrig) {
+    // 结果已含原文（润色/扩写/续写完整全文）→ 直接使用
+    finalText = incoming;
+    applied = 'full';
+  } else {
+    // 结果只是新增片段（模型只输出了新增部分）→ 原文 + 新增，绝不丢原文
+    finalText = (orig ? orig + '\n\n' : '') + incoming;
+    applied = 'append';
+  }
+
   pushChapterSnapshot(d, ch.id, ch.content, '写作工具应用前');
-  ch.content = text;
-  ch.word_count = text.length;
+  ch.content = finalText;
+  ch.word_count = finalText.length;
   ch.updated_at = new Date().toISOString();
   const proj = d.projects.find(p => p.id === ch.project_id);
   if (proj) proj.updated_at = ch.updated_at;
   saveDb();
-  res.json({ code: 0, data: { chapter: ch } });
+  res.json({ code: 0, data: { chapter: ch, applied } });
 });
 
 export default router;
