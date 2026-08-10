@@ -108,8 +108,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {user && <OnboardingTour />}
       {user && (
         <>
+          {/* 移动端悬浮反馈按钮放左下角，避免挡住聊天发送按钮；桌面端用顶栏「反馈」入口 */}
           <button onClick={() => setFbOpen(true)} title="反馈建议"
-            className="fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-xl text-paper shadow-lift transition hover:scale-105 hover:bg-accent/90">
+            className="fixed bottom-5 left-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-xl text-paper shadow-lift transition hover:scale-105 hover:bg-accent/90 md:hidden">
             💌
           </button>
           <FeedbackModal open={fbOpen} onClose={() => setFbOpen(false)} />
