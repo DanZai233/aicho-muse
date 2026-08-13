@@ -106,20 +106,51 @@ router.post('/reply', async (req, res) => {
   const ip = clientIp(req);
   const rl = rateLimit('letter_reply_' + ip, 5, 30 * 60 * 1000);
   if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '回信太频繁了，请稍后再寄（每 30 分钟最多 5 封）' });
-  const { persona_id, pen_name, letter_content } = req.body || {};
+  const { persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content } = req.body || {};
   const letter = String(letter_content || '').trim();
-  if (!persona_id) return res.status(400).json({ code: 40001, message: '请选择写信对象' });
+  if (!persona_id && !persona_name) return res.status(400).json({ code: 40001, message: '请选择写信对象' });
   if (!letter) return res.status(400).json({ code: 40001, message: '信的内容不能为空' });
   if (letter.length > 3000) return res.status(400).json({ code: 40001, message: '信太长了（最多 3000 字）' });
   const d = db();
-  const persona = d.personas.find(p => p.id === persona_id && (p.is_preset || p.is_public));
-  if (!persona) return res.status(404).json({ code: 40401, message: '写信对象不存在' });
-  const vp = persona.voice_profile_id ? d.voices.find(v => v.id === persona.voice_profile_id) : null;
-  const personaInfo = {
-    id: persona.id, name: persona.name, tagline: persona.tagline || '',
-    avatar_color: persona.avatar_color || '#8b7d6b',
-    voice_id: vp?.voice_id || null, voice_name: vp?.display_name || '',
-  };
+  let persona, vp, personaInfo;
+  if (persona_id) {
+    persona = d.personas.find(p => p.id === persona_id && (p.is_preset || p.is_public));
+    if (!persona) return res.status(404).json({ code: 40401, message: '写信对象不存在' });
+    vp = persona.voice_profile_id ? d.voices.find(v => v.id === persona.voice_profile_id) : null;
+    personaInfo = {
+      id: persona.id, name: persona.name, tagline: persona.tagline || '',
+      avatar_color: persona.avatar_color || '#8b7d6b',
+      voice_id: vp?.voice_id || null, voice_name: vp?.display_name || '',
+    };
+  } else {
+    // 自定义写信对象：名字 + 音色 + 性格（音色广场选择）
+    const customName = String(persona_name || '').trim().slice(0, 20);
+    if (!customName) return res.status(400).json({ code: 40001, message: '请填写对象名字' });
+    persona = {
+      id: 'custom:' + customName,
+      name: customName,
+      tagline: String(persona_tagline || '').trim().slice(0, 60) || '一位特别的朋友',
+      background: '',
+      personality: Array.isArray(persona_personality) && persona_personality.length
+        ? persona_personality.map(String).slice(0, 6)
+        : ['温柔', '真诚', '有想象力'],
+      speaking_style: { tone: '温柔而有温度', preferences: ['像朋友一样回应', '善于倾听', '给出真诚的建议'], avoid: ['冷漠', '说教'] },
+      values: ['真诚比华丽重要', '创作是自我发现的过程'],
+      relationship: '特别的朋友',
+      expertise: ['创作灵感', '情感陪伴', '故事讲述'],
+      greeting: '嗨，我收到你的信啦。',
+      is_preset: false,
+      is_public: false,
+    };
+    personaInfo = {
+      id: 'custom:' + customName,
+      name: customName,
+      tagline: persona.tagline,
+      avatar_color: '#8b7d6b',
+      voice_id: String(voice_id || '').trim() || null,
+      voice_name: String(voice_name || '').trim() || '',
+    };
+  }
   const displayName = String(pen_name || '').trim() || '远方的朋友';
 
   const s = d.settings.ai;
@@ -176,7 +207,7 @@ router.post('/tts', async (req, res) => {
   const ip = clientIp(req);
   const rl = rateLimit('letter_tts_' + ip, 30, 60 * 60 * 1000);
   if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '语音生成太频繁，请稍后再试' });
-  const { text, voice_id } = req.body || {};
+  const { text, voice_id, force } = req.body || {};
   const t = String(text || '').trim();
   if (!t) return res.status(400).json({ code: 40001, message: 'text 必填' });
   if (t.length > 400) return res.status(400).json({ code: 40001, message: '单段文本过长（最多 400 字）' });
@@ -188,7 +219,7 @@ router.post('/tts', async (req, res) => {
     const cacheKey = ttsCacheKey(t, refId, cfg.rate || 1, cfg.provider, cfg.model);
     const cacheFile = cacheKey + '.mp3';
     const audioPath = path.join(AUDIO_DIR, cacheFile);
-    if (!fs.existsSync(audioPath)) {
+    if (!fs.existsSync(audioPath) || !!force) {
       const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.api_key, model: cfg.model };
       const body = {
         text: t.slice(0, 400),
