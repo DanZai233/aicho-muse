@@ -38,7 +38,7 @@ cp .env.example .env
 # 2. 一键构建并启动（MySQL 8 + 应用，多阶段镜像构建前端）
 docker compose up --build -d
 
-# 3. 打开 http://localhost:3001（管理后台 /admin，admin/admin123）
+# 3. 打开 http://localhost:3001（管理后台 /admin，线上当前 admin / Muse#Admin2026）
 ```
 
 `.env` 关键配置：
@@ -58,7 +58,7 @@ docker compose up --build -d
 ### 默认账号
 
 - 用户端：注册任意邮箱即可
-- 管理后台：`/admin`，默认 `admin / admin123`（部署后请尽快修改）
+- 管理后台：`/admin`，当前线上 `admin / Muse#Admin2026`（部署后请尽快修改）
 
 ### 语音说明
 
