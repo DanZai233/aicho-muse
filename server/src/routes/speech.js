@@ -8,13 +8,13 @@ import { db, uuid } from '../db.js';
 import { checkQuota, consumeQuota } from '../quota.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, '..', '..', 'data', 'audio');
+export const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, '..', '..', 'data', 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 const router = Router();
 
 // TTS 音频缓存：同文本 + 同音色 + 同参数复用已合成文件，避免每次播放都调 API
-function ttsCacheKey(text, voiceId, rate, provider, model) {
+export function ttsCacheKey(text, voiceId, rate, provider, model) {
   return crypto.createHash('sha256').update([String(text || ''), String(voiceId || ''), String(rate || 1), String(provider || ''), String(model || '')].join('|')).digest('hex').slice(0, 32);
 }
 
@@ -31,7 +31,7 @@ router.get('/audio/:file', (req, res) => {
   res.set('Content-Type', 'audio/mpeg').set('Cache-Control', 'private, max-age=900').sendFile(p);
 });
 
-function ttsConfig() {
+export function ttsConfig() {
   const s = db().settings.tts || {};
   const provider = String(process.env.TTS_PROVIDER || s.provider || '').toLowerCase();
   return {
@@ -52,7 +52,7 @@ function sttConfig() {
   };
 }
 
-function signUrl(file) {
+export function signUrl(file) {
   const exp = Date.now() + 15 * 60 * 1000;
   const sig = crypto.createHmac('sha256', process.env.JWT_SECRET || 'aicho-muse-dev-secret-change-me').update(file + ':' + exp).digest('hex');
   return '/api/v1/audio/' + file + '?exp=' + exp + '&sig=' + sig;

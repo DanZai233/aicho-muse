@@ -30,6 +30,7 @@ import shareRoutes from './routes/shares.js';
 import referenceDocRoutes from './routes/reference-docs.js';
 import relationshipRoutes from './routes/relationships.js';
 import reviewRoutes from './routes/review.js';
+import letterRoutes from './routes/letter.js';
 import feedbackRoutes from './routes/feedback.js';
 import { attachPresenceServer } from './realtime/server.js';
 
@@ -68,6 +69,7 @@ app.get('/api/v1/uploads/:name', (req, res) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/letter', letterRoutes);
 app.use('/api/v1', shareRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/personas', personaRoutes);
