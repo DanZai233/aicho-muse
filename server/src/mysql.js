@@ -185,24 +185,33 @@ export async function mysqlDeletePreset(kind, id) {
   }
 }
 
-// 首次初始化专用：仅在 presets 表完全为空时从内置 seed 写入一次官方预设。
-// 表非空（哪怕只有 1 条）则完全不动，保证后台增删改永久生效、部署/重启不覆盖。
+// 初始化/补全官方预设：把内置 seed 中有、presets 表里还没有的条目增量插入。
+// 已存在的条目（无论后台改过与否）一律不动，保证后台增删改永久生效、部署/重启不覆盖。
 export async function mysqlEnsureSeedPresets(cache, connArg) {
   if (!mysqlEnabled()) return;
   await ensureTables();
   const conn = connArg || await getPool().getConnection();
   try {
-    const [cnt] = await conn.query('SELECT COUNT(*) AS n FROM presets');
-    if (Number(cnt?.[0]?.n || 0) > 0) return;
     const { seedPresets } = await import('./db.js');
     const { personas, voices } = seedPresets();
-    for (const p of personas) {
-      await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', ['persona', p.id, JSON.stringify(p)]);
-      if (!cache.personas.some((x) => x.id === p.id)) cache.personas.push(p);
-    }
-    for (const v of voices) {
-      await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', ['voice', v.id, JSON.stringify(v)]);
-      if (!cache.voices.some((x) => x.id === v.id)) cache.voices.push(v);
+    const kinds = [
+      ['persona', personas, 'personas'],
+      ['voice', voices, 'voices'],
+    ];
+    for (const [kind, rows, cacheKey] of kinds) {
+      if (!rows.length) continue;
+      const placeholders = rows.map(() => '?').join(',');
+      const [existing] = await conn.query(
+        `SELECT id FROM presets WHERE kind = ? AND id IN (${placeholders})`,
+        [kind, ...rows.map((r) => r.id)]
+      );
+      const have = new Set((existing || []).map((r) => r.id));
+      for (const row of rows) {
+        if (have.has(row.id)) continue;
+        await conn.query('INSERT INTO presets (kind, id, value) VALUES (?, ?, ?)', [kind, row.id, JSON.stringify(row)]);
+        const arr = cache[cacheKey] || [];
+        if (!arr.some((x) => x.id === row.id)) arr.push(row);
+      }
     }
   } finally {
     if (!connArg) conn.release();
@@ -215,7 +224,12 @@ let presetRefreshTimer = null;
 export function startPresetRefresh(cache) {
   if (presetRefreshTimer) return;
   presetRefreshTimer = setInterval(() => {
-    syncPresetsFromDb(cache).catch(e => console.error('[MySQL] 预设周期同步失败:', e.message));
+    (async () => {
+      // 周期补全：内置 seed 新增的官方预设（如新增干员）自动写入 presets 表，
+      // 只插入缺失 id，绝不覆盖后台已有编辑。
+      await mysqlEnsureSeedPresets(cache);
+      await syncPresetsFromDb(cache);
+    })().catch(e => console.error('[MySQL] 预设周期同步失败:', e.message));
   }, 30000);
   presetRefreshTimer.unref?.();
 }
