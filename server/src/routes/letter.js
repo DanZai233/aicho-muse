@@ -104,7 +104,7 @@ router.get('/library/search', async (req, res) => {
 // 按人设（性格/声音/名字）给「笔名」写一封回信，分段落（每段 60-120 字）
 router.post('/reply', async (req, res) => {
   const ip = clientIp(req);
-  const rl = rateLimit('letter_reply_' + ip, 5, 30 * 60 * 1000);
+  const rl = rateLimit('letter_reply_' + ip, 10, 30 * 60 * 1000);
   if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '回信太频繁了，请稍后再寄（每 30 分钟最多 5 封）' });
   const { persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content } = req.body || {};
   const letter = String(letter_content || '').trim();
