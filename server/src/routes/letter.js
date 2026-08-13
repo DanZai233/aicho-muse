@@ -202,6 +202,46 @@ router.post('/reply', async (req, res) => {
   }
 });
 
+
+// ---------- 信件润色（预设风格） ----------
+const POLISH_STYLES = {
+  gentle: { label: '温柔治愈', hint: '更温暖柔软，多一分抚慰与陪伴感，像被轻轻拥抱' },
+  poetic: { label: '诗意浪漫', hint: '更有画面感与诗意，善用比喻、意象和留白' },
+  concise: { label: '简洁有力', hint: '删繁就简，句子干净利落，直击人心' },
+  playful: { label: '俏皮灵动', hint: '活泼俏皮，带一点可爱的小幽默和元气' },
+  formal: { label: '深情郑重', hint: '庄重深情，适合郑重其事地表达心意' },
+};
+
+router.post('/polish', async (req, res) => {
+  const ip = clientIp(req);
+  const rl = rateLimit('letter_polish_' + ip, 10, 30 * 60 * 1000);
+  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '润色太频繁了，请稍后再试' });
+  const { text, style } = req.body || {};
+  const t = String(text || '').trim();
+  if (!t) return res.status(400).json({ code: 40001, message: 'text 必填' });
+  if (t.length > 3000) return res.status(400).json({ code: 40001, message: '内容太长了（最多 3000 字）' });
+  const st = POLISH_STYLES[String(style || 'gentle')] || POLISH_STYLES.gentle;
+  const s = db().settings.ai;
+  const hasLLM = ((process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none') || (s.api_key && s.provider !== 'none');
+  if (!hasLLM) return res.status(503).json({ code: 50301, message: '润色服务暂不可用' });
+  const sys = `你是一位文字编辑。请把用户写给朋友的信润色成「${st.label}」的风格：${st.hint}。
+要求：
+1. 保留原意、重要细节与整体结构（段落、称呼、落款）；
+2. 不要添加原信没有的新内容，不要改变事实；
+3. 不要使用 markdown、emoji、【】标题；
+4. 控制在接近原文的长度，不要过度扩写；
+5. 直接输出润色后的完整信件正文。`;
+  try {
+    const raw = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: t }], { temperature: 0.7, max_tokens: 1600, noFallback: true });
+    const out = String(raw || '').trim();
+    if (!out) throw new Error('润色结果为空');
+    res.json({ code: 0, data: { style: st.label, text: out } });
+  } catch (e) {
+    console.error('[Letter] 润色失败:', e.message);
+    res.status(502).json({ code: 50201, message: '润色失败：' + e.message });
+  }
+});
+
 // ---------- 分段 TTS（匿名，短文本，IP 限流） ----------
 router.post('/tts', async (req, res) => {
   const ip = clientIp(req);
