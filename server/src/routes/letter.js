@@ -28,6 +28,45 @@ function ttsCfg() {
   return ttsConfig();
 }
 
+// 从 LLM 输出中提取 JSON 对象（忽略字符串内的大括号，括号配平，避免被 params: {...} 之类残留干扰）
+function extractJsonObject(text) {
+  const block = String(text || '').match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const s = (block ? block[1] : String(text || '')).trim();
+  const scan = (start) => {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < s.length; i++) {
+      const c = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === '\\') esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === '{') depth++;
+      else if (c === '}') { depth--; if (depth === 0) return s.slice(start, i + 1); }
+    }
+    return null;
+  };
+  const mark = s.indexOf('{"paragraphs"');
+  if (mark >= 0) { const r = scan(mark); if (r) return r; }
+  const first = s.indexOf('{');
+  if (first >= 0) { const r = scan(first); if (r) return r; }
+  return null;
+}
+
+// 清洗非 JSON 输出：过滤 params:/max_tokens:/temperature: 等参数残留行
+function cleanReplyLines(text) {
+  return String(text || '').split('\n')
+    .map(x => x.trim())
+    .filter(Boolean)
+    .filter(l => !/^(params|parameters|arguments|max_tokens|temperature|top_p|top_k|model|messages|role|content|stop|stream|seed|frequency_penalty|presence_penalty|response_format|tools|tool_choice)\s*[:=]/i.test(l))
+    .join('\n')
+    .split(/\n{2,}|(?<=[。！？!?])\s*\n/)
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
 // ---------- 人设列表（官方预设 + 公开人设，附绑定音色） ----------
 router.get('/personas', (req, res) => {
   const d = db();
@@ -168,18 +207,20 @@ router.post('/reply', async (req, res) => {
 
   try {
     const raw = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: user }], { temperature: 0.8, max_tokens: 1600, noFallback: true });
-    // 容错解析 JSON
+    // 容错解析 JSON：括号配平提取，避免把 params: {...} 之类的残留当正文
     let paragraphs = [];
     let signature = persona.name;
-    const block = String(raw || '').match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const candidate = (block ? block[1] : String(raw || '')).match(/\{[\s\S]*\}/)?.[0] || String(raw || '');
-    try {
-      const obj = JSON.parse(candidate);
-      if (Array.isArray(obj.paragraphs)) paragraphs = obj.paragraphs.map(x => String(x).trim()).filter(Boolean);
-      if (obj.signature) signature = String(obj.signature).trim();
-    } catch {
-      // 非 JSON：按空行切分
-      paragraphs = String(raw || '').split(/\n{2,}/).map(x => x.trim()).filter(Boolean);
+    const jsonText = extractJsonObject(raw);
+    if (jsonText) {
+      try {
+        const obj = JSON.parse(jsonText);
+        if (Array.isArray(obj.paragraphs)) paragraphs = obj.paragraphs.map(x => String(x).trim()).filter(Boolean);
+        if (obj.signature) signature = String(obj.signature).trim();
+      } catch { /* 落到下方清洗分支 */ }
+    }
+    if (!paragraphs.length) {
+      // 非 JSON：去掉参数/调试残留行，再按空行/句末切分
+      paragraphs = cleanReplyLines(raw);
     }
     if (!paragraphs.length) paragraphs = [String(raw || '').trim()];
     // 二次切分：每段不超过 140 字（按句号/逗号切），段落总数 ≤ 8
