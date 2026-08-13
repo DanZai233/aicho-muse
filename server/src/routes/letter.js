@@ -24,6 +24,17 @@ function clientIp(req) {
   return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
 }
 
+// 429 提示：附带恢复时长与预计恢复时刻
+function fmtRetry(sec) {
+  const s = Math.max(1, Math.ceil(Number(sec) || 0));
+  const at = new Date(Date.now() + s * 1000);
+  const hh = String(at.getHours()).padStart(2, '0');
+  const mm = String(at.getMinutes()).padStart(2, '0');
+  if (s < 60) return `约 ${s} 秒后可重试（预计 ${hh}:${mm} 恢复）`;
+  return `约 ${Math.ceil(s / 60)} 分钟后可重试（预计 ${hh}:${mm} 恢复）`;
+}
+
+
 function ttsCfg() {
   return ttsConfig();
 }
@@ -115,7 +126,7 @@ router.get('/voices', (req, res) => {
 router.get('/library/search', async (req, res) => {
   const ip = clientIp(req);
   const rl = rateLimit('letter_lib_' + ip, 20, 60 * 1000);
-  if (!rl.allowed) return res.status(429).json({ code: 42901, message: '请求太快，请稍后再试' });
+  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '请求太快了，' + fmtRetry(rl.retryAfter) });
   const cfg = ttsCfg();
   if (!cfg.api_key) return res.status(501).json({ code: 50101, message: 'TTS 尚未配置' });
   const q = String(req.query.q || '').trim();
@@ -144,8 +155,8 @@ router.get('/library/search', async (req, res) => {
 router.post('/reply', async (req, res) => {
   const ip = clientIp(req);
   const rl = rateLimit('letter_reply_' + ip, 10, 30 * 60 * 1000);
-  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '回信太频繁了，请稍后再寄（每 30 分钟最多 5 封）' });
-  const { persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content } = req.body || {};
+  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '回信太频繁了（每 30 分钟最多 10 封），' + fmtRetry(rl.retryAfter) });
+  const { persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content, history } = req.body || {};
   const letter = String(letter_content || '').trim();
   if (!persona_id && !persona_name) return res.status(400).json({ code: 40001, message: '请选择写信对象' });
   if (!letter) return res.status(400).json({ code: 40001, message: '信的内容不能为空' });
@@ -196,13 +207,20 @@ router.post('/reply', async (req, res) => {
   const hasLLM = ((process.env.LLM_API_KEY || s.llm_api_key) && (process.env.LLM_PROVIDER || s.llm_provider) && (process.env.LLM_PROVIDER || s.llm_provider) !== 'none') || (s.api_key && s.provider !== 'none');
   if (!hasLLM) return res.status(503).json({ code: 50301, message: '回信服务暂不可用' });
 
-  const sys = `${personaPrompt(persona)}
-【回信任务】你是「${persona.name}」，收到了一封来自「${displayName}」的信。请以你自己的性格、说话风格与身份，写一封真诚、有温度的回信。要求：
-1. 开头自然地称呼对方（可用「${displayName}」或更亲昵/符合人设的称呼），结尾以你的人设落款；
-2. 回应信中提到的具体内容，不要空泛；
-3. 语气完全贴合你的人设，像写在纸上的信，不要用 emoji、不要 markdown、不要【】标题；
-4. 全文分 3-5 个自然段，每段 60-120 字；
-5. 严格输出 JSON（不要其他文字）：{"paragraphs":["段落1","段落2",...],"signature":"落款"}。`;
+  // 当前时间（Asia/Shanghai），帮助回信感知时节/昼夜
+  const now = new Date();
+  const nowStr = now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short' });
+  // 历史上下文：仅使用本次请求传入的往来信（同用户同收信人的最近几轮），不回显给其他用户
+  let historyBlock = '';
+  if (Array.isArray(history) && history.length) {
+    const h = history
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .map(m => `${m.role === 'user' ? '来信' : '回信'}：${m.content.trim().slice(0, 600)}`)
+      .join('\n');
+    if (h) historyBlock = `\n\n【你们之前的往来（供延续话题，不要复述，只自然承接）】\n${h}`;
+  }
+
+  const sys = `${personaPrompt(persona)}\n【当前时间】${nowStr}（北京时间）。\n【回信任务】你是「${persona.name}」，收到了一封来自「${displayName}」的信。请以你自己的性格、说话风格与身份，写一封真诚、有温度的回信。要求：\n1. 开头自然地称呼对方（可用「${displayName}」或更亲昵/符合人设的称呼），结尾以你的人设落款；\n2. 回应信中提到的具体内容，不要空泛；\n3. 语气完全贴合你的人设，像写在纸上的信，不要用 emoji、不要 markdown、不要【】标题；\n4. 全文分 3-5 个自然段，每段 60-120 字；\n5. 严格输出 JSON（不要其他文字）：{"paragraphs":["段落1","段落2",...],"signature":"落款"}。` + historyBlock;
   const user = `来信内容：\n${letter}`;
 
   try {
@@ -256,7 +274,7 @@ const POLISH_STYLES = {
 router.post('/polish', async (req, res) => {
   const ip = clientIp(req);
   const rl = rateLimit('letter_polish_' + ip, 10, 30 * 60 * 1000);
-  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '润色太频繁了，请稍后再试' });
+  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '润色太频繁了，' + fmtRetry(rl.retryAfter) });
   const { text, style } = req.body || {};
   const t = String(text || '').trim();
   if (!t) return res.status(400).json({ code: 40001, message: 'text 必填' });
@@ -287,7 +305,7 @@ router.post('/polish', async (req, res) => {
 router.post('/tts', async (req, res) => {
   const ip = clientIp(req);
   const rl = rateLimit('letter_tts_' + ip, 30, 60 * 60 * 1000);
-  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '语音生成太频繁，请稍后再试' });
+  if (!rl.allowed) return res.status(429).set('Retry-After', String(rl.retryAfter)).json({ code: 42901, message: '语音生成太频繁了，' + fmtRetry(rl.retryAfter) });
   const { text, voice_id, force } = req.body || {};
   const t = String(text || '').trim();
   if (!t) return res.status(400).json({ code: 40001, message: 'text 必填' });
