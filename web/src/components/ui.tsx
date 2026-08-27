@@ -17,10 +17,10 @@ export function Button({ children, onClick, variant = 'primary', type = 'button'
 export function Input({ label, value, onChange, placeholder, type = 'text', textarea = false, rows = 3, disabled = false }: {
   label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; textarea?: boolean; rows?: number; disabled?: boolean;
 }) {
-  const cls = 'w-full rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60';
+  const cls = 'w-full rounded-lg border border-ink/25 bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink/40 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60';
   return (
     <label className="block">
-      {label && <span className="mb-1.5 block text-xs font-medium text-ink/60">{label}</span>}
+      {label && <span className="mb-1.5 block text-xs font-semibold text-ink/80">{label}</span>}
       {textarea
         ? <textarea rows={rows} value={value} placeholder={placeholder} disabled={disabled} onChange={e => onChange(e.target.value)} className={`${cls} resize-y`} />
         : <input type={type} value={value} placeholder={placeholder} disabled={disabled} onChange={e => onChange(e.target.value)} className={cls} />}
@@ -34,10 +34,10 @@ export function Modal({ open, onClose, title, children, wide = false }: {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className={`${wide ? 'max-w-2xl' : 'max-w-md'} flex max-h-[90vh] w-full flex-col rounded-2xl bg-surface p-6 shadow-lift animate-fade-up`} onClick={e => e.stopPropagation()}>
+      <div className={`${wide ? 'max-w-2xl' : 'max-w-md'} flex max-h-[90vh] w-full flex-col rounded-2xl bg-surface p-6 text-ink shadow-lift animate-fade-up`} onClick={e => e.stopPropagation()}>
         <div className="mb-4 flex shrink-0 items-center justify-between">
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
-          <button onClick={onClose} className="rounded-full p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink">✕</button>
+          <button onClick={onClose} className="rounded-full p-1.5 text-ink/60 hover:bg-ink/10 hover:text-ink">✕</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">{children}</div>
       </div>

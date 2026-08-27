@@ -7,7 +7,7 @@ type AdminUser = { id: string; email: string; display_name: string; status?: str
 type FeedbackItem = { id: string; user_id: string; user_email?: string | null; user_name?: string | null; contact: string; content: string; page: string; status: string; note?: string; created_at: string; updated_at?: string };
 type LetterFeedbackItem = { id: string; type: string; content: string; contact: string; status: string; created_at: string };
 
-const inputCls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
+const inputCls = 'w-full rounded-lg border border-ink/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
 function adminHeaders() {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('am_admin_token')}` };
