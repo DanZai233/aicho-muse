@@ -5,6 +5,7 @@ import { Button, Input, Badge } from '../components/ui';
 type Stats = { users: number; projects: number; chapters: number; conversations: number; messages: number; messages_today: number; conversations_today: number; ai_provider: string; ai_model?: string; memories?: number; reply_types?: Record<string, number>; trend?: { date: string; messages: number; new_users: number; new_projects: number; new_conversations: number }[] };
 type AdminUser = { id: string; email: string; display_name: string; status?: string; created_at: string; projects?: number; conversations?: number; messages?: number; memories?: number; last_active?: string | null };
 type FeedbackItem = { id: string; user_id: string; user_email?: string | null; user_name?: string | null; contact: string; content: string; page: string; status: string; note?: string; created_at: string; updated_at?: string };
+type LetterFeedbackItem = { id: string; type: string; content: string; contact: string; status: string; created_at: string };
 
 const inputCls = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
@@ -26,7 +27,7 @@ async function adminSend<T>(p: string, method: string, body?: unknown): Promise<
 
 export default function Admin() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'admins'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'letter-feedback' | 'admins'>('stats');
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -37,6 +38,9 @@ export default function Admin() {
   const [admins, setAdmins] = useState<any[]>([]);
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [feedbackFilter, setFeedbackFilter] = useState('');
+  const [letterFeedback, setLetterFeedback] = useState<LetterFeedbackItem[]>([]);
+  const [letterFbFilter, setLetterFbFilter] = useState('');
+  const [letterFbErr, setLetterFbErr] = useState('');
   const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '', confirm: '' });
   const [pwMsg, setPwMsg] = useState('');
   const [personaOptions, setPersonaOptions] = useState<any[]>([]);
@@ -78,6 +82,17 @@ export default function Admin() {
   const loadAdmins = async () => { try { setAdmins((await adminGet<{ list: any[] }>('/admins')).list); } catch (e: any) { setErr(e.message); } };
   const loadFeedback = async () => {
     try { setFeedback((await adminGet<{ list: FeedbackItem[] }>('/feedback' + (feedbackFilter ? '?status=' + feedbackFilter : ''))).list); }
+    catch (e: any) { setErr(e.message); }
+  };
+  const loadLetterFeedback = async () => {
+    try {
+      setLetterFbErr('');
+      const q = letterFbFilter ? '?status=' + letterFbFilter : '';
+      setLetterFeedback((await adminGet<{ list: LetterFeedbackItem[] }>('/letter-feedback' + q)).list);
+    } catch (e: any) { setLetterFbErr(e.message); setLetterFeedback([]); }
+  };
+  const setLetterFbStatus = async (f: LetterFeedbackItem, status: string) => {
+    try { await adminSend('/letter-feedback/' + f.id, 'PATCH', { status }); setErr(''); flash('信笺反馈已更新'); loadLetterFeedback(); }
     catch (e: any) { setErr(e.message); }
   };
   const loadOptions = async () => {
@@ -222,7 +237,7 @@ export default function Admin() {
         </header>
 
         <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-white/5 p-1 text-sm">
-          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
+          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['letter-feedback', '信笺反馈'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={`min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 transition sm:px-4 ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
           ))}
         </nav>
@@ -580,6 +595,44 @@ export default function Admin() {
                 </div>
               ))}
               {feedback.length === 0 && <p className="py-8 text-center text-paper/40">暂无反馈</p>}
+            </div>
+          </div>
+        )}
+
+        {tab === 'letter-feedback' && (
+          <div className="rounded-2xl bg-white/5 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-serif text-lg font-semibold">信笺反馈（{letterFeedback.length}）</h2>
+              <div className="flex gap-1 rounded-lg bg-white/5 p-1 text-xs">
+                {[['', '全部'], ['new', '待处理'], ['done', '已处理']].map(([k, v]) => (
+                  <button key={k} onClick={() => { setLetterFbFilter(k); setTimeout(loadLetterFeedback, 0); }}
+                    className={'rounded-md px-3 py-1.5 transition ' + (letterFbFilter === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper')}>{v}</button>
+                ))}
+              </div>
+            </div>
+            {letterFbErr && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-300">{letterFbErr}</p>}
+            <div className="space-y-2">
+              {letterFeedback.map(f => (
+                <div key={f.id} className="rounded-xl bg-white/5 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-paper/50">
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px]">{f.type}</span>
+                      {' '}· {new Date(f.created_at).toLocaleString('zh-CN')}
+                      {f.contact ? ' · 📮 ' + f.contact : ''}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {f.status === 'new' && <Badge color="amber">待处理</Badge>}
+                      {f.status === 'done' && <Badge color="green">已处理</Badge>}
+                    </div>
+                  </div>
+                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-paper/85">{f.content}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {f.status !== 'done' && <button onClick={() => setLetterFbStatus(f, 'done')} className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/25">✓ 标记已处理</button>}
+                    {f.status === 'done' && <button onClick={() => setLetterFbStatus(f, 'new')} className="rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-300 transition hover:bg-amber-500/25">重新打开</button>}
+                  </div>
+                </div>
+              ))}
+              {letterFeedback.length === 0 && !letterFbErr && <p className="py-8 text-center text-paper/40">暂无信笺反馈</p>}
             </div>
           </div>
         )}
