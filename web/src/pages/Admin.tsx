@@ -29,6 +29,7 @@ export default function Admin() {
   const nav = useNavigate();
   const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'letter-feedback' | 'admins'>('stats');
   const [stats, setStats] = useState<Stats | null>(null);
+  const [letterStats, setLetterStats] = useState<{ days: number; total: number; done: number; trend: { date: string; count: number }[] } | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [presets, setPresets] = useState<any>(null);
@@ -305,8 +306,13 @@ export default function Admin() {
     catch (e: any) { setErr(e.message); }
   };
 
+  const loadLetterStats = async () => {
+    try { setLetterStats(await adminGet<{ days: number; total: number; done: number; trend: { date: string; count: number }[] }>('/letter-stats?days=14')); }
+    catch (e: any) { /* 信笺统计失败不阻塞概览 */ }
+  };
+
   useEffect(() => {
-    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders(); loadAdmins(); loadFeedback(); loadOptions();
+    loadStats(); loadUsers(); loadSettings(); loadPresets(); loadProviders(); loadAdmins(); loadFeedback(); loadOptions(); loadLetterStats();
   }, []);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
@@ -383,6 +389,30 @@ export default function Admin() {
               </div>
             ))}
           </div>
+          {letterStats && (
+            <div className="mt-4 rounded-2xl bg-white/5 p-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-serif text-lg font-semibold">信笺写信量（近 {letterStats.days} 天）</h3>
+                <div className="flex gap-2 text-xs">
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-paper/80">✉️ 共 {letterStats.total} 封</span>
+                  <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-300">✓ 已回 {letterStats.done} 封</span>
+                </div>
+              </div>
+              <div className="flex items-end gap-1.5" style={{ height: 96 }}>
+                {letterStats.trend.map(t => {
+                  const max = Math.max(1, ...letterStats.trend.map(x => x.count));
+                  const h = Math.max(4, Math.round((t.count / max) * 84));
+                  return (
+                    <div key={t.date} className="flex flex-1 flex-col items-center gap-1">
+                      <span className="text-[9px] font-medium text-paper/70">{t.count}</span>
+                      <div className="w-full rounded-t bg-accent/70" style={{ height: h }} title={t.date + ' ' + t.count + ' 封'} />
+                      <span className="text-[8px] text-paper/40">{t.date.slice(5)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {stats.reply_types && (
             <div className="mt-4 rounded-2xl bg-white/5 p-5">
               <h3 className="mb-3 font-serif text-lg font-semibold">回复类型分布</h3>

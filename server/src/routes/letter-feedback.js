@@ -57,4 +57,16 @@ router.patch('/letter-feedback/:id', async (req, res) => {
   }
 });
 
+// 信笺写信量统计（近 days 天每日写信数）
+router.get('/letter-stats', async (req, res) => {
+  if (!LETTER_TOKEN) return res.status(500).json({ code: 50001, message: '服务端未配置 LETTER_FEEDBACK_TOKEN' });
+  try {
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 14));
+    const data = await proxyFetch('/api/v1/stats/letters?days=' + days);
+    res.json({ code: 0, data });
+  } catch (e) {
+    res.status(e.status || 502).json({ code: 50201, message: '信笺统计拉取失败：' + e.message });
+  }
+});
+
 export default router;
