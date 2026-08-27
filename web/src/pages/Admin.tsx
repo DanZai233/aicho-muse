@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, Badge } from '../components/ui';
+import { Button, Input, Badge, Modal } from '../components/ui';
 
 type Stats = { users: number; projects: number; chapters: number; conversations: number; messages: number; messages_today: number; conversations_today: number; ai_provider: string; ai_model?: string; memories?: number; reply_types?: Record<string, number>; trend?: { date: string; messages: number; new_users: number; new_projects: number; new_conversations: number }[] };
 type AdminUser = { id: string; email: string; display_name: string; status?: string; created_at: string; projects?: number; conversations?: number; messages?: number; memories?: number; last_active?: string | null };
@@ -46,6 +46,22 @@ export default function Admin() {
   const [personaOptions, setPersonaOptions] = useState<any[]>([]);
   const [voiceOptions, setVoiceOptions] = useState<any[]>([]);
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '', role: 'admin' });
+  // 预设人设表单（表格）状态
+  const [personaModalOpen, setPersonaModalOpen] = useState(false);
+  const [personaEditId, setPersonaEditId] = useState<string | null>(null); // null=新建
+  const [personaForm, setPersonaForm] = useState({
+    name: '', tagline: '', background: '', personality: '', // 逗号分隔
+    tone: '', preferences: '', avoid: '', values: '', relationship: '', expertise: '',
+    greeting: '', avatar_color: '#8b7d6b',
+  });
+  const [aiDesc, setAiDesc] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState('');
+  const [voiceCandidates, setVoiceCandidates] = useState<any[]>([]);
+  const [voiceSearch, setVoiceSearch] = useState('');
+  const [voiceSearchBusy, setVoiceSearchBusy] = useState(false);
+  const [voiceSel, setVoiceSel] = useState<any>(null); // { id, title, sample_audio }
+  const [previewAudio, setPreviewAudio] = useState<any>(null);
   const origSettingsRef = useRef<any>(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -127,13 +143,122 @@ export default function Admin() {
     } catch (e: any) { setErr(e.message); }
   };
 
+  // ---- 预设人设完整表单 ----
+  const splitList = (s: string) => s.split(/[,，、\n]/).map(x => x.trim()).filter(Boolean).slice(0, 8);
+
+  const openPersonaForm = (p: any = null) => {
+    setPersonaEditId(p?.id || null);
+    setPersonaForm(p ? {
+      name: p.name || '',
+      tagline: p.tagline || '',
+      background: p.background || '',
+      personality: (p.personality || []).join('，'),
+      tone: p.speaking_style?.tone || '',
+      preferences: (p.speaking_style?.preferences || []).join('，'),
+      avoid: (p.speaking_style?.avoid || []).join('，'),
+      values: (p.values || []).join('，'),
+      relationship: p.relationship || '',
+      expertise: (p.expertise || []).join('，'),
+      greeting: p.greeting || '',
+      avatar_color: p.avatar_color || '#8b7d6b',
+    } : { name: '', tagline: '', background: '', personality: '', tone: '', preferences: '', avoid: '', values: '', relationship: '', expertise: '', greeting: '', avatar_color: '#8b7d6b' });
+    setVoiceSel(p?.voice_profile_id ? { id: p.voice_profile_id, title: p.voice_name || '已绑定音色' } : null);
+    setVoiceCandidates([]);
+    setVoiceSearch('');
+    setAiDesc('');
+    setAiMsg('');
+    setErr('');
+    setPersonaModalOpen(true);
+  };
+
+  const savePersonaForm = async () => {
+    if (!personaForm.name.trim()) { setErr('角色名必填'); return; }
+    const body = {
+      name: personaForm.name.trim(),
+      tagline: personaForm.tagline.trim(),
+      background: personaForm.background.trim(),
+      personality: splitList(personaForm.personality),
+      speaking_style: {
+        tone: personaForm.tone.trim(),
+        preferences: splitList(personaForm.preferences),
+        avoid: splitList(personaForm.avoid),
+      },
+      values: splitList(personaForm.values),
+      relationship: personaForm.relationship.trim(),
+      expertise: splitList(personaForm.expertise),
+      greeting: personaForm.greeting.trim(),
+      avatar_color: personaForm.avatar_color,
+      voice_profile_id: voiceSel?.id || null,
+    };
+    try {
+      if (personaEditId) {
+        await adminSend('/presets/personas/' + personaEditId, 'PATCH', body);
+      } else {
+        await adminSend('/presets/personas', 'POST', body);
+      }
+      setErr(''); flash(personaEditId ? '预设人设已更新' : '预设人设已添加');
+      setPersonaModalOpen(false);
+      loadPresets();
+    } catch (e: any) { setErr(e.message); }
+  };
+
+  // AI 自动生成：描述 → 人设字段 + 音色候选
+  const aiGenerate = async () => {
+    if (aiDesc.trim().length < 2) { setErr('请先描述角色，例如：陆沉，光与夜之恋，万甄集团CEO血族，温柔神秘'); return; }
+    setAiBusy(true); setAiMsg(''); setErr('');
+    try {
+      const d = await adminSend<{ persona: any; voices: any[] }>('/presets/ai-generate', 'POST', { description: aiDesc });
+      const p = d.persona || {};
+      setPersonaForm({
+        name: p.name || '', tagline: p.tagline || '', background: p.background || '',
+        personality: (p.personality || []).join('，'),
+        tone: p.speaking_style?.tone || '',
+        preferences: (p.speaking_style?.preferences || []).join('，'),
+        avoid: (p.speaking_style?.avoid || []).join('，'),
+        values: (p.values || []).join('，'),
+        relationship: p.relationship || '',
+        expertise: (p.expertise || []).join('，'),
+        greeting: p.greeting || '',
+        avatar_color: p.avatar_color || '#8b7d6b',
+      });
+      setVoiceCandidates(d.voices || []);
+      setVoiceSel(null);
+      setAiMsg('已生成，请核对并补充，然后保存');
+      if (d.voices?.length) setVoiceSearch(p.name || '');
+    } catch (e: any) { setErr(e.message); }
+    finally { setAiBusy(false); }
+  };
+
+  // 音色广场搜索
+  const searchVoices = async (q?: string) => {
+    const kw = (q !== undefined ? q : voiceSearch).trim();
+    if (!kw) return;
+    setVoiceSearchBusy(true);
+    try {
+      const r = await fetch('/api/v1/voice-profiles/library/search?q=' + encodeURIComponent(kw) + '&page_size=12', { headers: adminHeaders() });
+      const j = await r.json();
+      if (!r.ok || j.code !== 0) throw new Error(j.message || '音色搜索失败');
+      setVoiceCandidates(j.data?.list || []);
+    } catch (e: any) { setAiMsg(e.message); }
+    finally { setVoiceSearchBusy(false); }
+  };
+
+  const stopPreview = () => { if (previewAudio) { previewAudio.pause(); previewAudio.src = ''; setPreviewAudio(null); } };
+  const playSample = (item: any) => {
+    if (!item.sample_audio) return;
+    stopPreview();
+    const a = new Audio(item.sample_audio);
+    a.play().catch(() => {});
+    setPreviewAudio(a);
+  };
+
   const editPreset = async (type: 'persona' | 'voice', item: any) => {
     if (String(item.id).startsWith('preset-')) { setErr('内置官方预设不可编辑（如需调整请克隆为自定义预设）'); return; }
-    const name = prompt(type === 'persona' ? '修改预设人设名称：' : '修改预设音色名称：', item.name || item.display_name);
+    if (type === 'persona') { openPersonaForm(item); return; }
+    const name = prompt('修改预设音色名称：', item.display_name);
     if (!name) return;
     try {
-      const body = type === 'persona' ? { name } : { display_name: name };
-      await adminSend('/presets/' + (type === 'persona' ? 'personas' : 'voices') + '/' + item.id, 'PATCH', body);
+      await adminSend('/presets/voices/' + item.id, 'PATCH', { display_name: name });
       setErr(''); flash('预设已更新'); loadPresets();
     } catch (e: any) { setErr(e.message); }
   };
@@ -530,7 +655,7 @@ export default function Admin() {
             <div className="rounded-2xl bg-white/5 p-5">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="font-serif text-lg font-semibold">预设人设（{presets.personas.length}）</h2>
-                <Button variant="subtle" onClick={() => addPreset('persona')} className="bg-white/10 text-paper hover:bg-white/20">＋ 添加</Button>
+                <Button variant="subtle" onClick={() => openPersonaForm()} className="bg-white/10 text-paper hover:bg-white/20">＋ 添加</Button>
               </div>
               <div className="space-y-2">
                 {presets.personas.map((p: any) => (
@@ -680,6 +805,85 @@ export default function Admin() {
           </div>
         )}
       </div>
+
+      {/* 预设人设完整表单（表格） */}
+      <Modal open={personaModalOpen} onClose={() => { stopPreview(); setPersonaModalOpen(false); }} title={personaEditId ? '编辑预设人设' : '添加预设人设'} wide>
+        <div className="space-y-4 text-ink">
+          {/* AI 自动生成 */}
+          <div className="rounded-xl bg-accentlight/50 p-3">
+            <p className="mb-1.5 text-xs font-bold text-ink">✨ AI 自动生成</p>
+            <div className="flex gap-2">
+              <input value={aiDesc} onChange={e => setAiDesc(e.target.value)} placeholder="描述角色，如：陆沉，光与夜之恋，万甄集团CEO血族，温柔神秘；会联网检索资料并搜索音色" className={inputCls} />
+              <Button onClick={aiGenerate} disabled={aiBusy} className="shrink-0 bg-ink text-paper hover:bg-ink/90">{aiBusy ? '生成中…' : '生成'}</Button>
+            </div>
+            {aiMsg && <p className="mt-1.5 text-xs font-medium text-emerald-700">{aiMsg}</p>}
+          </div>
+
+          {/* 表格：基础信息 */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="角色名 *" value={personaForm.name} onChange={v => setPersonaForm({ ...personaForm, name: v })} placeholder="如：陆沉" />
+            <Input label="一句话标签" value={personaForm.tagline} onChange={v => setPersonaForm({ ...personaForm, tagline: v })} placeholder="如：万甄集团 CEO · 血族" />
+          </div>
+          <Input label="背景故事（含出处）" textarea rows={3} value={personaForm.background} onChange={v => setPersonaForm({ ...personaForm, background: v })} placeholder="2-4 句，介绍角色出处与经历" />
+          <Input label="性格标签（逗号分隔）" value={personaForm.personality} onChange={v => setPersonaForm({ ...personaForm, personality: v })} placeholder="温柔、神秘、睿智、克制" />
+
+          {/* 表格：说话风格 */}
+          <div className="rounded-xl bg-ink/5 p-3">
+            <p className="mb-2 text-xs font-bold text-ink">说话风格</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Input label="语气总述" value={personaForm.tone} onChange={v => setPersonaForm({ ...personaForm, tone: v })} placeholder="温润低沉、慢条斯理" />
+              <Input label="说话偏好（逗号分隔）" value={personaForm.preferences} onChange={v => setPersonaForm({ ...personaForm, preferences: v })} placeholder="用隐喻和故事说话、安静倾听" />
+              <Input label="要避免的（逗号分隔）" value={personaForm.avoid} onChange={v => setPersonaForm({ ...personaForm, avoid: v })} placeholder="急躁、命令式、空泛安慰" />
+            </div>
+          </div>
+
+          {/* 表格：深层设定 */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="价值观（逗号分隔）" value={personaForm.values} onChange={v => setPersonaForm({ ...personaForm, values: v })} placeholder="真实比华丽重要" />
+            <Input label="与写信人的关系" value={personaForm.relationship} onChange={v => setPersonaForm({ ...personaForm, relationship: v })} placeholder="如：守护者、青梅竹马" />
+            <Input label="专长（逗号分隔）" value={personaForm.expertise} onChange={v => setPersonaForm({ ...personaForm, expertise: v })} placeholder="剑术、治国、厨艺" />
+            <Input label="初次见面问候语" value={personaForm.greeting} onChange={v => setPersonaForm({ ...personaForm, greeting: v })} placeholder="如：在下钟离，往生堂客卿" />
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-ink">头像底色</span>
+              <div className="flex items-center gap-2">
+                <input type="color" value={personaForm.avatar_color} onChange={e => setPersonaForm({ ...personaForm, avatar_color: e.target.value })} className="h-9 w-12 cursor-pointer rounded border border-ink/30 bg-transparent" />
+                <input value={personaForm.avatar_color} onChange={e => setPersonaForm({ ...personaForm, avatar_color: e.target.value })} className={inputCls} />
+              </div>
+            </label>
+          </div>
+
+          {/* 音色绑定 */}
+          <div className="rounded-xl bg-ink/5 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-bold text-ink">绑定音色（自动搜索广场）</p>
+              {voiceSel && <Badge color="accent">✓ {voiceSel.title}</Badge>}
+            </div>
+            <div className="flex gap-2">
+              <input value={voiceSearch} onChange={e => setVoiceSearch(e.target.value)} placeholder="搜音色：如 陆沉 男声 中文" className={inputCls} onKeyDown={e => { if (e.key === 'Enter') searchVoices(); }} />
+              <Button onClick={() => searchVoices()} disabled={voiceSearchBusy} className="shrink-0 bg-ink text-paper hover:bg-ink/90">{voiceSearchBusy ? '搜索中…' : '搜索'}</Button>
+            </div>
+            {voiceCandidates.length > 0 && (
+              <div className="mt-2 grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
+                {voiceCandidates.map((v: any) => (
+                  <button key={v.id} onClick={() => setVoiceSel({ id: v.id, title: v.title })} className={'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition ' + (voiceSel?.id === v.id ? 'bg-accent/30 font-semibold text-ink' : 'bg-white text-ink/80 ring-1 ring-ink/15 hover:ring-accent/60')}>
+                    <span className="min-w-0 truncate">{v.title}</span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {v.sample_audio && <span className="rounded bg-ink/10 px-1.5 py-0.5 font-medium" onClick={e => { e.stopPropagation(); playSample(v); }}>▶ 试听</span>}
+                      <span className="text-[10px] text-ink/60">{(v.languages || []).slice(0, 2).join('/')}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {voiceCandidates.length === 0 && !voiceSearchBusy && <p className="mt-1.5 text-xs text-ink/60">输入关键词搜索 Fish 音色广场；未绑定音色则保存后不可朗读</p>}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { stopPreview(); setPersonaModalOpen(false); }}>取消</Button>
+            <Button onClick={savePersonaForm} className="bg-ink text-paper hover:bg-ink/90">保存预设</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -277,6 +277,66 @@ router.patch('/presets/voices/:id', (req, res) => {
   res.json({ code: 0, data: { ok: true } });
 });
 
+// ---------- AI 自动生成预设人设（描述 → 人设 JSON + 音色候选） ----------
+// 用 LLM 根据一句话描述生成完整人设字段，同时按角色名搜索 Fish 音色广场返回候选
+router.post('/presets/ai-generate', async (req, res) => {
+  const { description, voice_query } = req.body || {};
+  const desc = String(description || '').trim();
+  if (desc.length < 2) return res.status(400).json({ code: 40001, message: '请先描述角色，例如：陆沉，光与夜之恋，万甄集团CEO血族，温柔神秘' });
+  try {
+    const { callLLM } = await import('../ai.js');
+    const sys = [
+      '你是资深游戏与二次元角色设定专家，非常熟悉乙女游戏（恋与制作人、光与夜之恋、未定事件簿、时空中的绘旅人等）、原神、崩坏星穹铁道等作品的角色人设。',
+      '根据用户的角色描述，输出该角色的完整设定 JSON，严格使用以下结构（不要输出任何 JSON 之外的内容）：',
+      '{"name":"角色名","tagline":"一句话标签","background":"背景故事（2-4句，含出处）","personality":["性格","标签","3-6个"],"speaking_style":{"tone":"语气总述","preferences":["说话偏好","3-5条"],"avoid":["要避免的","2-4条"]},"values":["1-3条价值观"],"relationship":"与写信人/用户的关系设定","expertise":["1-3项专长"],"greeting":"初次见面的一句话","avatar_color":"十六进制颜色，贴合角色气质"}',
+      '如果描述提到具体作品角色（如陆沉），请使用该角色的真实人设；如果是原创角色，则根据描述合理创作。所有文本用简体中文。',
+    ].join('\n');
+    const raw = await callLLM(
+      [{ role: 'system', content: sys }, { role: 'user', content: desc }],
+      { temperature: 0.7, max_tokens: 1600, noFallback: true }
+    );
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('AI 未返回有效 JSON');
+    const persona = JSON.parse(m[0]);
+    if (!persona.name) throw new Error('AI 未生成角色名');
+    // 规范字段类型
+    persona.personality = Array.isArray(persona.personality) ? persona.personality.map(String).slice(0, 6) : [];
+    persona.values = Array.isArray(persona.values) ? persona.values.map(String).slice(0, 3) : [];
+    persona.expertise = Array.isArray(persona.expertise) ? persona.expertise.map(String).slice(0, 3) : [];
+    persona.speaking_style = persona.speaking_style && typeof persona.speaking_style === 'object' ? persona.speaking_style : {};
+    if (!Array.isArray(persona.speaking_style.preferences)) persona.speaking_style.preferences = [];
+    if (!Array.isArray(persona.speaking_style.avoid)) persona.speaking_style.avoid = [];
+    persona.avatar_color = /^#[0-9a-fA-F]{6}$/.test(persona.avatar_color || '') ? persona.avatar_color : '#8b7d6b';
+
+    // 按角色名搜索 Fish 音色广场（同音色搜索接口）
+    const s = db().settings.tts || {};
+    const fishKey = process.env.TTS_API_KEY || s.api_key || '';
+    const fishBase = String(process.env.TTS_BASE_URL || s.base_url || 'https://api.fish.audio').replace(/\/+$/, '');
+    const q = String(voice_query || persona.name || '').trim();
+    let voices = [];
+    if (fishKey && q) {
+      try {
+        const url = fishBase + '/model?self_only=false&page_size=10&page=1&title=' + encodeURIComponent(q);
+        const r = await fetch(url, { headers: { Authorization: 'Bearer ' + fishKey }, signal: AbortSignal.timeout(30000) });
+        if (r.ok) {
+          const data = await r.json();
+          voices = (data.items || []).filter(i => i.state === 'trained').map(i => ({
+            id: i._id,
+            title: i.title,
+            description: i.description,
+            tags: i.tags || [],
+            languages: i.languages || [],
+            sample_audio: i.samples?.[0]?.audio || null,
+          }));
+        }
+      } catch { /* 音色搜索失败不阻断人设生成 */ }
+    }
+    res.json({ code: 0, data: { persona, voices } });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: 'AI 生成失败：' + e.message });
+  }
+});
+
 // ---------- 管理员账号 ----------
 router.get('/admins', (req, res) => {
   const d = db();
