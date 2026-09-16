@@ -66,6 +66,36 @@ function extractJsonObject(text) {
   return null;
 }
 
+// 宽松解析：先直解；失败则把「字符串内部的裸换行」转义后再解（LLM 常在 JSON 字符串里直接换行）
+function looseParseJson(jsonText) {
+  const t = String(jsonText || '');
+  try { return JSON.parse(t); } catch { /* 继续尝试修复 */ }
+  try {
+    const fixed = t.replace(/"(?:[^"\\]|\\.)*"/g, (m) => m.replace(/\r/g, '').replace(/\n/g, '\\n'));
+    return JSON.parse(fixed);
+  } catch { return null; }
+}
+
+// 极端兜底：JSON 不合法（转义缺失/被 max_tokens 截断）时，直接抽取文本中的长字符串作为段落，
+// 避免 {"paragraphs":[ 这类 JSON 语法残留混入回信正文。
+const JSON_NOISE_KEYS = /^(paragraphs|signature|params|parameters|arguments|max_tokens|temperature|top_p|top_k|model|messages|role|content|stop|stream|seed|frequency_penalty|presence_penalty|response_format|tools|tool_choice)$/i;
+function salvageParagraphsFromJsonish(text) {
+  const s = String(text || '');
+  const out = [];
+  const re = /"((?:[^"\\]|\\.)*)"/g;
+  let m;
+  while ((m = re.exec(s))) {
+    let v = m[1];
+    try { v = JSON.parse('"' + v + '"'); } catch { v = v.replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\"/g, '"').replace(/\\\\/g, '\\'); }
+    v = String(v).trim();
+    if (v.length < 8) continue;                       // 过滤键名与短噪声
+    if (JSON_NOISE_KEYS.test(v)) continue;
+    if (/^[\s\[\]{}",:]+$/.test(v)) continue;
+    out.push(v);
+  }
+  return out;
+}
+
 // 清洗非 JSON 输出：过滤 params:/max_tokens:/temperature: 等参数残留行
 function cleanReplyLines(text) {
   return String(text || '').split('\n')
@@ -230,11 +260,17 @@ router.post('/reply', async (req, res) => {
     let signature = persona.name;
     const jsonText = extractJsonObject(raw);
     if (jsonText) {
-      try {
-        const obj = JSON.parse(jsonText);
+      const obj = looseParseJson(jsonText);
+      if (obj) {
         if (Array.isArray(obj.paragraphs)) paragraphs = obj.paragraphs.map(x => String(x).trim()).filter(Boolean);
         if (obj.signature) signature = String(obj.signature).trim();
-      } catch { /* 落到下方清洗分支 */ }
+      }
+    }
+    if (!paragraphs.length) {
+      // JSON 不合法（字符串内含裸换行 / 被 max_tokens 截断）：抽取长字符串当段落。
+      // 仅当输出确实带 JSON 结构时才启用，避免误伤纯文本正文里的引号内容。
+      const looksJsonish = /"paragraphs"\s*:/.test(raw) || /^\s*\{\s*"/.test(raw);
+      if (looksJsonish) paragraphs = salvageParagraphsFromJsonish(jsonText || raw);
     }
     if (!paragraphs.length) {
       // 非 JSON：去掉参数/调试残留行，再按空行/句末切分
