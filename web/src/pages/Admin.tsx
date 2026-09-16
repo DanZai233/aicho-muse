@@ -6,6 +6,8 @@ type Stats = { users: number; projects: number; chapters: number; conversations:
 type AdminUser = { id: string; email: string; display_name: string; status?: string; created_at: string; projects?: number; conversations?: number; messages?: number; memories?: number; last_active?: string | null };
 type FeedbackItem = { id: string; user_id: string; user_email?: string | null; user_name?: string | null; contact: string; content: string; page: string; status: string; note?: string; created_at: string; updated_at?: string };
 type LetterFeedbackItem = { id: string; type: string; content: string; contact: string; status: string; created_at: string };
+type LetterItem = { id: string; pen_name: string; persona_name: string; persona_tagline?: string; voice_name?: string; status: string; error?: string | null; reply_count: number; letter_preview: string; share_token: string | null; share_path: string | null; share_url: string | null; created_at: string };
+type LetterDetail = { id: string; pen_name: string; persona: any; letter_content: string; signature: string; reply: any[]; status: string; error?: string | null; share_token: string | null; share_url: string | null; visitor_id?: string | null; created_at: string; updated_at?: string };
 
 const inputCls = 'w-full rounded-lg border border-ink/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
@@ -27,7 +29,7 @@ async function adminSend<T>(p: string, method: string, body?: unknown): Promise<
 
 export default function Admin() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'letter-feedback' | 'admins'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'letter-feedback' | 'letter-letters' | 'admins'>('stats');
   const [stats, setStats] = useState<Stats | null>(null);
   const [letterStats, setLetterStats] = useState<{ days: number; total: number; done: number; trend: { date: string; count: number }[] } | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -42,6 +44,15 @@ export default function Admin() {
   const [letterFeedback, setLetterFeedback] = useState<LetterFeedbackItem[]>([]);
   const [letterFbFilter, setLetterFbFilter] = useState('');
   const [letterFbErr, setLetterFbErr] = useState('');
+  const [letterItems, setLetterItems] = useState<LetterItem[]>([]);
+  const [letterItemsTotal, setLetterItemsTotal] = useState(0);
+  const [letterQ, setLetterQ] = useState('');
+  const [letterStatusFilter, setLetterStatusFilter] = useState('');
+  const [letterSharedOnly, setLetterSharedOnly] = useState(false);
+  const [letterErr, setLetterErr] = useState('');
+  const [letterBusy, setLetterBusy] = useState(false);
+  const [letterDetail, setLetterDetail] = useState<LetterDetail | null>(null);
+  const [letterDetailBusy, setLetterDetailBusy] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '', confirm: '' });
   const [pwMsg, setPwMsg] = useState('');
   const [personaOptions, setPersonaOptions] = useState<any[]>([]);
@@ -317,6 +328,34 @@ export default function Admin() {
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
 
+  const loadLetterItems = async () => {
+    try {
+      setLetterBusy(true); setLetterErr('');
+      const q = new URLSearchParams();
+      if (letterQ) q.set('q', letterQ);
+      if (letterStatusFilter) q.set('status', letterStatusFilter);
+      if (letterSharedOnly) q.set('shared', '1');
+      q.set('page_size', '50');
+      const d = await adminGet<{ list: LetterItem[]; total: number }>('/letter-letters?' + q.toString());
+      setLetterItems(d.list || []); setLetterItemsTotal(d.total || 0);
+    } catch (e: any) { setLetterErr(e.message); setLetterItems([]); setLetterItemsTotal(0); }
+    finally { setLetterBusy(false); }
+  };
+
+  const openLetterDetail = async (id: string) => {
+    try {
+      setLetterDetailBusy(true); setLetterErr('');
+      const d = await adminGet<{ letter: LetterDetail }>('/letter-letters/' + id);
+      setLetterDetail(d.letter);
+    } catch (e: any) { setLetterErr(e.message); }
+    finally { setLetterDetailBusy(false); }
+  };
+
+  const copyLetterUrl = async (url: string) => {
+    try { await navigator.clipboard.writeText(url); flash('分享链接已复制'); }
+    catch { flash('复制失败，请手动选中链接'); }
+  };
+
   const logout = () => { localStorage.removeItem('am_admin_token'); nav('/admin/login'); };
 
   const delUser = async (u: AdminUser) => {
@@ -368,7 +407,7 @@ export default function Admin() {
         </header>
 
         <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-white/5 p-1 text-sm">
-          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['letter-feedback', '信笺反馈'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
+          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['letter-feedback', '信笺反馈'], ['letter-letters', '信笺信件'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={`min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 transition sm:px-4 ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
           ))}
         </nav>
@@ -494,6 +533,107 @@ export default function Admin() {
             </div>
           </div>
         )}
+
+        {tab === 'letter-letters' && (
+          <div className="rounded-2xl bg-white/5 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-serif text-lg font-semibold">信笺信件（{letterItemsTotal}）</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex gap-1 rounded-lg bg-white/5 p-1 text-xs">
+                  {[['', '全部'], ['done', '已回信'], ['error', '失败'], ['writing', '生成中']].map(([k, v]) => (
+                    <button key={k} onClick={() => setLetterStatusFilter(k)}
+                      className={'rounded-md px-3 py-1.5 transition ' + (letterStatusFilter === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper')}>{v}</button>
+                  ))}
+                </div>
+                <button onClick={() => setLetterSharedOnly(v => !v)}
+                  className={'rounded-lg px-3 py-1.5 text-xs transition ' + (letterSharedOnly ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/5 text-paper/60 hover:text-paper')}>只看已分享</button>
+                <input value={letterQ} onChange={e => setLetterQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') loadLetterItems(); }}
+                  placeholder="搜笔名 / 收信人 / 正文" className="w-44 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-paper outline-none focus:border-accent" />
+                <Button onClick={loadLetterItems}>查询</Button>
+              </div>
+            </div>
+            {letterErr && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-300">{letterErr}</p>}
+            <div className="space-y-2">
+              {letterItems.map(it => (
+                <div key={it.id} className="rounded-xl bg-white/5 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-paper/50">
+                      <span className="text-paper/85">{it.pen_name || '匿名'}</span>
+                      {' → '}
+                      <span className="text-paper/85">{it.persona_name || '未知'}</span>
+                      {' · '}{new Date(it.created_at).toLocaleString('zh-CN')}
+                      {' · 回信 '}{it.reply_count}{' 段'}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {it.status === 'done' && <Badge color="green">已回信</Badge>}
+                      {it.status === 'error' && <span className="rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs text-red-300">失败</span>}
+                      {(it.status === 'writing' || it.status === 'replying') && <Badge color="amber">生成中</Badge>}
+                      <button onClick={() => openLetterDetail(it.id)} className="rounded-full bg-white/10 px-3 py-1 text-xs text-paper/70 transition hover:bg-white/20">查看内容</button>
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-6 text-paper/70">{it.letter_preview}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {it.share_url ? (
+                      <>
+                        <a href={it.share_url} target="_blank" rel="noreferrer" className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/25">打开分享页</a>
+                        <button onClick={() => copyLetterUrl(it.share_url!)} className="rounded-full bg-white/10 px-3 py-1 text-xs text-paper/70 transition hover:bg-white/20">复制链接</button>
+                        <span className="max-w-full truncate text-[11px] text-paper/35">{it.share_url}</span>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-paper/35">未分享</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {!letterBusy && letterItems.length === 0 && <p className="py-8 text-center text-paper/40">暂无信件（点「查询」拉取）</p>}
+              {letterBusy && <p className="py-8 text-center text-paper/40">加载中…</p>}
+            </div>
+          </div>
+        )}
+
+        <Modal open={!!letterDetail} onClose={() => setLetterDetail(null)}
+          title={letterDetail ? `${letterDetail.pen_name || '匿名'} → ${letterDetail.persona?.name || '未知'}` : '信件详情'} wide>
+          {letterDetailBusy && <p className="py-6 text-center text-ink/50">加载中…</p>}
+          {letterDetail && !letterDetailBusy && (
+            <div className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-ink/60">
+                <span>{new Date(letterDetail.created_at).toLocaleString('zh-CN')}</span>
+                {letterDetail.status === 'done' && <Badge color="green">已回信</Badge>}
+                {letterDetail.status === 'error' && <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">失败</span>}
+                {letterDetail.persona?.voice_name && <span>音色：{letterDetail.persona.voice_name}</span>}
+              </div>
+
+              {letterDetail.share_url ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-ink/5 px-3 py-2">
+                  <span className="text-xs text-ink/60">分享链接</span>
+                  <a href={letterDetail.share_url} target="_blank" rel="noreferrer" className="break-all text-xs text-accent underline">{letterDetail.share_url}</a>
+                  <button onClick={() => copyLetterUrl(letterDetail.share_url!)} className="rounded-full bg-ink/10 px-3 py-1 text-xs text-ink/70 transition hover:bg-ink/20">复制</button>
+                </div>
+              ) : (
+                <p className="rounded-lg bg-ink/5 px-3 py-2 text-xs text-ink/50">这封信尚未开启分享，暂无分享链接</p>
+              )}
+
+              <div>
+                <h4 className="mb-1 font-semibold text-ink/80">来信原文</h4>
+                <p className="whitespace-pre-wrap rounded-lg bg-ink/5 px-3 py-2 leading-6 text-ink/85">{letterDetail.letter_content}</p>
+              </div>
+
+              <div>
+                <h4 className="mb-1 font-semibold text-ink/80">回信（{letterDetail.reply?.length || 0} 段）</h4>
+                {letterDetail.error && <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600">{letterDetail.error}</p>}
+                <div className="space-y-2">
+                  {(letterDetail.reply || []).map((seg: any, i: number) => (
+                    <p key={i} className="whitespace-pre-wrap rounded-lg bg-ink/5 px-3 py-2 leading-6 text-ink/85">
+                      {typeof seg === 'string' ? seg : (seg?.text || '')}
+                    </p>
+                  ))}
+                  {(!letterDetail.reply || letterDetail.reply.length === 0) && <p className="text-ink/40">暂无回信</p>}
+                </div>
+                {letterDetail.signature && <p className="mt-2 text-right text-xs text-ink/60">落款：{letterDetail.signature}</p>}
+              </div>
+            </div>
+          )}
+        </Modal>
 
         {tab === 'settings' && settings && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
