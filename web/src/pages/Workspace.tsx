@@ -137,8 +137,9 @@ export default function Workspace() {
     if (Date.now() - localEditAtRef.current < 1200) return; // 本地正在输入，跳过远端覆盖
     const cid = chapterIdRef.current;
     if (!cid) return;
-    setChapter(prev => (prev && prev.id === cid) ? { ...prev, content, word_count: content.length } : prev);
-    setChapters(prev => prev.map(c => c.id === cid ? { ...c, content, word_count: content.length } : c));
+    // 内容与本地一致时保持原对象：避免无谓重渲染导致输入光标位置被重置
+    setChapter(prev => (prev && prev.id === cid) ? (prev.content === content ? prev : { ...prev, content, word_count: content.length }) : prev);
+    setChapters(prev => prev.map(c => c.id === cid ? (c.content === content ? c : { ...c, content, word_count: content.length }) : c));
   }, []);
   const { peers, cursors, reportCursor, sendContent } = usePresence(projectId, chapter?.id || '', token || '', handleRemoteContent);
   const [convs, setConvs] = useState<Conversation[]>([]);
@@ -254,6 +255,11 @@ export default function Workspace() {
     } else {
       setChapter(prev => {
         const ch = prev && d.chapters.find(c => c.id === prev.id) ? d.chapters.find(c => c.id === prev.id)! : d.chapters[0];
+        // 本地刚编辑过：保留本地正文，不用服务端（可能落后于本地）的版本覆盖。
+        // 自动保存后这里会整章重载，覆盖会把输入光标顶到末尾（用户反馈「打字时突然跳到最后」）。
+        if (prev && prev.id === ch.id && prev.content !== ch.content && Date.now() - localEditAtRef.current < 5000) {
+          return { ...ch, content: prev.content, word_count: prev.content.length };
+        }
         const pending = getDraft(ch.id);
         if (pending && (pending.content !== ch.content || pending.title !== ch.title)) {
           queueMicrotask(() => {
