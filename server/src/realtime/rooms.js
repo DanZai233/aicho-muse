@@ -97,3 +97,10 @@ export function checkProjectAccess(userId, projectId) {
   if (!ids.has(userId)) return { ok: false, reason: 'forbidden' };
   return { ok: true, project: p };
 }
+
+// Broadcast only committed chapter state, never a temporary editor buffer.
+export function notifyChapterSaved(chapter) {
+  const room = rooms.get(chapter.project_id + ':' + chapter.id);
+  room?.broadcast({ type: 'content', persisted: true, chapterId: chapter.id,
+    memberId: 'server', content: chapter.content, rev: Date.now() });
+}

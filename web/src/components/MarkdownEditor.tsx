@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import type { SaveState } from '../lib/chapterSaves';
 import { marked } from 'marked';
 import { Button } from './ui';
 
@@ -7,7 +8,9 @@ marked.setOptions({ breaks: true, gfm: true });
 type Props = {
   value: string;
   onChange: (v: string) => void;
-  onSave: () => void;
+  onSave: () => Promise<void>;
+  saveState: SaveState;
+  onConflict: () => void;
   placeholder?: string;
   fontSize?: 'md' | 'lg';
   remoteCursors?: ReactNode;
@@ -30,27 +33,15 @@ const TOOLS = [
   { key: 'hr', label: '分割线', icon: '—', line: '---\n' },
 ];
 
-export default function MarkdownEditor({ value, onChange, onSave, placeholder, fontSize = 'lg', remoteCursors, taRef: externalTaRef, onActivity }: Props) {
+export default function MarkdownEditor({ value, onChange, onSave, saveState, onConflict, placeholder, fontSize = 'lg', remoteCursors, taRef: externalTaRef, onActivity }: Props) {
   const innerTaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTaRef || innerTaRef;
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
-  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
   const undoRef = useRef<string[]>([]);
   const redoRef = useRef<string[]>([]);
   const lastRef = useRef(value);
-  const saveTimer = useRef<any>(null);
-
-  // 自动保存（防抖 1.2s）
-  useEffect(() => {
-    setSaveState('saving');
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      onSave();
-      setSaveState('saved');
-    }, 1200);
-    return () => clearTimeout(saveTimer.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  // External refreshes synchronize the baseline without recording a phantom local edit.
+  useEffect(() => { lastRef.current = value; }, [value]);
 
   const handleChange = (v: string) => {
     // 撤销栈
@@ -149,8 +140,10 @@ export default function MarkdownEditor({ value, onChange, onSave, placeholder, f
           className="flex h-8 w-8 items-center justify-center rounded-md text-sm text-ink/60 hover:bg-accentlight/70 hover:text-ink">↷</button>
         <div className="ml-auto flex items-center gap-1">
           <span className={`mr-2 text-xs ${saveState === 'saved' ? 'text-ink/35' : 'text-amber-600'}`}>
-            {saveState === 'saved' ? '已保存 ✓' : '保存中…'}
+            {saveState === 'saved' ? '已保存 ✓' : saveState === 'saving' ? '保存中…' : saveState === 'conflict' ? '保存冲突 · 本地草稿已保留' : '保存失败 · 本地草稿已保留'}
           </span>
+          {saveState === 'conflict' ? <button onClick={onConflict} className="text-xs text-accent">核对冲突</button> : null}
+          {saveState === 'error' ? <button onClick={() => onSave().catch(() => {})} className="text-xs text-accent">重试保存</button> : null}
           <div className="flex rounded-lg bg-ink/5 p-0.5 text-xs">
             <button onClick={() => setMode('edit')} className={`rounded-md px-2.5 py-1 transition ${mode === 'edit' ? 'bg-surface text-ink shadow-sm' : 'text-ink/50'}`}>编辑</button>
             <button onClick={() => setMode('preview')} className={`rounded-md px-2.5 py-1 transition ${mode === 'preview' ? 'bg-surface text-ink shadow-sm' : 'text-ink/50'}`}>预览</button>

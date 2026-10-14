@@ -38,7 +38,7 @@ export function attachPresenceServer(httpServer) {
     const state = { isAlive: true, memberId: null, room: null };
     ws._state = state; // 供周期清理读取
     heartbeat(ws, state);
-    console.log('[Realtime] connection', user ? user.id.slice(0, 8) : 'unauth', req.url?.slice(0, 40));
+    console.log('[Realtime] connection', user ? user.id.slice(0, 8) : 'unauth', '/ws');
 
     if (!user) {
       ws.close(4001, 'unauthorized');
@@ -69,17 +69,14 @@ export function attachPresenceServer(httpServer) {
           removeRoomIfEmpty(state.room.projectId, state.room.chapterId);
         }
 
+        const chapter = db().chapters.find(c => c.id === chapterId && c.project_id === projectId);
+        if (!chapter) return;
         const room = getRoom(projectId, chapterId);
         const memberId = user.id;
         room.add(memberId, ws, user);
         state.room = room;
         state.memberId = memberId;
         console.log('[Realtime] room', room.projectId?.slice(0, 8), room.chapterId?.slice(0, 8), 'members=', [...room.members.keys()].map(id => id.slice(0, 8)).join(','));
-
-        // 新成员加入即同步：把房间最新正文推给他（若存在）
-        if (room.latestContent) {
-          send({ type: 'content', memberId: room.latestContent.memberId, content: room.latestContent.content, rev: room.latestContent.rev });
-        }
 
         // 告知新加入者当前活跃成员
         send({
@@ -115,7 +112,9 @@ export function attachPresenceServer(httpServer) {
 
       // 正文更新（远端协作者输入内容 → 广播给房间其他人）
       if (msg.type === 'content' && state.room) {
-        const content = typeof msg.content === 'string' ? msg.content : '';
+        const chapter = db().chapters.find(c => c.id === state.room.chapterId && c.project_id === state.room.projectId);
+        if (!chapter || msg.content !== chapter.content) return;
+        const content = chapter.content;
         const rev = Math.max(0, Math.floor(Number(msg.rev) || 0));
         state.room.publishContent(state.memberId, content, rev);
         return;

@@ -42,13 +42,17 @@ export class PresenceClient {
     this.opts = opts;
   }
 
+  private stopped = false;
+
   connect() {
+    if (this.stopped) return;
     if (this.ws) return;
     const url = presenceWsUrl() + '?token=' + encodeURIComponent(this.opts.token);
     const ws = new WebSocket(url);
     this.ws = ws;
 
     ws.onopen = () => {
+      this.retryCount = 0;
       this.connected = true;
       this.emit('status', true);
       this.joinRoom();
@@ -62,7 +66,9 @@ export class PresenceClient {
         case 'peer-joined': this.emit('peerJoined', msg.peer); break;
         case 'peer-left': this.emit('peerLeft', msg.memberId); break;
         case 'cursor': this.emit('cursor', msg.memberId, msg.cursor); break;
-        case 'content': this.emit('content', msg.memberId, msg.content, msg.rev || 0); break;
+        case 'content':
+          if (msg.persisted === true && msg.chapterId === this.opts.chapterId) this.emit('content', msg.memberId, msg.content, msg.rev || 0);
+          break;
         default: break;
       }
     };
@@ -75,7 +81,7 @@ export class PresenceClient {
       // 简单重连（指数退避，最大 30s）
       const delay = Math.min(30_000, 1000 * Math.pow(1.6, (this.retryCount || 0)));
       this.retryCount = (this.retryCount || 0) + 1;
-      this.reconnectTimer = setTimeout(() => this.connect(), delay);
+      if (!this.stopped) this.reconnectTimer = setTimeout(() => this.connect(), delay);
     };
     ws.onerror = () => { /* close 统一处理 */ };
   }
@@ -139,6 +145,7 @@ export class PresenceClient {
   }
 
   disconnect() {
+    this.stopped = true;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.stopReportLoop();
     if (this.ws) {

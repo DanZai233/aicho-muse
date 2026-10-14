@@ -1,3 +1,4 @@
+import { notifyChapterSaved } from '../realtime/rooms.js';
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid, pushChapterSnapshot, latestSnapshotOf } from '../db.js';
@@ -37,6 +38,7 @@ router.post('/projects/:pid/chapters', (req, res) => {
   const proj = d.projects.find(p => p.id === req.params.pid);
   if (proj) proj.updated_at = now;
   saveDb();
+  notifyChapterSaved(ch);
   res.json({ code: 0, data: { chapter: ch } });
 });
 
@@ -60,6 +62,10 @@ router.patch('/chapters/:id', (req, res) => {
   const ch = d.chapters.find(c => c.id === req.params.id);
   if (!ch || !canView(req, projectOf(ch))) return res.status(404).json({ code: 40401, message: '章节不存在' });
   if (!canEdit(req, projectOf(ch))) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
+  if ((req.body.base_content !== undefined && req.body.base_content !== ch.content)
+    || (req.body.base_title !== undefined && req.body.base_title !== ch.title)) {
+    return res.status(409).json({ code: 40901, message: '章节已在其他窗口更新，本地草稿已保留，请核对后再保存' });
+  }
   const oldContent = ch.content;
   const changed = (req.body.content !== undefined && req.body.content !== oldContent);
   for (const k of ['title', 'content', 'status', 'order_index']) {
@@ -73,6 +79,7 @@ router.patch('/chapters/:id', (req, res) => {
   const proj = d.projects.find(p => p.id === ch.project_id);
   if (proj) proj.updated_at = ch.updated_at;
   saveDb();
+  notifyChapterSaved(ch);
   res.json({ code: 0, data: { chapter: ch } });
 });
 
@@ -110,6 +117,7 @@ router.post('/chapters/:id/restore', (req, res) => {
   ch.word_count = snap.content.length;
   ch.updated_at = new Date().toISOString();
   saveDb();
+  notifyChapterSaved(ch);
   res.json({ code: 0, data: { chapter: ch } });
 });
 

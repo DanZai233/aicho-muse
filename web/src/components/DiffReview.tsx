@@ -24,12 +24,13 @@ function isQaSegment(seg: string) {
   return /^(你觉得|你怎么看|怎么样|要不要|想试试|试试看|感兴趣吗|想听|要不要我)/.test(t);
 }
 
-export default function DiffReview({ message, conversationId, chapter, chapters, onAdopted, onClose }: {
+export default function DiffReview({ message, conversationId, chapter, chapters, beforeAdopt, onAdopted, onClose }: {
   message: Message; conversationId: string; chapter: Chapter | null;
-  chapters: Chapter[]; onAdopted: (adoptedText: string, full: boolean) => void; onClose: () => void;
+  chapters: Chapter[]; beforeAdopt: (id: string) => Promise<Chapter | undefined>; onAdopted: (adoptedText: string, full: boolean) => void; onClose: () => void;
 }) {
   const [chapterId, setChapterId] = useState(chapter?.id || 'new');
   const [adopting, setAdopting] = useState<string | null>(null);
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const bodyParagraphs = chapter ? splitParagraphs(chapter.content) : [];
@@ -42,16 +43,18 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
   const adopt = async (seg: string, full: boolean) => {
     if (busy || isFull) return;
     setAdopting(full ? '__all__' : seg.slice(0, 20));
-    setBusy(true);
+    setBusy(true); setError('');
     try {
+      const target = chapterId !== 'new' ? await beforeAdopt(chapterId) : undefined;
       await api.post('/conversations/' + conversationId + '/adopt', {
+        base_content: target?.content, base_title: target?.title,
         message_id: message.id,
         chapter_id: chapterId === 'new' ? null : chapterId,
         mode: full ? undefined : 'segment',
         text: full ? undefined : seg,
       });
       onAdopted(seg, full);
-    } finally {
+    } catch (e: any) { setError(e.message || '采纳失败，正文未修改'); } finally {
       setBusy(false); setAdopting(null);
     }
   };
@@ -63,6 +66,7 @@ export default function DiffReview({ message, conversationId, chapter, chapters,
         <button onClick={onClose} className="text-xs text-ink/35 hover:text-ink">✕</button>
       </div>
 
+      {error && <p role="alert" className="mb-2 text-xs text-red-700">{error}</p>}
       <div className="mb-2">
         <select value={chapterId} onChange={e => setChapterId(e.target.value)}
           className="w-full rounded-lg border border-emerald-200 bg-surface px-2.5 py-1.5 text-xs outline-none">

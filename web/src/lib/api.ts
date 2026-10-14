@@ -86,7 +86,7 @@ export type Project = {
 
 export type Chapter = {
   id: string; project_id: string; title: string; content: string;
-  order_index: number; status: string; word_count: number;
+  order_index: number; status: string; word_count: number; updated_at?: string;
 };
 
 export type Conversation = {

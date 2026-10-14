@@ -4,6 +4,7 @@ import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, Ci
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input, Spinner } from '../components/ui';
+import { ChapterSaves, type SaveState } from '../lib/chapterSaves';
 import MarkdownEditor from '../components/MarkdownEditor';
 import BookCover from '../components/BookCover';
 import DiffReview from '../components/DiffReview';
@@ -128,20 +129,37 @@ export default function Workspace() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const { token, user: me } = useAuth();
-  // 协作内容同步：本地输入防抖后广播；远端内容在本地未输入时应用（避免覆盖正在写的内容）
-  const localEditAtRef = useRef(0);
+  const [saveConflict, setSaveConflict] = useState<Chapter | null>(null);
+  const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+  const saveQueueRef = useRef<ChapterSaves | null>(null);
+  if (!saveQueueRef.current) saveQueueRef.current = new ChapterSaves({
+    save: async (draft, base) => (await api.patch<{ chapter: Chapter }>('/chapters/' + draft.id, {
+      content: draft.content, title: draft.title, base_content: base.content, base_title: base.title, note: '编辑器自动保存',
+    })).chapter,
+    change: (saved, state) => {
+      setSaveStates(prev => ({ ...prev, [saved.id]: state }));
+      setChapter(prev => prev?.id === saved.id ? saved : prev);
+      setChapters(prev => prev.map(c => c.id === saved.id ? saved : c));
+    },
+    draft: (draft, base) => saveDraft(draft.id, draft.content, draft.title, base),
+    clear: clearDraft,
+  });
+  const saves = saveQueueRef.current;
   const chapterIdRef = useRef('');
   chapterIdRef.current = chapter?.id || '';
-  const contentSendTimer = useRef<any>(null);
-  const handleRemoteContent = useCallback((_memberId: string, content: string) => {
-    if (Date.now() - localEditAtRef.current < 1200) return; // 本地正在输入，跳过远端覆盖
-    const cid = chapterIdRef.current;
-    if (!cid) return;
-    // 内容与本地一致时保持原对象：避免无谓重渲染导致输入光标位置被重置
-    setChapter(prev => (prev && prev.id === cid) ? (prev.content === content ? prev : { ...prev, content, word_count: content.length }) : prev);
-    setChapters(prev => prev.map(c => c.id === cid ? (c.content === content ? c : { ...c, content, word_count: content.length }) : c));
-  }, []);
-  const { peers, cursors, reportCursor, sendContent } = usePresence(projectId, chapter?.id || '', token || '', handleRemoteContent);
+  const handleRemoteContent = useCallback((_memberId: string, _content: string) => {
+    const id = chapterIdRef.current;
+    if (!id) return;
+    const version = saves.capture().get(id);
+    // Only persisted server content is authoritative; never write another user's transient buffer.
+    api.get<{ chapter: Chapter }>('/chapters/' + id).then(({ chapter: remote }) => {
+      const merged = saves.receive(remote, version);
+      setChapter(prev => prev?.id === id ? merged : prev);
+      setChapters(prev => prev.map(c => c.id === id ? merged : c));
+    }).catch(() => {});
+  }, [saves]);
+  const { peers, cursors, reportCursor } = usePresence(projectId, chapter?.id || '', token || '', handleRemoteContent);
+  useEffect(() => () => saves.stopTimers(), [saves]);
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [conv, setConv] = useState<Conversation | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -235,8 +253,10 @@ export default function Workspace() {
     } catch { /* ignore */ }
   }, []);
   const loadProject = useCallback(async (id: string) => {
+    const versions = saves.capture();
     const d = await api.get<{ project: Project; chapters: Chapter[] }>('/projects/' + id);
     setProject(d.project);
+    d.chapters = d.chapters.map(c => saves.receive(c, versions.get(c.id)));
     setChapters(d.chapters);
     loadStructure(id);
     setPaperInfoKey(k => k + 1);
@@ -254,24 +274,23 @@ export default function Workspace() {
       setChapters([ch.chapter]); setChapter(ch.chapter);
     } else {
       setChapter(prev => {
-        const ch = prev && d.chapters.find(c => c.id === prev.id) ? d.chapters.find(c => c.id === prev.id)! : d.chapters[0];
-        // 本地刚编辑过：保留本地正文，不用服务端（可能落后于本地）的版本覆盖。
-        // 自动保存后这里会整章重载，覆盖会把输入光标顶到末尾（用户反馈「打字时突然跳到最后」）。
-        if (prev && prev.id === ch.id && prev.content !== ch.content && Date.now() - localEditAtRef.current < 5000) {
-          return { ...ch, content: prev.content, word_count: prev.content.length };
-        }
+        const selected = prev && d.chapters.find(c => c.id === prev.id) ? d.chapters.find(c => c.id === prev.id)! : d.chapters[0];
+        const ch = saves.current(selected.id) || selected;
         const pending = getDraft(ch.id);
         if (pending && (pending.content !== ch.content || pending.title !== ch.title)) {
           queueMicrotask(() => {
             setDraftRestored('已恢复「' + pending.title + '」的离线草稿');
             setTimeout(() => setDraftRestored(null), 4000);
           });
-          return { ...ch, content: pending.content, title: pending.title, word_count: pending.content.length };
+          const restored = { ...ch, content: pending.content, title: pending.title, word_count: pending.content.length };
+          const base = { ...ch, content: pending.base_content ?? ch.content, title: pending.base_title ?? ch.title };
+          queueMicrotask(() => saves.edit(restored, base));
+          return restored;
         }
         return ch;
       });
     }
-  }, [loadStructure]);
+  }, [loadStructure, saves]);
   const loadConvs = useCallback(async () => {
     try { setConvs((await api.get<{ list: Conversation[] }>('/conversations')).list); } catch { /* ignore */ }
   }, []);
@@ -321,15 +340,15 @@ export default function Workspace() {
   useEffect(() => {
     const flush = async () => {
       for (const d of listPending()) {
-        try {
-          await api.patch('/chapters/' + d.id, { content: d.content, note: '离线草稿同步' });
-          clearDraft(d.id);
-        } catch { /* 仍离线则保留 */ }
+        if (!saves.current(d.id)) continue;
+        try { await saves.flush(d.id); } catch { /* Keep the local draft and conflict indicator. */ }
       }
     };
     window.addEventListener('online', flush);
-    return () => window.removeEventListener('online', flush);
-  }, []);
+    const pagehide = () => { flush().catch(() => {}); };
+    window.addEventListener('pagehide', pagehide);
+    return () => { window.removeEventListener('online', flush); window.removeEventListener('pagehide', pagehide); };
+  }, [saves]);
   useEffect(() => {
     if (!project) return;
     const match = convs.find(c => c.project_id === project.id);
@@ -490,26 +509,25 @@ export default function Workspace() {
     if (go && t) send(t);
   };
 
-  const saveChapter = async (ch: Chapter) => {
-    try {
-      const d = await api.patch<{ chapter: Chapter }>('/chapters/' + ch.id, { content: ch.content, note: '编辑器自动保存' });
-      clearDraft(ch.id);
-      setChapters(prev => prev.map(c => c.id === d.chapter.id ? d.chapter : c));
-    } catch {
-      saveDraft(ch.id, ch.content, ch.title);
-      setDraftRestored('当前处于离线状态，内容已保存在本地，联网后自动同步');
-      setTimeout(() => setDraftRestored(null), 4000);
-    }
-    if (project) loadProject(project.id);
-  };
-  const updateContent = (content: string) => {
+  const updateChapter = (patch: Partial<Chapter>) => {
     if (!chapter) return;
-    localEditAtRef.current = Date.now();
-    const ch = { ...chapter, content, word_count: content.length };
-    setChapter(ch); setChapters(prev => prev.map(c => c.id === ch.id ? ch : c));
-    if (contentSendTimer.current) clearTimeout(contentSendTimer.current);
-    contentSendTimer.current = setTimeout(() => sendContent(content), 500);
+    const current = saves.current(chapter.id) || chapter;
+    const next = { ...current, ...patch };
+    next.word_count = next.content.length;
+    saves.edit(next);
   };
+  const inspectConflict = async () => {
+    if (!chapter) return;
+    try { setSaveConflict((await api.get<{ chapter: Chapter }>('/chapters/' + chapter.id)).chapter); }
+    catch (e: any) { setNotice(e.message || '暂时无法加载服务器版本'); }
+  };
+  const resolveConflict = async () => {
+    if (!saveConflict) return;
+    if (!confirm('已核对双方内容，确认用本地草稿替换服务器版本？服务器原文会保留在版本历史中。')) return;
+    try { await saves.rebase(saveConflict.id, saveConflict); setSaveConflict(null); }
+    catch (e: any) { setNotice(e.message || '保存失败，本地草稿已保留'); }
+  };
+  const updateContent = (content: string) => updateChapter({ content });
 
   // 论文模式：在正文光标处插入引用标记 [n]
   const insertCitationMark = (idx: number) => {
@@ -622,8 +640,10 @@ export default function Workspace() {
     if (!chapter) return;
     const next = chapter.status === 'final' ? 'draft' : chapter.status === 'reviewed' ? 'final' : 'reviewed';
     try {
+      await saves.flush(chapter.id);
       const d = await api.patch<{ chapter: Chapter }>('/chapters/' + chapter.id, { status: next });
-      setChapter(d.chapter); setChapters(prev => prev.map(c => c.id === d.chapter.id ? d.chapter : c));
+      const merged = saves.receive(d.chapter);
+      setChapter(prev => prev?.id === merged.id ? merged : prev); setChapters(prev => prev.map(c => c.id === merged.id ? merged : c));
     } catch { /* ignore */ }
   };
 
@@ -639,7 +659,9 @@ export default function Workspace() {
   const deleteChapter = async () => {
     if (!chapter) return;
     if (!confirm('删除章节「' + chapter.title + '」？30 秒内可撤销。')) return;
+    await saves.flush(chapter.id).catch(() => {});
     const removed = chapter;
+    saves.forget(chapter.id);
     await api.del('/chapters/' + chapter.id);
     const rest = chapters.filter(c => c.id !== chapter.id);
     setChapters(rest); setChapter(rest[0] || null);
@@ -661,15 +683,20 @@ export default function Workspace() {
   };
   const restoreVersion = async (vid: string) => {
     if (!confirm('恢复到该版本？当前内容会保留为一条新记录。')) return;
-    await api.post('/chapters/' + chapter!.id + '/restore', { version_id: vid });
+    if (!chapter) return;
+    const id = chapter.id;
+    await saves.flush(id);
+    const version = saves.capture().get(id);
+    await api.post('/chapters/' + id + '/restore', { version_id: vid });
     setShowVersions(false);
-    const fresh = (await api.get<{ chapter: Chapter }>('/chapters/' + chapter!.id)).chapter;
-    setChapter(fresh); setChapters(prev => prev.map(c => c.id === fresh.id ? fresh : c));
+    const fresh = saves.receive((await api.get<{ chapter: Chapter }>('/chapters/' + id)).chapter, version);
+    setChapter(prev => prev?.id === fresh.id ? fresh : prev); setChapters(prev => prev.map(c => c.id === fresh.id ? fresh : c));
   };
   const saveVersion = async () => {
     if (!chapter) return;
     setSaveVerBusy(true); setSaveVerMsg('');
     try {
+      await saves.flush(chapter.id);
       const d = await api.post<{ pushed: boolean; unchanged: boolean }>('/chapters/' + chapter.id + '/save-version', { note: '手动保存' });
       setSaveVerMsg(d.pushed ? '✅ 已保存一个新版本' : 'ℹ️ 内容与上一版本相同，未重复保存');
       setTimeout(() => setSaveVerMsg(''), 3000);
@@ -684,32 +711,39 @@ export default function Workspace() {
   const [toolMode, setToolMode] = useState<'polish' | 'expand' | 'condense' | 'continue' | 'restyle'>('polish');
   const [toolBusy, setToolBusy] = useState(false);
   const [toolResult, setToolResult] = useState('');
+  const toolSource = useRef<Chapter | null>(null);
   const [toolDiff, setToolDiff] = useState<{ type: string; old?: string; new?: string }[]>([]);
   const runTool = async (mode: typeof toolMode) => {
     if (!chapter) return;
     setToolMode(mode); setToolBusy(true); setToolResult(''); setToolDiff([]);
     try {
-      const d = await api.post<{ result: string; diff?: { type: string; old?: string; new?: string }[] }>('/tools/rewrite', { chapter_id: chapter.id, mode });
+      await saves.flush(chapter.id);
+      toolSource.current = { ...(saves.current(chapter.id) || chapter) };
+      const d = await api.post<{ result: string; base_content?: string; base_title?: string; diff?: { type: string; old?: string; new?: string }[] }>('/tools/rewrite', { chapter_id: chapter.id, mode });
+      if (toolSource.current && d.base_content !== undefined) toolSource.current = { ...toolSource.current, content: d.base_content, title: d.base_title || toolSource.current.title };
       setToolResult(d.result); setToolDiff(d.diff || []);
     } catch (e: any) { setToolResult('出错了：' + e.message); }
     finally { setToolBusy(false); }
   };
   const applyTool = async () => {
     if (!chapter || !toolResult) return;
-    // diff 里如果有删除/替换原段，先让用户确认（防止误删之前写的内容）
-    const deletes = toolDiff.filter(d => d.type === 'delete' || d.type === 'replace');
-    let mode = 'append';
-    if (deletes.length > 0) {
-      const preview = deletes.slice(0, 3).map(d => '· ' + (d.old || '').slice(0, 30) + (d.old && d.old.length > 30 ? '…' : '')).join('\n');
-      const ok = confirm('这次改动会删除/替换以下原文段落（共 ' + deletes.length + ' 处）：\n\n' + preview + '\n\n是否确认替换？选「取消」则只保留新增内容、原文不动。');
-      mode = ok ? 'replace' : 'append';
-    }
-    const d = await api.post<{ chapter: Chapter; applied: string }>('/tools/apply', { chapter_id: chapter.id, text: toolResult, mode });
-    await loadProject(project!.id);
-    setChapter(d.chapter);
-    setToolResult(''); setToolDiff([]);
-    setNotice(mode === 'replace' ? '已按新文本替换章节' : '已应用（原文保留，新增内容已加入）');
-    setTimeout(() => setNotice(null), 3000);
+    const source = toolSource.current;
+    if (!source || source.id !== chapter.id) { setNotice('请先为当前章节重新生成结果'); return; }
+    const mode = toolMode === 'continue' ? 'append' : 'replace';
+    if (mode === 'replace' && !confirm('用润色后的内容替换本章正文？原文会保留在版本历史中。取消则不修改正文。')) return;
+    setToolBusy(true);
+    try {
+      await saves.flush(chapter.id);
+      const d = await api.post<{ chapter: Chapter; applied: string }>('/tools/apply', {
+        chapter_id: chapter.id, text: toolResult, mode, base_content: source.content, base_title: source.title,
+      });
+      const merged = saves.receive(d.chapter);
+      setChapter(prev => prev?.id === merged.id ? merged : prev);
+      setChapters(prev => prev.map(c => c.id === merged.id ? merged : c));
+      setToolResult(''); setToolDiff([]);
+      setNotice(mode === 'replace' ? '已替换正文，原文保留在版本历史中' : '已追加续写内容');
+    } catch (e: any) { setNotice(e.message || '应用失败，本地正文已保留'); }
+    finally { setToolBusy(false); }
   };
   const runCheck = async () => {
     if (!chapter) return;
@@ -1170,7 +1204,8 @@ export default function Workspace() {
                 <div className="flex min-h-0 flex-1 flex-col bg-paper">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-ink/10 bg-surface/80 px-4 py-2 sm:px-5">
                     <span className="text-xs text-ink/35">第 {chapters.findIndex(c => c.id === chapter.id) + 1} 章</span>
-                    <input value={chapter.title} onChange={e => setChapter({ ...chapter, title: e.target.value })}
+                    <label htmlFor="chapter-title" className="text-xs text-ink/50">章节名称</label>
+                    <input id="chapter-title" value={chapter.title} onChange={e => updateChapter({ title: e.target.value })} aria-label="章节名称" title="点击修改章节名称，自动保存"
                       className="min-w-0 flex-1 bg-transparent font-serif text-base font-semibold outline-none" />
                     <span className="text-xs text-ink/35">{chapter.word_count} 字</span>
                     {project?.genre === 'paper' && (
@@ -1195,7 +1230,10 @@ export default function Workspace() {
                       <MarkdownEditor
                         value={chapter.content}
                         onChange={updateContent}
-                        onSave={() => saveChapter(chapter)}
+                        key={chapter.id}
+                        saveState={saveStates[chapter.id] || 'saved'}
+                        onConflict={inspectConflict}
+                        onSave={() => saves.flush(chapter.id)}
                         placeholder="在这一页写下你的故事…（支持 Markdown）"
                         taRef={editorRef}
                         onActivity={handleEditorSelection}
@@ -1243,7 +1281,7 @@ export default function Workspace() {
                         <textarea value={toolResult} onChange={e => setToolResult(e.target.value)} rows={5}
                           className="font-creative w-full rounded-lg border border-ink/10 bg-paper/60 px-3 py-2 text-sm leading-6 outline-none" />
                         <div className="mt-1.5 flex gap-2">
-                          <Button variant="subtle" onClick={applyTool} className="flex-1 text-xs">应用到章节</Button>
+                          <Button variant="subtle" onClick={applyTool} disabled={toolBusy} className="flex-1 text-xs">{toolMode === 'continue' ? '追加续写到章节' : '替换章节正文'}</Button>
                           <Button variant="ghost" onClick={() => setToolResult('')} className="text-xs">放弃</Button>
                         </div>
                       </div>
@@ -1340,7 +1378,7 @@ export default function Workspace() {
                 </div>
               )}
               {diffMsg && conv && (
-                <DiffReview message={diffMsg} conversationId={conv.id} chapter={chapter} chapters={chapters} onAdopted={handleAdopted} onClose={() => setDiffMsg(null)} />
+                <DiffReview message={diffMsg} conversationId={conv.id} chapter={chapter} chapters={chapters} beforeAdopt={async id => { await saves.flush(id); return saves.current(id); }} onAdopted={handleAdopted} onClose={() => setDiffMsg(null)} />
               )}
             </div>
 
@@ -1690,6 +1728,14 @@ export default function Workspace() {
         </div>
       </Modal>
 
+      <Modal open={!!saveConflict} onClose={() => setSaveConflict(null)} title="核对保存冲突" wide>
+        {saveConflict && <div className="space-y-3">
+          <p className="text-sm text-ink/60">你的修改保存在本地草稿中。请先核对服务器上的新内容，再决定是否替换。</p>
+          <label className="block text-sm">服务器版本<textarea readOnly value={saveConflict.content} className="mt-1 h-40 w-full rounded border p-2" /></label>
+          <label className="block text-sm">本地草稿<textarea readOnly value={saves.current(saveConflict.id)?.content || ''} className="mt-1 h-40 w-full rounded border p-2" /></label>
+          <Button onClick={resolveConflict}>确认使用本地草稿</Button>
+        </div>}
+      </Modal>
       {adoptDone && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">{adoptDone}</div>}
       {undoInfo && (
         <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-ink px-5 py-2.5 text-sm text-paper shadow-lift animate-fade-up">

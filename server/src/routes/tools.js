@@ -1,3 +1,4 @@
+import { notifyChapterSaved } from '../realtime/rooms.js';
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid, pushChapterSnapshot } from '../db.js';
@@ -65,9 +66,11 @@ router.post('/rewrite', async (req, res) => {
     return res.status(400).json({ code: 40001, message: '不支持的写作工具模式' });
   }
   let text = content || '';
+  let sourceChapter = null;
   if (chapter_id) {
     const ch = ownChapter(req, chapter_id);
     if (!ch) return res.status(404).json({ code: 40401, message: '章节不存在' });
+    sourceChapter = { content: ch.content, title: ch.title };
     if (target) {
       // 简单定位：按段落匹配
       const paras = (ch.content || '').split(/\n+/);
@@ -91,7 +94,7 @@ router.post('/rewrite', async (req, res) => {
       }
     }
     saveDb();
-    res.json({ code: 0, data: { ...out, diff } });
+    res.json({ code: 0, data: { ...out, diff, base_content: sourceChapter?.content, base_title: sourceChapter?.title } });
   } catch (e) {
     res.status(500).json({ code: 50001, message: e.message });
   }
@@ -118,6 +121,11 @@ router.post('/apply', (req, res) => {
   const { chapter_id, text, mode } = req.body || {};
   const ch = ownChapter(req, chapter_id);
   if (!ch) return res.status(404).json({ code: 40401, message: '章节不存在' });
+  if ((req.body.base_content !== undefined && req.body.base_content !== ch.content)
+    || (req.body.base_title !== undefined && req.body.base_title !== ch.title)) {
+    return res.status(409).json({ code: 40901, message: '正文已在生成结果后修改，请重新生成，避免覆盖新内容' });
+  }
+  if (mode !== 'replace' && mode !== 'append') return res.status(400).json({ code: 40001, message: '请选择替换或追加' });
   const d = db();
   const orig = ch.content || '';
   const incoming = String(text || '').trim();
@@ -152,6 +160,7 @@ router.post('/apply', (req, res) => {
   const proj = d.projects.find(p => p.id === ch.project_id);
   if (proj) proj.updated_at = ch.updated_at;
   saveDb();
+  notifyChapterSaved(ch);
   res.json({ code: 0, data: { chapter: ch, applied } });
 });
 

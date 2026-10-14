@@ -1,3 +1,4 @@
+import { notifyChapterSaved } from '../realtime/rooms.js';
 import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid, pushChapterSnapshot } from '../db.js';
@@ -278,6 +279,10 @@ router.post('/:id/adopt', (req, res) => {
   if (chapter_id) {
     targetChapter = d.chapters.find(ch => ch.id === chapter_id && ch.project_id === c.project_id);
     if (!targetChapter) return res.status(404).json({ code: 40401, message: '目标章节不存在' });
+    if ((req.body.base_content !== undefined && req.body.base_content !== targetChapter.content)
+      || (req.body.base_title !== undefined && req.body.base_title !== targetChapter.title)) {
+      return res.status(409).json({ code: 40901, message: '目标章节已更新，请核对正文后再采纳' });
+    }
     const now = new Date().toISOString();
     pushChapterSnapshot(d, targetChapter.id, targetChapter.content, '采纳对话内容前');
     targetChapter.content = (targetChapter.content ? targetChapter.content + '\n\n' : '') + adoptText.trim();
@@ -298,6 +303,7 @@ router.post('/:id/adopt', (req, res) => {
   // 标记消息已采纳
   msg.adopted_at = new Date().toISOString();
   saveDb();
+  notifyChapterSaved(targetChapter);
   res.json({ code: 0, data: { chapter: targetChapter, adopted: true } });
 });
 

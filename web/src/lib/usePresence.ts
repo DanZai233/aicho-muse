@@ -1,6 +1,7 @@
 // 实时光标 hook：管理 PresenceClient 生命周期，暴露远端成员/光标与上报方法
 // 章节切换时 join 新房间；组件卸载时断开
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useAuth } from './auth';
 import { PresenceClient, type Peer, type CursorPayload, type RemoteUser } from './presence';
 
 export type RemoteCursorEntry = { memberId: string; user: RemoteUser; cursor: CursorPayload };
@@ -11,6 +12,9 @@ export function usePresence(
   token: string | null,
   onRemoteContent?: (memberId: string, content: string, rev: number) => void,
 ) {
+  const { user } = useAuth();
+  const remoteRef = useRef(onRemoteContent);
+  remoteRef.current = onRemoteContent;
   const clientRef = useRef<PresenceClient | null>(null);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [cursors, setCursors] = useState<Record<string, RemoteCursorEntry>>({});
@@ -27,17 +31,19 @@ export function usePresence(
     if (!token || !projectId || !chapterId) return;
     setPeers([]);
     setCursors({});
-    const client = new PresenceClient({ projectId, chapterId, token, reportIntervalMs: 4000 });
+    const client = new PresenceClient({ projectId, chapterId, token, reportIntervalMs: 250 });
     clientRef.current = client;
 
     const offs = [
       client.on('peers', (list) => {
+        list = list.filter(p => p.user.id !== user?.id);
         setPeers(list);
         const next: Record<string, RemoteCursorEntry> = {};
         for (const p of list) if (p.cursor) next[p.memberId] = { memberId: p.memberId, user: p.user, cursor: p.cursor };
         setCursors(next);
       }),
       client.on('peerJoined', (peer) => {
+        if (peer.user.id === user?.id) return;
         setPeers(prev => [...prev.filter(p => p.memberId !== peer.memberId), peer]);
         // 同步补齐 cursor 条目（cursor 可能为 null，等第一条 cursor 事件再显示）
         const c = peer.cursor;
@@ -62,7 +68,7 @@ export function usePresence(
         });
       }),
       client.on('status', (connected) => setOnline(connected)),
-      client.on('content', (memberId, content, rev) => onRemoteContent?.(memberId, content, rev)),
+      client.on('content', (memberId, content, rev) => remoteRef.current?.(memberId, content, rev)),
     ];
 
     client.connect();
@@ -71,7 +77,7 @@ export function usePresence(
       client.disconnect();
       clientRef.current = null;
     };
-  }, [token, projectId, chapterId]);
+  }, [token, projectId, chapterId, user?.id]);
 
   const reportCursor = useCallback((offset: number, selection: { start: number; end: number } | null, scrollTop: number) => {
     clientRef.current?.reportCursor(offset, selection, scrollTop);
