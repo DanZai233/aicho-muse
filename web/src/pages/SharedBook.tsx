@@ -1,11 +1,13 @@
 // 拾卷详情：无需登录阅读分享书籍；登录后可以点赞
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, ShareInfo, GENRE_LABEL } from '../lib/api';
 import BookCover from '../components/BookCover';
 import MarkdownPreview from '../components/MarkdownPreview';
 import { useAuth } from '../lib/auth';
 import { Avatar } from '../components/ui';
+
+const BookReader = lazy(() => import('../components/reader/BookReader'));
 
 export default function SharedBook() {
   const { id } = useParams();
@@ -16,6 +18,7 @@ export default function SharedBook() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [bookMode, setBookMode] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -102,6 +105,11 @@ export default function SharedBook() {
           </div>
         </div>
 
+        {chapters.length > 0 && <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink/10 bg-surface/60 p-4">
+          <div><p className="text-sm font-medium">把这一卷，当作一本书来读</p><p className="mt-1 text-xs text-ink/50">逐页翻阅 · 单双页 · 字号与底色 · 自动记住进度</p></div>
+          <button onClick={() => setBookMode(true)} className="min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-medium text-paper transition hover:bg-accent/90">📖 书本阅读</button>
+        </div>}
+        {bookMode && <Suspense fallback={<div role="status" className="fixed inset-0 z-[80] flex items-center justify-center bg-paper text-ink">正在打开书本…</div>}><BookReader key={share.id + ':' + share.version} share={share} initialChapter={activeIdx} onClose={chapter => { setActiveIdx(chapter); setBookMode(false); }} /></Suspense>}
         {chapters.length > 0 ? (
           <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
             <aside className="max-h-[70vh] overflow-y-auto rounded-xl border border-ink/5 bg-surface/60 p-3 lg:sticky lg:top-20">
