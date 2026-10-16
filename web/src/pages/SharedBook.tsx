@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, ShareInfo, GENRE_LABEL } from '../lib/api';
 import BookCover from '../components/BookCover';
+import MarkdownPreview from '../components/MarkdownPreview';
 import { useAuth } from '../lib/auth';
 import { Avatar } from '../components/ui';
 
@@ -115,7 +116,7 @@ export default function SharedBook() {
             </aside>
             <article className="min-w-0 rounded-xl border border-ink/5 bg-surface/80 px-4 py-6 shadow-soft sm:px-6 sm:py-8">
               <h2 className="font-serif text-xl font-semibold">{active?.title}</h2>
-              <div className="mt-5 whitespace-pre-wrap font-creative text-base leading-8 text-ink/80">{active?.content || '（这一章还是空白，作者把想象留在了这里。）'}</div>
+              <div className="mt-5"><MarkdownPreview content={active?.content || '（这一章还是空白，作者把想象留在了这里。）'} /></div>
               <div className="mt-8 flex items-center justify-between border-t border-ink/5 pt-4 text-sm">
                 <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} disabled={activeIdx === 0}
                   className="rounded-lg px-3 py-1.5 text-ink/50 transition hover:bg-ink/5 disabled:opacity-30">← 上一章</button>
