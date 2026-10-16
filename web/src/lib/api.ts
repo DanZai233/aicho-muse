@@ -74,7 +74,9 @@ export type VoiceProfile = {
 export const LANGUAGES = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'];
 export const LANGUAGE_LABEL: Record<string, string> = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español', ru: 'Русский' };
 
+export type WritingBrief = { purpose: string; audience: string; style: string; coverage: string; constraints: string };
 export type Project = {
+  writing_brief?: WritingBrief;
   id: string; title: string; genre: string; language?: string; theme: string; target_audience: string;
   goal_word_count: number; status: string; default_persona_id: string | null; team_persona_ids?: string[];
   cover_color: string; subtitle?: string; author_name?: string;
@@ -126,6 +128,7 @@ export type ShareInfo = {
   chapters?: { title: string; content: string; order_index: number }[];
 };
 
-export const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
-export const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
+
+export const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文', guide: '生活指南', self_help: '心理与自我关怀', nonfiction: '纪实非虚构', essay: '随笔杂文', popular_science: '科普', travel: '旅行与城市漫游' };
+export const GENRES = Object.keys(GENRE_LABEL);
 export const CITATION_STYLE_LABEL: Record<string, string> = { gb7714: 'GB/T 7714', apa: 'APA', mla: 'MLA' };

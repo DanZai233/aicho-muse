@@ -16,7 +16,7 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024, files: 1 },
 });
 
-const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
+import { GENRES } from '../writing/genres.js';
 
 function projectOf(id) { return id ? db().projects.find(p => p.id === id) : null; }
 

@@ -1,6 +1,6 @@
-import { Project } from '../lib/api';
+import { Project, GENRE_LABEL } from '../lib/api';
 
-const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
+
 
 export function coverGradient(color: string) {
   const c = color || '#8b7d6b';

@@ -6,7 +6,7 @@ import { projectRole, findProject, canView, canEdit, isOwner } from '../access.j
 const router = Router();
 router.use(authRequired);
 
-const GENRES = ['biography', 'fiction', 'prose', 'poetry', 'script', 'paper'];
+import { GENRES } from '../writing/genres.js';
 const LANGUAGES = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'];
 
 router.get('/', (req, res) => {
@@ -79,6 +79,8 @@ router.patch('/:id', (req, res) => {
   if (!found) return res.status(404).json({ code: 40401, message: '作品不存在' });
   if (!canEdit(req, found.p)) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
   const p = found.p;
+  if (req.body.genre !== undefined && !GENRES.includes(req.body.genre)) return res.status(400).json({ code: 40001, message: '不支持的体裁' });
+  if (req.body.language !== undefined && !LANGUAGES.includes(req.body.language)) return res.status(400).json({ code: 40001, message: '不支持的作品语言' });
   for (const k of ['title', 'subtitle', 'author_name', 'genre', 'language', 'theme', 'target_audience', 'goal_word_count', 'status', 'default_persona_id', 'cover_color', 'abstract', 'citation_style']) {
     if (req.body[k] !== undefined) p[k] = req.body[k];
   }

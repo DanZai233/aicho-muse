@@ -1,3 +1,4 @@
+import { GENRE_LABEL } from '../lib/api';
 // 记忆接入面板：通过 @记忆 打开，只显示自己的记忆（按书分组），
 // 勾选其他作品的记忆库后，本会话临时接入该书记忆
 import { useEffect, useState } from 'react';
@@ -93,7 +94,7 @@ export default function MemoryLinkModal({ open, convId, currentProjectId, linked
                               <span className="truncate text-sm font-medium">{p.title}</span>
                               {isCurrent && <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] text-ink/45">当前作品</span>}
                             </div>
-                            <p className="mt-0.5 text-[11px] text-ink/40">{p.genre ? ({ biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' } as any)[p.genre] || p.genre : ''} · {p.memory_count} 条记忆</p>
+                            <p className="mt-0.5 text-[11px] text-ink/40">{p.genre ? GENRE_LABEL[p.genre] || p.genre : ''} · {p.memory_count} 条记忆</p>
                           </div>
                           {!isCurrent && (
                             <button onClick={() => toggle(p.id)} disabled={busy}

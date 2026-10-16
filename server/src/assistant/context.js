@@ -2,7 +2,7 @@
 // 聚合用户的知识库（长期记忆）+ 作品库（摘要/简介/章节信息），供问答使用
 import { db } from '../db.js';
 
-const GENRE_LABEL = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
+import { GENRE_LABEL } from '../writing/genres.js';
 const CHAPTER_SNIPPET = 800; // 每章最多喂给模型的字数
 
 // 单部作品的简要信息（不含全文）

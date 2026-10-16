@@ -5,7 +5,7 @@ import { db } from '../db.js';
 const router = Router();
 router.use(authRequired);
 
-const GENRE_LABEL = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本' };
+import { GENRE_LABEL } from '../writing/genres.js';
 const TOOL_LABEL = { polish: '润色', expand: '扩写', condense: '缩写', continue: '续写', restyle: '风格迁移' };
 const REPLY_LABEL = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', other: '其他' };
 

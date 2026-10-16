@@ -67,3 +67,7 @@ Muse 持久卷为 `aicho-muse_mysql_data`、`aicho-muse_app_data`；Letter 为 `
 `AGENTS.md` 是新 agent 的入口；本文件描述跨仓库关系；产品详情见 `PRODUCT_DESIGN.md`、`UX_DESIGN.md`、`ARCHITECTURE.md`。`OPS_GUIDE.md` 有旧 dz / 旧域名记录，仅用于历史参考，部署以服务器当前状态为准。
 
 在 Codex 把 `/Users/dan_zai/Git/aicho-muse` 添加为项目后，在项目内开新聊天即可自动读取根目录 `AGENTS.md`。Letter 任务需读取本文件后到 Letter 仓库修改；跨服务任务分别提交各仓库，不混淆数据库与部署目标。
+
+## 最近一次 Muse 部署核验
+
+本次确认 Muse 的 Compose 工作目录为 `/opt/aicho-muse`，配置文件为该目录的 `docker-compose.yml`；应用容器 `aicho-muse-app` 挂载 `aicho-muse_app_data:/app/data`。模型为 `deepseek-v4-flash`，本次未改模型与生产配置。大纲策划、采纳修复及验证方式见 `docs/OUTLINE_WORKFLOW.md`。生产代码可能没有 Git 元数据，应比较更新前源码基线，只同步本次受控源文件，并备份源码、数据库和 app_data 卷。

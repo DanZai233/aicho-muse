@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { authRequired } from '../auth.js';
 import { db, saveDb, uuid } from '../db.js';
 import { callLLM } from '../ai.js';
+import { writingContext, EDITOR_RULES } from '../writing/genres.js';
+import { COLLECTIONS, normalizeSuggestion } from '../writing/suggestions.js';
 
 const router = Router();
 router.use(authRequired);
@@ -218,10 +220,10 @@ router.post('/:kind/:id/ai/generate', async (req, res) => {
   const prompt = String(req.body?.prompt || '').trim();
   const langNote = proj?.language && proj.language !== 'zh-CN' ? '作品语言：' + proj.language + '，请用该语言输出。' : '';
   const sys = kind === 'outline'
-    ? '你是专业的文学策划。根据作品主题与现有大纲，生成新的大纲节点：标题 + 一句话摘要。只输出内容本身，不要解释。格式：标题：摘要。' + langNote
+    ? EDITOR_RULES + '你是专业的文学策划。根据作品主题与现有大纲，生成新的大纲节点：标题 + 详细摘要，包含本节目标、小节要点、例子或行动清单。每节点一行，格式：标题：摘要。只输出内容本身，不要解释。' + langNote
     : '你是专业的角色设定师。根据作品主题与现有角色，生成新的人物卡：姓名、角色定位、一句话描述。只输出内容本身，不要解释。格式：姓名（角色）：描述。' + langNote;
   const ctx = smartContextText(pid);
-  const user = '作品：《' + (proj?.title || '') + '》主题：' + (proj?.theme || '未设置') + '\n' + ctx + '\n我的要求：' + (prompt || '请合理生成');
+  const user = writingContext(proj) + '\n' + ctx + '\n我的要求：' + (prompt || '请合理生成');
   try {
     const text = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: user }], { max_tokens: 1000, temperature: 0.8 });
     if (!text) return res.status(500).json({ code: 50001, message: 'AI 未返回结果' });
@@ -247,7 +249,7 @@ router.post('/:kind/:id/ai/polish', async (req, res) => {
   const sys = kind === 'outline'
     ? '你是专业的文学策划。润色这个大纲节点：让摘要更清晰、更有张力、更贴合主题。只输出润色后的摘要，不要标题与解释。' + langNote
     : '你是专业的角色设定师。润色这段人物设定：让描述更立体、更有记忆点。只输出润色后的描述，不要解释。' + langNote;
-  const user = '作品：《' + (proj?.title || '') + '》主题：' + (proj?.theme || '未设置') + '\n需要润色的内容：' + target;
+  const user = writingContext(proj) + '\n需要润色的内容：' + target;
   try {
     const text = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: user }], { max_tokens: 1000, temperature: 0.8 });
     if (!text) return res.status(500).json({ code: 50001, message: 'AI 未返回结果' });
@@ -260,22 +262,22 @@ router.post('/:kind/:id/ai/polish', async (req, res) => {
 const SUGGEST_SPEC = {
   outline: {
     sys: '你是专业的文学策划。根据作品主题与现有大纲，给出 3-4 条有价值的大纲建议：可以补充新节点、调整顺序、深化冲突或新增伏笔。每条必须包含建议内容与理由，可给出建议的标题。',
-    fmt: '输出 JSON 数组，每项 {"type":"add"|"update"|"note","title":"建议标题或新节点标题","summary":"一句话内容","reason":"为什么建议这样做"}。只输出 JSON。',
+    fmt: '输出 JSON 数组，每项 {"type":"add"|"update"|"note","title":"建议标题或新节点标题","id":"仅调整时填写提供的真实条目ID","summary":"详细写作要点","reason":"为什么建议这样做"}。只输出 JSON。',
   },
   characters: {
     sys: '你是专业的角色设定师。根据作品主题与现有角色，给出 3-4 条人物建议：新增配角、深化主角、制造人物冲突或补全动机。',
-    fmt: '输出 JSON 数组，每项 {"type":"add"|"update"|"note","name":"建议新增或调整的角色名","role":"角色定位","description":"一句话描述","reason":"为什么建议这样做"}。只输出 JSON。',
+    fmt: '输出 JSON 数组，每项 {"type":"add"|"update"|"note","id":"仅调整时填写提供的真实条目ID","name":"建议新增或调整的角色名","role":"角色定位","description":"一句话描述","reason":"为什么建议这样做"}。只输出 JSON。',
   },
   timeline: {
     sys: '你是专业的编剧/叙事顾问。根据作品主题与现有时间线，给出 3-4 条时间线建议：新增关键事件、调整事件顺序、补充转折或强化因果。',
-    fmt: '输出 JSON 数组，每项 {"type":"add"|"update"|"note","when":"时间/节点","event":"事件内容","reason":"为什么建议这样做"}。只输出 JSON。',
+    fmt: '输出 JSON 数组，每项 {"type":"add"|"update"|"note","id":"仅调整时填写提供的真实条目ID","when":"时间/节点","event":"事件内容","reason":"为什么建议这样做"}。只输出 JSON。',
   },
 };
 
 router.post('/projects/:pid/ai-suggest', async (req, res) => {
   const { pid } = req.params;
   const kind = String(req.body?.kind || 'outline');
-  if (!SUGGEST_SPEC[kind]) return res.status(400).json({ code: 40001, message: '不支持的 AI 建议类型' });
+  if (!Object.hasOwn(SUGGEST_SPEC, kind)) return res.status(400).json({ code: 40001, message: '不支持的 AI 建议类型' });
   const proj = db().projects.find(p => p.id === pid);
   if (!ensureEdit(req, proj)) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
 
@@ -284,13 +286,13 @@ router.post('/projects/:pid/ai-suggest', async (req, res) => {
   const cards = d.character_cards.filter(c => c.project_id === pid);
   const events = d.timeline_events.filter(e => e.project_id === pid);
   const ctxParts = [];
-  if (outline.length) ctxParts.push('现有大纲：' + outline.slice(0, 10).map(n => n.title + (n.summary ? '：' + n.summary.slice(0, 40) : '')).join('；'));
-  if (cards.length) ctxParts.push('现有角色：' + cards.slice(0, 8).map(c => c.name + '(' + (c.role || '') + ')' + (c.description ? '：' + c.description.slice(0, 40) : '')).join('；'));
-  if (events.length) ctxParts.push('现有时间线：' + events.slice(0, 10).map(e => (e.when || '') + ' ' + (e.event || '')).join('；'));
+  if (outline.length) ctxParts.push('现有大纲：' + outline.slice(0, 10).map(n => '[ID:' + n.id + '] ' + n.title + (n.summary ? '：' + n.summary.slice(0, 40) : '')).join('；'));
+  if (cards.length) ctxParts.push('现有角色：' + cards.slice(0, 8).map(c => '[ID:' + c.id + '] ' + c.name + '(' + (c.role || '') + ')' + (c.description ? '：' + c.description.slice(0, 40) : '')).join('；'));
+  if (events.length) ctxParts.push('现有时间线：' + events.slice(0, 10).map(e => '[ID:' + e.id + '] ' + (e.when || '') + ' ' + (e.event || '')).join('；'));
   const langNote = proj?.language && proj.language !== 'zh-CN' ? '作品语言：' + proj.language + '，请用该语言输出。' : '';
 
-  const sys = SUGGEST_SPEC[kind].sys + '\n' + SUGGEST_SPEC[kind].fmt + '\n' + langNote;
-  const user = '作品：《' + (proj?.title || '') + '》主题：' + (proj?.theme || '未设置') + '\n' + (ctxParts.join('\n') || '（暂无内容，从零开始给建议）');
+  const sys = EDITOR_RULES + '\n' + SUGGEST_SPEC[kind].sys + '\n' + SUGGEST_SPEC[kind].fmt + '\n' + langNote;
+  const user = writingContext(proj) + '\n' + (ctxParts.join('\n') || '（暂无内容，从零开始给建议）');
 
   try {
     const text = await callLLM([{ role: 'system', content: sys }, { role: 'user', content: user }], { max_tokens: 1500, temperature: 0.8 });
@@ -303,9 +305,43 @@ router.post('/projects/:pid/ai-suggest', async (req, res) => {
       // 兜底：把文本按空行拆成建议
       arr = String(text).split(/\n{2,}/).filter(Boolean).map(x => ({ type: 'note', summary: x.trim().slice(0, 200), reason: '' }));
     }
-    const cleaned = arr.filter(x => x && (x.summary || x.title || x.name || x.event)).slice(0, 5).map(x => ({ ...x, type: ['add', 'update', 'note'].includes(x.type) ? x.type : 'note' }));
+    const cleaned = arr.filter(x => x && (x.summary || x.title || x.name || x.description || x.event)).slice(0, 5).map(x => normalizeSuggestion(x, kind, d[COLLECTIONS[kind]].filter(item => item.project_id === pid)));
     res.json({ code: 0, data: { list: cleaned } });
   } catch (e) { res.status(500).json({ code: 50001, message: e.message }); }
+});
+
+// Resolve model suggestions against the actual project instead of trusting generated IDs.
+router.post('/projects/:pid/structure-suggestions/apply', (req, res) => {
+  const { pid } = req.params;
+  const proj = projectOf(pid);
+  if (!ensureView(req, proj)) return res.status(404).json({ code: 40401, message: '作品不存在' });
+  if (!ensureEdit(req, proj)) return res.status(403).json({ code: 40301, message: '没有编辑权限' });
+  const { kind, suggestion } = req.body || {};
+  if (!Object.hasOwn(COLLECTIONS, kind) || !suggestion || typeof suggestion !== 'object') return res.status(400).json({ code: 40001, message: '建议格式无效' });
+  const d = db(), items = d[COLLECTIONS[kind]].filter(x => x.project_id === pid);
+  const sg = normalizeSuggestion(suggestion, kind, items);
+  const existing = [...items, ...d.idea_notes.filter(x => x.project_id === pid)].find(x => x.source_suggestion_id === sg.suggestion_id);
+  if (existing) return res.json({ code: 0, data: { item: existing, duplicate: true } });
+  let item;
+  const now = new Date().toISOString();
+  if (sg.type === 'note') {
+    item = { id: uuid(), project_id: pid, content: [sg.title || sg.name || sg.when, sg.summary || sg.description || sg.event].filter(Boolean).join('：'), tags: [], source: 'ai', created_at: now };
+    d.idea_notes.push(item);
+  } else if (sg.type === 'update') {
+    item = items.find(x => x.id === sg.id);
+    const fields = kind === 'outline' ? ['title', 'summary'] : kind === 'characters' ? ['name', 'role', 'description', 'arc'] : ['when', 'event'];
+    for (const field of fields) if (sg[field]) item[field] = sg[field];
+    item.updated_at = now;
+  } else {
+    const defaults = kind === 'outline' ? { title: sg.title || '新节点', summary: sg.summary, parent_id: null, chapter_id: null, order_index: Math.max(-1, ...items.map(x => x.order_index || 0)) + 1 }
+      : kind === 'characters' ? { name: sg.name || '新角色', role: sg.role || '配角', description: sg.description, arc: sg.arc, relationships: [] }
+      : { when: sg.when, event: sg.event, importance: 3, linked_chapters: [] };
+    item = { ...defaults, id: uuid(), project_id: pid, created_at: now, updated_at: now };
+    d[COLLECTIONS[kind]].push(item);
+  }
+  item.source_suggestion_id = sg.suggestion_id;
+  saveDb();
+  res.json({ code: 0, data: { item, applied_as: sg.type } });
 });
 
 export default router;

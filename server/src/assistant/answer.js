@@ -70,7 +70,7 @@ export async function askAssistant({ userId, question, projectId }) {
 2. 识别用户的「操作意图」并给出对应动作：
    - 用户想去某页/某功能/在哪里 → type=nav（可用：${NAV_HINTS.map(h => `"${h.label}"→${h.to}`).join('，')}）
    - 用户想打开某个已有作品 → type=open_project，id 必须是作品库中的真实作品 ID（从上文作品库的《标题》行对应读取，不要用书名代替 ID）
-   - 用户明确想「创建一本书/新建作品/开始写一本（含书名、体裁、主题等要求）」→ type=create_project，帮用户把书填好：title 必填，genre 可选（biography 自传/fiction 小说/prose 散文/poetry 诗歌/script 剧本/paper 论文），subtitle/author_name/theme/language/cover_color 可选
+   - 用户明确想「创建一本书/新建作品/开始写一本（含书名、体裁、主题等要求）」→ type=create_project，帮用户把书填好：title 必填，genre 可选（biography 自传/fiction 小说/prose 散文/poetry 诗歌/script 剧本/paper 论文/guide 生活指南/self_help 心理与自我关怀/nonfiction 纪实非虚构/essay 随笔杂文/popular_science 科普/travel 旅行与城市漫游），subtitle/author_name/theme/language/cover_color 可选
 3. 回答保持简洁、有温度、贴合创作场景。给出 create_project 动作时，在 answer 里说明你准备建一本怎样的书。
 
 输出格式（严格 JSON，不要其他文字）：

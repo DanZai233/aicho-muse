@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, Project, Chapter, Conversation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
+import { api, GENRE_LABEL, Project, Chapter, Conversation, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Button, EmptyState, Modal, Input } from '../components/ui';
 import BookCover from '../components/BookCover';
 import { completeTourStep } from '../lib/tour';
 
-const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
+
 
 export default function Home() {
   const { user } = useAuth();

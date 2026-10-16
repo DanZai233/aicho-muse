@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+test('suggestions resolve real targets; planning asks first; drafts preview and adopt without overwrite', async t => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'muse-planning-test-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  process.env.DATA_DIR = dir; delete process.env.MYSQL_HOST; delete process.env.DB_HOST;
+  const { default: express } = await import('../server/node_modules/express/index.js');
+  const { db, initStorage } = await import('../server/src/db.js');
+  await initStorage();
+  const { signToken } = await import('../server/src/auth.js');
+  const { createPlanningRouter, parseOutlinePlan } = await import('../server/src/routes/planning.js');
+  const structure = (await import('../server/src/routes/structure.js')).default;
+  const projects = (await import('../server/src/routes/projects.js')).default;
+  const { normalizeSuggestion } = await import('../server/src/writing/suggestions.js');
+  const d = db();
+  d.users.push({ id: 'owner', status: 'active' }, { id: 'stranger', status: 'active' }, { id: 'viewer', status: 'active' });
+  d.projects.push({ id: 'book', user_id: 'owner', title: '测试生活指南', genre: 'guide', language: 'zh-CN', collaborators: [{ user_id: 'viewer', role: 'viewer' }] }, { id: 'other', user_id: 'stranger' });
+  d.character_cards.push({ id: 'foreign', project_id: 'other', name: '不能修改', description: '不变' });
+  d.outline_nodes.push({ id: 'old', project_id: 'book', title: '已有章', summary: '原大纲', order_index: 0, chapter_id: 'original-chapter' });
+  d.chapters.push({ id: 'original-chapter', project_id: 'book', title: '已有章', content: '不能覆盖的正文', order_index: 0 });
+  const calls = [];
+  let malformed = false;
+  const generate = async (messages, options) => {
+    calls.push({ messages, options });
+    if (malformed) return '这不是 JSON';
+    return messages[0].content.includes('JSON 数组') ? JSON.stringify([{ title: '准备', summary: '目标：减少负担。\n小节：吃饭、整理。\n例子：下班后。\n10%电量：先喝水。' }, { title: '快乐', summary: '目标：找到免费快乐。\n行动清单：散步与听歌。' }]) : '## 下班以后\n\n先坐一会儿，给自己倒杯水。';
+  };
+  const app = express(); app.use(express.json()); app.use('/projects', projects); app.use(createPlanningRouter(generate)); app.use(structure);
+  const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
+  t.after(() => new Promise(r => server.close(r)));
+  async function request(route, body, user = 'owner', method = 'POST') {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}${route}`, { method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + signToken({ id: user }) }, body: JSON.stringify(body) });
+    return { status: response.status, ...(await response.json()) };
+  }
+  const apply = (kind, suggestion, user) => request('/projects/book/structure-suggestions/apply', { kind, suggestion }, user);
+  for (const kind of ['outline', 'characters', 'timeline']) {
+    const result = await apply(kind, { type: 'update', id: 'hallucinated', title: '新节点', summary: '详细说明', name: '新角色', description: '新设定', event: '新事件', suggestion_id: 'sg-' + kind });
+    assert.equal(result.status, 200); assert.equal(result.data.applied_as, 'add');
+    const repeated = await apply(kind, { type: 'update', suggestion_id: 'sg-' + kind });
+    assert.equal(repeated.data.item.id, result.data.item.id); assert.equal(repeated.data.duplicate, true);
+  }
+  const cross = await apply('characters', { type: 'update', id: 'foreign', name: '不能跨项目更新', description: '新卡' });
+  assert.equal(cross.data.applied_as, 'add'); assert.equal(d.character_cards.find(x => x.id === 'foreign').description, '不变');
+  assert.equal((await apply('outline', { type: 'update', id: 'old', summary: '更新成功' })).data.item.summary, '更新成功');
+  assert.equal((await apply('outline', { type: 'add' }, 'viewer')).status, 403);
+  assert.equal((await apply('outline', { type: 'add' }, 'stranger')).status, 404);
+  assert.equal((await apply('__proto__', {})).status, 400);
+  assert.equal(normalizeSuggestion({ type: 'update' }, 'outline', []).type, 'add');
+  assert.equal((await request('/projects/book/outline-plan', {})).status, 400); assert.equal(calls.length, 0);
+  const brief = { purpose: '城市生活少一点负担', audience: '低精力独居人群', style: '温柔幽默加小清单', coverage: '吃饭和免费快乐', constraints: '不说教', chapter_count: 6 };
+  const preview = await request('/projects/book/outline-plan', brief);
+  assert.equal(preview.status, 200); assert.equal(preview.data.nodes.length, 2);
+  assert.ok(calls[0].messages[0].content.includes('不强行编造主角'));
+  assert.ok(calls[0].messages[1].content.includes(brief.style));
+  assert.equal(d.outline_nodes.some(x => x.title === '准备'), false, 'preview must not write');
+  const adopted = await request('/projects/book/outline-plan/adopt', preview.data);
+  assert.equal(adopted.data.nodes.length, 2);
+  assert.equal((await request('/projects/book/outline-plan/adopt', preview.data)).data.duplicate, true);
+  assert.equal(d.projects.find(x => x.id === 'book').writing_brief.style, brief.style);
+  malformed = true;
+  assert.equal((await request('/projects/book/outline-plan', brief)).status, 502); malformed = false;
+  assert.throws(() => parseOutlinePlan('[{"title":"缺少摘要"}]'));
+  const drafted = await request('/outline/old/draft', { word_count: 600, instructions: '先说一句温柔的话' });
+  assert.equal(drafted.status, 200); assert.equal(d.chapters.length, 1, 'draft generation must not write');
+  assert.ok(calls.at(-1).messages[1].content.includes(brief.style));
+  const saved = await request('/outline/old/draft/adopt', drafted.data);
+  assert.equal(saved.status, 200); assert.notEqual(saved.data.chapter.id, 'original-chapter');
+  assert.equal(d.chapters[0].content, '不能覆盖的正文'); assert.equal(d.outline_nodes.find(x => x.id === 'old').chapter_id, 'original-chapter');
+  assert.equal((await request('/outline/old/draft/adopt', drafted.data)).data.duplicate, true);
+  const stale = await request('/outline/old/draft', {});
+  d.outline_nodes.find(x => x.id === 'old').summary = '此时大纲被修改';
+  assert.equal((await request('/outline/old/draft/adopt', stale.data)).status, 409);
+  assert.equal((await request('/outline/old/draft', {}, 'viewer')).status, 403);
+  assert.equal((await request('/outline/old/draft', {}, 'stranger')).status, 404);
+  for (const genre of ['guide', 'self_help', 'nonfiction', 'essay', 'popular_science', 'travel']) assert.equal((await request('/projects', { title: '新类型', genre })).status, 200);
+  assert.equal((await request('/projects/book', { genre: 'not-a-genre' }, 'owner', 'PATCH')).status, 400);
+  assert.equal(d.projects.find(x => x.id === 'book').genre, 'guide');
+});

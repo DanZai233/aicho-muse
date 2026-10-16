@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { api, Project, Chapter, Conversation, Message, Persona, VoiceProfile, Citation, ReferenceDoc, ShareInfo, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
+import { api, GENRE_LABEL, Project, Chapter, Conversation, Message, Persona, VoiceProfile, Citation, ReferenceDoc, ShareInfo, LANGUAGES, LANGUAGE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import { Avatar, Button, Badge, Modal, Input, Spinner } from '../components/ui';
@@ -21,9 +21,10 @@ import RelationshipGraph from '../components/RelationshipGraph';
 import ReviewModal from '../components/ReviewModal';
 import MemoryLinkModal from '../components/MemoryLinkModal';
 import ReviewsPanel from '../components/ReviewsPanel';
+import { OutlinePlanner, OutlineDraft, type OutlineSource } from '../components/OutlineWorkshop';
 
 const REPLY_LABEL: Record<string, string> = { question: '提问', feedback: '反馈', suggestion: '建议', encouragement: '鼓励', guide: '引导', writing: '写作稿', other: '回复' };
-const GENRE_LABEL: Record<string, string> = { biography: '自传', fiction: '小说', prose: '散文', poetry: '诗歌', script: '剧本', paper: '论文' };
+
 const TOOL_LABEL: Record<string, string> = { polish: '润色', expand: '扩写', condense: '缩写', continue: '续写', restyle: '风格迁移' };
 // 只有带正文建议的回复可进入 diff 与采纳（提问/鼓励/其他不写入文章）
 const ADOPTABLE_TYPES = new Set(['suggestion', 'feedback', 'writing']);
@@ -31,31 +32,35 @@ const isAdoptable = (t?: string) => !!t && ADOPTABLE_TYPES.has(t);
 
 type StructItem = { id: string; [k: string]: any };
 
-function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, onAI, onSuggest, emptyHint = '还没有内容', chapters }: {
+function StructurePanel({ kind, items, setItems, title, addLabel, fields, projectId, onChanged, onAI, onSuggest, onWrite, emptyHint = '还没有内容', chapters }: {
   kind: 'outline' | 'characters' | 'timeline' | 'ideas';
   items: StructItem[]; setItems: (fn: (prev: StructItem[]) => StructItem[]) => void;
   title: string; addLabel: string;
   fields: { key: string; label: string; placeholder: string; textarea?: boolean }[];
   projectId: string; onChanged: () => void; emptyHint?: string; chapters?: { id: string; title: string; order_index: number }[];
+  onWrite?: (item: StructItem) => void;
   onAI?: (kind: 'outline' | 'characters', id: string, item: StructItem) => void;
   onSuggest?: (kind: 'outline' | 'characters' | 'timeline') => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const add = async () => {
-    setBusy(true);
+    setBusy(true); setError('');
     try {
       const d = await api.post<{ [k: string]: StructItem }>('/projects/' + projectId + '/' + kind, { ...draft, chapter_id: draft.chapter_id || null });
       const key = { outline: 'node', characters: 'card', timeline: 'event', ideas: 'note' }[kind];
       setItems(prev => [...prev, d[key]]);
       setDraft({}); setOpen(false); onChanged();
-    } finally { setBusy(false); }
+    } catch (e: any) { setError(e.message || '添加失败，请重试'); } finally { setBusy(false); }
   };
   const remove = async (id: string) => {
     if (!confirm('确定删除？')) return;
-    await api.del('/' + kind + '/' + id);
-    setItems(prev => prev.filter(i => i.id !== id)); onChanged();
+    try {
+      await api.del('/' + kind + '/' + id);
+      setItems(prev => prev.filter(i => i.id !== id)); onChanged();
+    } catch (e: any) { setError(e.message || '删除失败'); }
   };
   return (
     <div>
@@ -63,8 +68,8 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
         <p className="text-xs font-medium text-ink/40">{title}</p>
         <div className="flex items-center gap-2">
           {onSuggest && kind !== 'ideas' && (
-            <button onClick={() => onSuggest(kind)} title="让 AI 给出创作建议"
-              className="text-xs text-accent/80 hover:text-accent hover:underline">✨ AI 建议</button>
+            <button onClick={() => onSuggest(kind)} title={kind === 'outline' ? '先聊方向，生成详细大纲' : '让 AI 给出创作建议'}
+              className="text-xs text-accent/80 hover:text-accent hover:underline">{kind === 'outline' ? '✨ 规划大纲' : '✨ AI 建议'}</button>
           )}
           <button onClick={() => setOpen(!open)} className="text-xs text-accent hover:underline">{addLabel}</button>
         </div>
@@ -89,19 +94,21 @@ function StructurePanel({ kind, items, setItems, title, addLabel, fields, projec
           </div>
         </div>
       )}
+      {error && <p role="alert" className="mb-2 text-xs text-red-600">{error}</p>}
       <div className="space-y-1.5">
         {items.map(i => (
           <div key={i.id} className="group rounded-xl border border-ink/5 bg-surface px-3 py-2.5 shadow-soft">
             <div className="flex items-start justify-between gap-1">
               <div className="min-w-0">
                 <div className="text-sm font-medium">{i.title || i.name || i.event || i.content?.slice(0, 24)}</div>
-                {i.summary && <div className="text-xs text-ink/45 line-clamp-2">{i.summary}</div>}
+                {i.summary && <details className="text-xs text-ink/55"><summary className="cursor-pointer">查看详细大纲</summary><div className="mt-1 whitespace-pre-wrap leading-5">{i.summary}</div></details>}
                 {i.description && <div className="text-xs text-ink/45 line-clamp-2">{i.description}</div>}
                 {i.role && <Badge color="accent">{i.role}</Badge>}
                 {i.when && <div className="mt-0.5 text-xs text-ink/40">⏱ {i.when}</div>}
                 {i.tags?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{i.tags.map((t: string) => <Badge key={t}>{t}</Badge>)}</div>}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {kind === 'outline' && onWrite && <button onClick={() => onWrite(i)} className="text-xs text-accent" title="按这个大纲生成正文草稿">写正文</button>}
                 {(kind === 'outline' || kind === 'characters') && onAI && (
                   <button onClick={() => onAI(kind, i.id, i)} title="AI 生成 / 润色"
                     className="text-xs text-accent/70 opacity-100 transition group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-accent">✨</button>
@@ -205,6 +212,9 @@ export default function Workspace() {
   const [aiErr, setAiErr] = useState('');
   const [leftTab, setLeftTab] = useState<'book' | 'outline' | 'characters' | 'timeline' | 'ideas' | 'citations' | 'refs' | 'reviews'>('book');
   const [outline, setOutline] = useState<StructItem[]>([]);
+  const [showOutlinePlanner, setShowOutlinePlanner] = useState(false);
+  const [outlineDraft, setOutlineDraft] = useState<OutlineSource | null>(null);
+  const [suggestApplying, setSuggestApplying] = useState(false);
   const [characters, setCharacters] = useState<StructItem[]>([]);
   const [timeline, setTimeline] = useState<StructItem[]>([]);
   const [ideas, setIdeas] = useState<StructItem[]>([]);
@@ -831,7 +841,8 @@ export default function Workspace() {
     finally { setAiBusy(false); }
   };
   const applyAI = async () => {
-    if (!aiItem || !project || !aiResult.trim()) return;
+    if (!aiItem || !project || !aiResult.trim() || aiBusy) return;
+    setAiBusy(true); setAiErr('');
     try {
       const lines = aiResult.split(/\n+/).map(x => x.trim()).filter(Boolean);
       if (aiItem.kind === 'outline') {
@@ -871,12 +882,13 @@ export default function Workspace() {
         }
       }
       setAiItem(null); setAiResult(''); setAiPrompt(''); loadStructure(project.id);
-    } catch (e: any) { setAiErr(e.message || '应用失败'); }
+    } catch (e: any) { setAiErr(e.message || '应用失败'); } finally { setAiBusy(false); }
   };
 
   // AI 建议：打开面板并拉取建议
   const openSuggest = async (kind: 'outline' | 'characters' | 'timeline') => {
     if (!project) return;
+    if (kind === 'outline') { setShowOutlinePlanner(true); return; }
     setSuggestKind(kind); setSuggestList([]); setSuggestErr(''); setSuggestMsg(''); setSuggestBusy(true);
     try {
       const d = await api.post<{ list: any[] }>('/projects/' + project.id + '/ai-suggest', { kind });
@@ -885,47 +897,16 @@ export default function Workspace() {
     finally { setSuggestBusy(false); }
   };
 
-  // 保留一条建议：type=add 创建新项；update 更新对应项；note 作为灵感箱记录
+  const suggestionLock = useRef(false);
   const applySuggestion = async (sg: any) => {
-    if (!project) return;
+    if (!project || !suggestKind || suggestionLock.current) return;
+    suggestionLock.current = true; setSuggestApplying(true); setSuggestMsg('');
     try {
-      if (suggestKind === 'outline') {
-        if (sg.type === 'add') {
-          const d = await api.post<{ node: StructItem }>('/projects/' + project.id + '/outline', { title: sg.title || '新节点', summary: sg.summary || '' });
-          setOutline(prev => [...prev, d.node]);
-        } else if (sg.type === 'update') {
-          await api.patch('/outline/' + (sg.id || ''), { summary: sg.summary || '' });
-          loadStructure(project.id);
-        } else {
-          await api.post<{ note: StructItem }>('/projects/' + project.id + '/ideas', { content: (sg.title || '') + (sg.summary ? '：' + sg.summary : '') });
-          loadStructure(project.id);
-        }
-      } else if (suggestKind === 'characters') {
-        if (sg.type === 'add') {
-          const d = await api.post<{ card: StructItem }>('/projects/' + project.id + '/characters', { name: sg.name || '新角色', role: sg.role || '配角', description: sg.description || '' });
-          setCharacters(prev => [...prev, d.card]);
-        } else if (sg.type === 'update') {
-          await api.patch('/characters/' + (sg.id || ''), { description: sg.description || '' });
-          loadStructure(project.id);
-        } else {
-          await api.post<{ note: StructItem }>('/projects/' + project.id + '/ideas', { content: (sg.name || '') + (sg.description ? '：' + sg.description : '') });
-          loadStructure(project.id);
-        }
-      } else if (suggestKind === 'timeline') {
-        if (sg.type === 'add') {
-          const d = await api.post<{ event: StructItem }>('/projects/' + project.id + '/timeline', { when: sg.when || '', event: sg.event || '' });
-          setTimeline(prev => [...prev, d.event]);
-        } else if (sg.type === 'update') {
-          await api.patch('/timeline/' + (sg.id || ''), { event: sg.event || '' });
-          loadStructure(project.id);
-        } else {
-          await api.post<{ note: StructItem }>('/projects/' + project.id + '/ideas', { content: (sg.when ? sg.when + '：' : '') + (sg.event || '') });
-          loadStructure(project.id);
-        }
-      }
-      setSuggestMsg('已保留 ✓');
-      setSuggestList(prev => prev.filter(x => x !== sg));
-    } catch (e: any) { setSuggestMsg(e.message || '保留失败'); }
+      await api.post('/projects/' + project.id + '/structure-suggestions/apply', { kind: suggestKind, suggestion: sg });
+      await loadStructure(project.id);
+      setSuggestMsg('已保留 ✓'); setSuggestList(prev => prev.filter(x => x !== sg));
+    } catch (e: any) { setSuggestMsg(e.message || '保留失败，请重试'); }
+    finally { suggestionLock.current = false; setSuggestApplying(false); }
   };
 
   const saveProjSettings = async () => {
@@ -1072,7 +1053,7 @@ export default function Workspace() {
                 fields={[{ key: 'title', label: '标题', placeholder: '例如：离家前夜' }, { key: 'summary', label: '内容概述', placeholder: '这一节发生什么…' }]}
                 projectId={project.id} onChanged={() => loadStructure(project.id)} emptyHint="还没有大纲，先搭好章节骨架，故事就有了方向" chapters={chapters}
                 onAI={(kind, id, item) => { setAiItem({ kind, id, item }); setAiMode('polish'); setAiPrompt(''); setAiResult(''); setAiErr(''); }}
-                onSuggest={openSuggest} />
+                onSuggest={openSuggest} onWrite={item => setOutlineDraft({ id: item.id, title: item.title || '未命名', summary: item.summary || '' })} />
             )}
             {leftTab === 'characters' && project && (
               <>
@@ -1598,6 +1579,12 @@ export default function Workspace() {
         </div>
       </Modal>
 
+      {showOutlinePlanner && project && <OutlinePlanner key={project.id} project={project} onClose={() => setShowOutlinePlanner(false)} onAdopted={() => { loadStructure(project.id); loadProject(project.id); setNotice('详细大纲已添加，点击各章「写正文」即可开始'); }} />}
+      {outlineDraft && <OutlineDraft key={outlineDraft.id} node={outlineDraft} onClose={() => setOutlineDraft(null)} onAdopted={ch => {
+        const merged = saves.receive(ch); setChapters(prev => [...prev.filter(c => c.id !== ch.id), merged]); setChapter(merged); setBookView('write');
+        setProject(prev => prev && ({ ...prev, chapter_count: chapters.filter(c => c.id !== ch.id).length + 1, word_count: chapters.filter(c => c.id !== ch.id).reduce((total, c) => total + c.content.length, 0) + ch.content.length }));
+        if (project) loadStructure(project.id); setNotice('正文已保存为新章节');
+      }} />}
       <Modal open={!!suggestKind} onClose={() => setSuggestKind(null)} title={'✨ AI 建议 · ' + (suggestKind === 'outline' ? '大纲' : suggestKind === 'characters' ? '人物' : '时间线')}>
         <div className="space-y-3">
           <p className="text-xs leading-5 text-ink/50">AI 根据作品主题与现有内容给出建议，你可以选择性地保留：新增会创建新条目，调整会更新对应内容，其他会记入灵感箱。</p>
@@ -1621,7 +1608,7 @@ export default function Workspace() {
                 </span>
               </div>
               <div className="mt-2 flex gap-1.5">
-                <Button variant="subtle" onClick={() => applySuggestion(sg)} className="px-2.5 py-1 text-[11px]">✓ 保留</Button>
+                <Button variant="subtle" disabled={suggestApplying} onClick={() => applySuggestion(sg)} className="px-2.5 py-1 text-[11px]">✓ 保留</Button>
                 <Button variant="ghost" onClick={() => setSuggestList(prev => prev.filter(x => x !== sg))} className="px-2.5 py-1 text-[11px]">忽略</Button>
               </div>
             </div>
