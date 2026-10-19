@@ -56,6 +56,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* 桌面端横向导航 */}
           <nav className="hidden items-center gap-1 text-sm md:flex">
             <Link to="/workspace" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">工作台</Link>
+            <a href={(import.meta.env.VITE_LETTER_URL||'https://letter.imuse.chat')+'/connect?target=letter'} className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5">Letter</a>
+            <a href={(import.meta.env.VITE_LETTER_URL||'https://letter.imuse.chat')+'/connect?target=paper'} className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5">纸上逢</a>
             <Link to="/personas" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">人设</Link>
             <Link to="/voices" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">声色</Link>
             <Link to="/settings" className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink">设置</Link>
@@ -90,7 +92,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <nav className="border-t border-ink/5 bg-paper/95 px-4 py-3 shadow-lift backdrop-blur md:hidden animate-fade-up">
             <div className="grid grid-cols-2 gap-1.5">
               <Link to="/workspace" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">📖 工作台</Link>
-              <Link to="/personas" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">🧑‍🎨 人设</Link>
+              <a href={(import.meta.env.VITE_LETTER_URL||'https://letter.imuse.chat')+'/connect?target=letter'} className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5">Letter</a>
+            <a href={(import.meta.env.VITE_LETTER_URL||'https://letter.imuse.chat')+'/connect?target=paper'} className="rounded-lg px-3 py-1.5 text-ink/60 hover:bg-ink/5">纸上逢</a>
+            <Link to="/personas" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">🧑‍🎨 人设</Link>
               <Link to="/voices" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">🎙 声色</Link>
               <Link to="/settings" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">⚙ 设置</Link>
               <Link to="/shares" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink/70 hover:bg-ink/5 hover:text-ink">📚 拾卷</Link>

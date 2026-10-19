@@ -1,9 +1,11 @@
+import accountBridge from './account-bridge.js';
 import { Router } from 'express';
 import { registerUser, signToken, checkPassword, authRequired, publicUser, findUserByEmail, findUserById } from '../auth.js';
 import { db, saveDb } from '../db.js';
 import { checkIpRate, getClientIp } from '../quota.js';
 
 const router = Router();
+router.use(accountBridge);
 
 router.post('/register', (req, res) => {
   try {

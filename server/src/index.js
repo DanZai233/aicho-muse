@@ -44,6 +44,7 @@ await initStorage();
 
 const app = express();
 app.use(cors());
+app.use('/connect', (req,res,next)=>{res.set('Referrer-Policy','no-referrer').set('Cache-Control','no-store');next();});
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/v1/health', (req, res) => {

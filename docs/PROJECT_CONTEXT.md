@@ -71,3 +71,9 @@ Muse 持久卷为 `aicho-muse_mysql_data`、`aicho-muse_app_data`；Letter 为 `
 ## 最近一次 Muse 部署核验
 
 本次确认 Muse 的 Compose 工作目录为 `/opt/aicho-muse`，配置文件为该目录的 `docker-compose.yml`；应用容器 `aicho-muse-app` 挂载 `aicho-muse_app_data:/app/data`。模型为 `deepseek-v4-flash`，本次未改模型与生产配置。大纲策划、采纳修复及验证方式见 `docs/OUTLINE_WORKFLOW.md`。生产代码可能没有 Git 元数据，应比较更新前源码基线，只同步本次受控源文件，并备份源码、数据库和 app_data 卷。
+
+## Muse / Letter / 纸上逢共用账号
+
+Letter 新增 `/paper` 真人慢信入口「纸上逢」，与 Muse 共用账号，无需二次注册。Muse 顶部及移动导航、Letter 顶部互设入口。两域名通过 `/connect` 和一次性、120 秒、目标绑定的 PKCE 接续码登录；Muse `/api/v1/auth/bridge` 签发、`/bridge/exchange` 兑换，Letter `/api/v1/account/*` 代理。Muse 仍是唯一账号来源，Letter 每次私信请求检查 Muse 账号状态。各应用的退出仅清除当前域名会话。
+
+后端 `MUSE_PUBLIC_URL`、`LETTER_PUBLIC_URL` 控制固定回跳域名，前端 `VITE_LETTER_URL`、Letter 的 `VITE_MUSE_URL` 用于本地联调。先更新 Muse 再更新 Letter。纸上逢邮程、权限、朗读、AI、举报和单进程存储限制详见 Letter 仓库 `docs/PAPER_POST.md`。旧匿名 AI 信箱保留在 `/inbox?legacy=1`，登录后的新 AI 信笺按 Muse 用户归属。

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
+import Connect from './pages/Connect';
 import Login from './pages/Login';
 import Brand from './pages/Brand';
 import Home from './pages/Home';
@@ -27,6 +28,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        <Route path="/connect" element={<Connect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<Admin />} />
