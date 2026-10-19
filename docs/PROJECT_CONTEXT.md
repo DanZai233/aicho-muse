@@ -74,6 +74,8 @@ Muse 持久卷为 `aicho-muse_mysql_data`、`aicho-muse_app_data`；Letter 为 `
 
 ## Muse / Letter / 纸上逢共用账号
 
+纸上逢管理入口为 `/admin?tab=paper`，复用既有管理员登录。Muse `/api/v1/admin/paper/*` 校验管理员后代理 Letter，复用 `LETTER_BASE_URL` / `LETTER_FEEDBACK_TOKEN`，密钥仅留在服务端。支持举报处理、用户封禁、信件屏蔽及审计。封禁仅影响纸上逢；全局禁用仍在原用户管理操作。取消的投递不会随解封恢复，详见 Letter `docs/PAPER_POST.md`。
+
 Letter 新增 `/paper` 真人慢信入口「纸上逢」，与 Muse 共用账号，无需二次注册。Muse 顶部及移动导航、Letter 顶部互设入口。两域名通过 `/connect` 和一次性、120 秒、目标绑定的 PKCE 接续码登录；Muse `/api/v1/auth/bridge` 签发、`/bridge/exchange` 兑换，Letter `/api/v1/account/*` 代理。Muse 仍是唯一账号来源，Letter 每次私信请求检查 Muse 账号状态。各应用的退出仅清除当前域名会话。
 
 后端 `MUSE_PUBLIC_URL`、`LETTER_PUBLIC_URL` 控制固定回跳域名，前端 `VITE_LETTER_URL`、Letter 的 `VITE_MUSE_URL` 用于本地联调。先更新 Muse 再更新 Letter。纸上逢邮程、权限、朗读、AI、举报和单进程存储限制详见 Letter 仓库 `docs/PAPER_POST.md`。旧匿名 AI 信箱保留在 `/inbox?legacy=1`，登录后的新 AI 信笺按 Muse 用户归属。

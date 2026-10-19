@@ -1,3 +1,5 @@
+import {lazy,Suspense} from 'react';
+const AdminPaper=lazy(()=>import('./AdminPaper'));
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Badge, Modal } from '../components/ui';
@@ -29,7 +31,7 @@ async function adminSend<T>(p: string, method: string, body?: unknown): Promise<
 
 export default function Admin() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'letter-feedback' | 'letter-letters' | 'admins'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'settings' | 'presets' | 'feedback' | 'letter-feedback' | 'letter-letters' | 'paper' | 'admins'>(()=>new URLSearchParams(window.location.search).get('tab')==='paper'?'paper':'stats');
   const [stats, setStats] = useState<Stats | null>(null);
   const [letterStats, setLetterStats] = useState<{ days: number; total: number; done: number; trend: { date: string; count: number }[] } | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -407,7 +409,7 @@ export default function Admin() {
         </header>
 
         <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-white/5 p-1 text-sm">
-          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['letter-feedback', '信笺反馈'], ['letter-letters', '信笺信件'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
+          {([['stats', '数据概览'], ['users', '用户管理'], ['feedback', '用户反馈'], ['letter-feedback', '信笺反馈'], ['letter-letters', '信笺信件'], ['paper', '纸上逢'], ['settings', '系统设置'], ['presets', '预设管理'], ['admins', '管理员']] as const).map(([k, v]) => (
             <button key={k} onClick={() => setTab(k)} className={`min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 transition sm:px-4 ${tab === k ? 'bg-paper text-ink font-medium' : 'text-paper/60 hover:text-paper'}`}>{v}</button>
           ))}
         </nav>
@@ -415,6 +417,7 @@ export default function Admin() {
         {msg && <div className="mb-4 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">{msg}</div>}
         {err && <div className="mb-4 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{err}</div>}
 
+        {tab === 'paper' && <Suspense fallback={<p>正在打开纸上逢管理…</p>}><AdminPaper /></Suspense>}
         {tab === 'stats' && stats && (
           <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
