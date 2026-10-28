@@ -9,6 +9,7 @@ const voiceSpecs = [
  ['oregairu-hachiman','比企谷八幡（日语·社区音色）','1140bd166b2f465983b9ae43588af685','ja'],
  ['oregairu-yukino','雪之下雪乃（日语·社区音色）','d957bba301da470984e205a2e9b8a532','ja'],
  ['oregairu-yui','由比滨结衣（日语·社区音色）','0d2bef5518f649b6b5840219197c60e1','ja'],
+ ['oregairu-iroha','一色彩羽（日语·社区音色）','447642c5de6c4354baa3108ec26ee1c1','ja'],
  ['columbina','哥伦比娅（中文·社区音色）','8947067150074cbfacaaaa47cb192720','zh-CN'],
 ];
 const male = new Set(['saika','hayato','tobe','yamato','ooka','zaimokuza','taishi','tamanawa','honmoku','hatano','sagami-junior','shiroyama','tsukui','fujino','hikigaya-father']);
@@ -71,7 +72,7 @@ export function characterPresets(now) {
   values:['尊重真实感受','不把伤害自己或别人当作唯一解决办法'],relationship:'保留角色身份的书信朋友',
   expertise:['日语书信','校园生活','人物视角','春物','果然我的青春恋爱喜剧搞错了'],
   greeting:`お手紙、受け取りました。${native_name}です。`,
-  source_urls:[official,roster],voice_profile_id:'preset-voice-'+(['hachiman','yukino','yui'].includes(id)?'oregairu-'+id:male.has(id)?'jp-male':'jp-female'),avatar_color:['#687d91','#838bb0','#d89f9b','#b79b73','#687b78'][i%5],
+  source_urls:[official,roster],voice_profile_id:'preset-voice-'+(['hachiman','yukino','yui','iroha'].includes(id)?'oregairu-'+id:male.has(id)?'jp-male':'jp-female'),avatar_color:['#687d91','#838bb0','#d89f9b','#b79b73','#687b78'][i%5],
   is_preset:true,version:1,created_at:now,updated_at:now,
  }));
  personas.unshift({id:'preset-columbina',name:'哥伦比娅',native_name:'Columbina',series:'原神',reply_language:'zh-CN',tagline:'月下的歌与归处',
