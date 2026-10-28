@@ -19,7 +19,7 @@ test('reply and translation routes send separate language instructions and prese
  const dir=await mkdtemp(path.join(os.tmpdir(),'muse-language-'));process.env.DATA_DIR=dir;delete process.env.MYSQL_HOST;delete process.env.DB_HOST;
  const {default:express}=await import('../server/node_modules/express/index.js');
  const llm=express();llm.use(express.json());const calls=[];
- llm.post('/chat/completions',(req,res)=>{calls.push(req.body);const translating=req.body.messages[0].content.includes('书信译者');res.json({choices:[{message:{content:JSON.stringify({paragraphs:translating?['收到你的信了。']:['お手紙を受け取りました。今日はゆっくり休んでください。'],signature:'错误的中文落款'})}}]});});
+ llm.post('/chat/completions',(req,res)=>{calls.push(req.body);const translating=req.body.messages[0].content.includes('书信译者');res.json({choices:[{message:{content:JSON.stringify({paragraphs:translating?['收到你的信了。']:['お手紙を受け取りました。今日はゆっくり休んでください。','雪ノ下雪乃'],signature:'错误的中文落款'})}}]});});
  const upstream=llm.listen(0,'127.0.0.1');await new Promise(r=>upstream.once('listening',r));
  process.env.LLM_PROVIDER='deepseek';process.env.LLM_MODEL='deepseek-v4-flash';process.env.LLM_API_KEY='local-fixture';process.env.LLM_BASE_URL='http://127.0.0.1:'+upstream.address().port;
  const edited={...characterPresets('2026-10-28T00:00:00Z').find(p=>p.id==='preset-oregairu-yukino'),name:'后台编辑版雪乃'};
@@ -33,6 +33,7 @@ test('reply and translation routes send separate language instructions and prese
  const post=(url,body)=>fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  const response=await post('/reply',{persona_id:'preset-oregairu-yukino',letter_content:'今天有点累，请用中文回信。'});assert.equal(response.status,200);const reply=(await response.json()).data;
  assert.equal(reply.reply_language,'ja');assert.equal(reply.signature,'雪ノ下雪乃');assert.match(calls[0].messages[0].content,/无论来信语言/);
+ assert.equal(reply.paragraphs.length,1);
  const translated=await post('/translate',{paragraphs:reply.paragraphs});assert.equal(translated.status,200);assert.deepEqual((await translated.json()).data.paragraphs,['收到你的信了。']);
  assert.equal((await post('/translate',{paragraphs:[]})).status,400);
  const personas=(await(await fetch(base+'/personas')).json()).data.list;assert.equal(personas.find(x=>x.id==='preset-oregairu-yukino').reply_language,'ja');

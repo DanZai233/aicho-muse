@@ -296,6 +296,9 @@ router.post('/reply', async (req, res) => {
       if (cur.trim()) cut.push(cur.trim());
     }
     paragraphs = cut.slice(0, 8);
+    // The signature has its own field; some models repeat it as a final paragraph.
+    if(paragraphs.at(-1)===(persona.native_name||persona.name))paragraphs.pop();
+    if(!paragraphs.length)throw new Error('回信正文为空，请重试');
     if(replyLanguage(persona)==='ja'&&!/[\u3040-\u30ff]/u.test(paragraphs.join('')))throw new Error('回信未按日语生成，请重试');
     if(replyLanguage(persona)==='ja')signature=persona.native_name||persona.name;
     res.json({ code: 0, data: { persona: personaInfo, signature, paragraphs, reply_language:replyLanguage(persona) } });
