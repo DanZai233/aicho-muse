@@ -1,0 +1,39 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {characterPresets,characterVoices} from '../server/src/character-presets.js';
+import {replyLanguageInstruction,translationInput,parseTranslation} from '../server/src/letter-language.js';
+import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+test('character roster preserves separate identities, language policy and valid voice bindings',()=>{
+ const p=characterPresets('2026-10-28T00:00:00Z'),v=characterVoices('2026-10-28T00:00:00Z');
+ assert.equal(p.length,44);assert.equal(new Set(p.map(x=>x.id)).size,p.length);
+ for(const x of p){assert.ok(v.some(y=>y.id===x.voice_profile_id));assert.ok(x.source_urls.length);}
+ const jp=p.filter(x=>x.series!=='原神');assert.ok(jp.every(x=>x.reply_language==='ja'));
+ assert.ok(jp.some(x=>x.native_name==='雪ノ下雪乃'));assert.ok(jp.some(x=>x.name==='优子（林间学校）'));assert.ok(jp.some(x=>x.name==='优子（相模同学）'));
+ assert.match(replyLanguageInstruction(jp[0]),/无论来信语言/);assert.match(replyLanguageInstruction(p[0]),/简体中文/);
+ assert.deepEqual(parseTranslation('{"paragraphs":["译文一","译文二"]}',2),['译文一','译文二']);
+ assert.throws(()=>parseTranslation('{"paragraphs":["少一段"]}',2));assert.throws(()=>translationInput({paragraphs:['']}));assert.throws(()=>translationInput({paragraphs:Array(9).fill('あ')}));
+});
+test('reply and translation routes send separate language instructions and preserve Japanese signatures',async t=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'muse-language-'));process.env.DATA_DIR=dir;delete process.env.MYSQL_HOST;delete process.env.DB_HOST;
+ const {default:express}=await import('../server/node_modules/express/index.js');
+ const llm=express();llm.use(express.json());const calls=[];
+ llm.post('/chat/completions',(req,res)=>{calls.push(req.body);const translating=req.body.messages[0].content.includes('书信译者');res.json({choices:[{message:{content:JSON.stringify({paragraphs:translating?['收到你的信了。']:['お手紙を受け取りました。今日はゆっくり休んでください。'],signature:'错误的中文落款'})}}]});});
+ const upstream=llm.listen(0,'127.0.0.1');await new Promise(r=>upstream.once('listening',r));
+ process.env.LLM_PROVIDER='deepseek';process.env.LLM_MODEL='deepseek-v4-flash';process.env.LLM_API_KEY='local-fixture';process.env.LLM_BASE_URL='http://127.0.0.1:'+upstream.address().port;
+ const edited={...characterPresets('2026-10-28T00:00:00Z').find(p=>p.id==='preset-oregairu-yukino'),name:'后台编辑版雪乃'};
+ await writeFile(path.join(dir,'db.json'),JSON.stringify({personas:[edited],voices:[]}));
+ const {initStorage,db}=await import('../server/src/db.js');await initStorage();
+ assert.equal(db().personas.find(p=>p.id===edited.id).name,edited.name);
+ const persisted=JSON.parse(await readFile(path.join(dir,'db.json'),'utf8'));assert.ok(persisted.personas.some(p=>p.id==='preset-columbina'));assert.ok(persisted.voices.some(v=>v.id==='preset-voice-jp-female'));
+ const {default:router}=await import('../server/src/routes/letter.js');const app=express();app.use(express.json());app.use(router);const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+ t.after(async()=>{await new Promise(r=>server.close(r));await new Promise(r=>upstream.close(r));await rm(dir,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+server.address().port;
+ const post=(url,body)=>fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const response=await post('/reply',{persona_id:'preset-oregairu-yukino',letter_content:'今天有点累，请用中文回信。'});assert.equal(response.status,200);const reply=(await response.json()).data;
+ assert.equal(reply.reply_language,'ja');assert.equal(reply.signature,'雪ノ下雪乃');assert.match(calls[0].messages[0].content,/无论来信语言/);
+ const translated=await post('/translate',{paragraphs:reply.paragraphs});assert.equal(translated.status,200);assert.deepEqual((await translated.json()).data.paragraphs,['收到你的信了。']);
+ assert.equal((await post('/translate',{paragraphs:[]})).status,400);
+ const personas=(await(await fetch(base+'/personas')).json()).data.list;assert.equal(personas.find(x=>x.id==='preset-oregairu-yukino').reply_language,'ja');
+});

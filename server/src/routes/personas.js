@@ -22,7 +22,7 @@ router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase();
   if (q) {
     list = list.filter(p => {
-      const hay = [p.name, p.tagline, p.background, (p.personality || []).join(' '), (p.expertise || []).join(' ')].join(' ').toLowerCase();
+      const hay = [p.name, p.native_name, p.series, p.tagline, p.background, (p.personality || []).join(' '), (p.expertise || []).join(' ')].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }

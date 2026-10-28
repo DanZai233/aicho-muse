@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { encryptChapters, decryptChapters } from './crypto.js';
+import { characterPresets, characterVoices } from './character-presets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -1393,8 +1394,8 @@ function seed() {
     projects: [],
     chapters: [],
     snapshots: [],
-    personas: presetPersonas,
-    voices: presetVoices,
+    personas: [...presetPersonas, ...characterPresets(now)],
+    voices: [...presetVoices, ...characterVoices(now)],
     conversations: [],
     messages: [],
     settings: {
@@ -1446,6 +1447,7 @@ export async function initStorage() {
 
 export function loadDb() {
   if (cache) return cache;
+  let addedPresets = false;
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DB_FILE)) {
     cache = seed();
@@ -1456,10 +1458,15 @@ export function loadDb() {
       decryptChapters(cache);
       const s = seed();
       for (const k of Object.keys(s)) if (!(k in cache)) cache[k] = s[k];
+      // Match MySQL's insert-only preset completion. Never overwrite admin edits.
+      for (const k of ['personas','voices']) for (const row of s[k])
+        if (row.is_preset && !cache[k].some(x=>x.id===row.id)) {cache[k].push(row);addedPresets=true;}
     } catch {
+      addedPresets = false;
       cache = seed();
     }
   }
+  if(addedPresets&&!mysqlMode())saveDb();
   return cache;
 }
 
